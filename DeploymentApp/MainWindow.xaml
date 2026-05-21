@@ -208,6 +208,7 @@
                 <Grid Margin="12,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
@@ -226,8 +227,59 @@
                                    VerticalAlignment="Center"/>
                     </StackPanel>
 
+                    <!-- Demo Mode Toggle -->
+                    <Border Grid.Column="1"
+                            CornerRadius="{StaticResource CornerRadiusSmall}"
+                            Padding="10,6"
+                            Margin="16,0,0,0"
+                            VerticalAlignment="Center">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsDemoMode}" Value="True">
+                                        <Setter Property="Background" Value="#1AFF9800"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <CheckBox IsChecked="{Binding IsDemoMode, Mode=TwoWay}"
+                                      Style="{StaticResource Win11ToggleSwitch}"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,8,0">
+                                <TextBlock Text="Modalità Demo"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsDemoMode}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource WarningBrush}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </CheckBox>
+                            <!-- Demo mode indicator badge -->
+                            <Border Background="{DynamicResource WarningBrush}"
+                                    CornerRadius="3"
+                                    Padding="5,2"
+                                    VerticalAlignment="Center"
+                                    Visibility="{Binding IsDemoMode, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="DATI TEST"
+                                           Foreground="White"
+                                           FontSize="9"
+                                           FontWeight="Bold"/>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Auth status badge -->
-                    <Border Grid.Column="2"
+                    <Border Grid.Column="3"
                             CornerRadius="{StaticResource CornerRadiusSmall}"
                             Padding="10,4" Margin="0,0,8,0"
                             VerticalAlignment="Center">
@@ -272,7 +324,7 @@
                     </Border>
 
                     <!-- Toolbar action buttons -->
-                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                    <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
                         <ProgressBar Width="80" Height="3"
                                      IsIndeterminate="True"
                                      Style="{StaticResource Win11ProgressBar}"
@@ -310,7 +362,7 @@
                     </StackPanel>
 
                     <!-- Theme toggle -->
-                    <Button Grid.Column="4"
+                    <Button Grid.Column="5"
                             Command="{Binding ToggleThemeCommand}"
                             ToolTip="{Binding ThemeToggleTooltip}"
                             Style="{StaticResource Win11Button}"
@@ -342,6 +394,7 @@
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>  <!-- Card header -->
+                            <RowDefinition Height="Auto"/>  <!-- Search bar -->
                             <RowDefinition Height="*"/>     <!-- Preset list -->
                             <RowDefinition Height="Auto"/>  <!-- Action bar -->
                         </Grid.RowDefinitions>
@@ -373,12 +426,57 @@
                             </Grid>
                         </Border>
 
+                        <!-- Search bar -->
+                        <Border Grid.Row="1"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="0,1,0,1"
+                                Padding="12,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0"
+                                         Text="{Binding PresetSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource Win11TextBox}"
+                                         Padding="28,6,8,6"
+                                         FontSize="12">
+                                    <TextBox.Resources>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+                                        </Style>
+                                    </TextBox.Resources>
+                                </TextBox>
+                                <!-- Search icon -->
+                                <Image Grid.Column="0"
+                                       Source="{DynamicResource IconSettings}"
+                                       Width="14" Height="14"
+                                       HorizontalAlignment="Left"
+                                       VerticalAlignment="Center"
+                                       Margin="10,0,0,0"
+                                       Opacity="0.5"
+                                       IsHitTestVisible="False"
+                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                <!-- Clear button -->
+                                <Button Grid.Column="1"
+                                        Content="✕"
+                                        Command="{Binding ClearPresetSearchCommand}"
+                                        Style="{StaticResource Win11Button}"
+                                        Width="28" Height="28"
+                                        Padding="0"
+                                        Margin="4,0,0,0"
+                                        FontSize="12"
+                                        Visibility="{Binding PresetSearchText, Converter={StaticResource StringToVisibilityConverter}}"/>
+                            </Grid>
+                        </Border>
+
                         <!-- Preset list — clickable card ToggleButtons -->
-                        <ScrollViewer Grid.Row="1"
+                        <ScrollViewer Grid.Row="2"
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
                                       Padding="8,8,8,0">
-                            <ItemsControl ItemsSource="{Binding Presets}">
+                            <ItemsControl ItemsSource="{Binding FilteredPresets}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <ToggleButton Style="{StaticResource PresetCardToggleButton}"
@@ -454,19 +552,36 @@
                             </ItemsControl>
                         </ScrollViewer>
 
-                        <!-- Action bar -->
-                        <Border Grid.Row="2"
+                        <!-- Action bar with Create Preset button -->
+                        <Border Grid.Row="3"
                                 Background="{DynamicResource SurfaceElevatedBrush}"
                                 CornerRadius="0,0,8,8"
                                 Padding="16,12">
                             <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
+                                <!-- Create New Preset button -->
+                                <Button Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                                        Command="{Binding OpenCreatePresetCommand}"
+                                        Style="{StaticResource Win11AccentButton}"
+                                        HorizontalAlignment="Stretch"
+                                        Padding="12,8"
+                                        Margin="0,0,0,8">
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <TextBlock Text="➕" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBlock Text="Crea Nuovo Preset" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
                                 <!-- Overall status -->
-                                <TextBlock Grid.Column="0"
+                                <TextBlock Grid.Row="1" Grid.Column="0"
                                            Text="{Binding OverallStatus}"
                                            TextWrapping="Wrap"
                                            VerticalAlignment="Center"
@@ -474,7 +589,7 @@
                                            FontSize="12"/>
 
                                 <!-- Run queue button -->
-                                <Button Grid.Column="1"
+                                <Button Grid.Row="1" Grid.Column="1"
                                         Content="{Binding IsRunning, Converter={StaticResource BusyToTextConverter},
                                                   ConverterParameter='▶  Esegui Coda|⏳  Esecuzione…'}"
                                         Command="{Binding RunQueueCommand}"
@@ -500,6 +615,7 @@
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>  <!-- Card header -->
+                            <RowDefinition Height="Auto"/>  <!-- Search bar + Create button -->
                             <RowDefinition Height="*"/>     <!-- Queue list -->
                         </Grid.RowDefinitions>
 
@@ -522,8 +638,73 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Search bar + Create Process button -->
+                        <Border Grid.Row="1"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="0,1,0,1"
+                                Padding="12,8">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- Search bar -->
+                                <Grid Grid.Row="0" Margin="0,0,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding ProcessSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource Win11TextBox}"
+                                             Padding="28,6,8,6"
+                                             FontSize="12">
+                                        <TextBox.Resources>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+                                            </Style>
+                                        </TextBox.Resources>
+                                    </TextBox>
+                                    <!-- Search icon -->
+                                    <Image Grid.Column="0"
+                                           Source="{DynamicResource IconSettings}"
+                                           Width="14" Height="14"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
+                                           Margin="10,0,0,0"
+                                           Opacity="0.5"
+                                           IsHitTestVisible="False"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                    <!-- Clear button -->
+                                    <Button Grid.Column="1"
+                                            Content="✕"
+                                            Command="{Binding ClearProcessSearchCommand}"
+                                            Style="{StaticResource Win11Button}"
+                                            Width="28" Height="28"
+                                            Padding="0"
+                                            Margin="4,0,0,0"
+                                            FontSize="12"
+                                            Visibility="{Binding ProcessSearchText, Converter={StaticResource StringToVisibilityConverter}}"/>
+                                </Grid>
+
+                                <!-- Create Process button -->
+                                <Button Grid.Row="1"
+                                        Command="{Binding CreateProcessCommand}"
+                                        Style="{StaticResource Win11AccentButton}"
+                                        HorizontalAlignment="Stretch"
+                                        Padding="10,8">
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                        <TextBlock Text="➕" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <TextBlock Text="Create Custom Process" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </Border>
+
                         <!-- Empty state -->
-                        <TextBlock Grid.Row="1"
+                        <TextBlock Grid.Row="2"
                                    Text="Seleziona uno o più preset per costruire la coda di esecuzione"
                                    Style="{StaticResource Win11TextSecondary}"
                                    TextWrapping="Wrap"
@@ -536,53 +717,80 @@
                                                 ConverterParameter=Inverse}"/>
 
                         <!-- Queue items -->
-                        <ScrollViewer Grid.Row="1"
+                        <ScrollViewer Grid.Row="2"
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
                                       Padding="8,8,8,8">
-                            <ItemsControl ItemsSource="{Binding ExecutionQueue}">
+                            <ItemsControl ItemsSource="{Binding FilteredExecutionQueue}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Margin="0,0,0,5"
-                                                CornerRadius="{StaticResource CornerRadiusSmall}"
-                                                BorderThickness="1"
-                                                BorderBrush="{DynamicResource BorderBrush}"
-                                                Padding="10,9">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                                        <ToggleButton IsChecked="{Binding IsEnabled, Mode=TwoWay}">
+                                            <ToggleButton.Style>
+                                                <Style TargetType="ToggleButton" BasedOn="{StaticResource ProcessCardToggleButton}">
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsEnabled}" Value="False">
                                                             <Setter Property="Opacity" Value="0.5"/>
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
-                                            </Border.Style>
+                                            </ToggleButton.Style>
                                             <Grid>
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="Auto"/>
                                                     <RowDefinition Height="Auto"/>
                                                 </Grid.RowDefinitions>
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>  <!-- Checkbox -->
+                                                    <ColumnDefinition Width="Auto"/>  <!-- Checkbox indicator -->
                                                     <ColumnDefinition Width="Auto"/>  <!-- Status icon -->
                                                     <ColumnDefinition Width="*"/>     <!-- Name -->
                                                     <ColumnDefinition Width="Auto"/>  <!-- Kind label -->
                                                 </Grid.ColumnDefinitions>
 
-                                                <!-- Checkbox -->
-                                                <CheckBox Grid.Row="0" Grid.Column="0"
-                                                          Style="{StaticResource Win11RoundCheckBox}"
-                                                          IsChecked="{Binding IsEnabled, Mode=TwoWay}"
-                                                          VerticalAlignment="Center"
-                                                          Margin="0,0,8,0"/>
+                                                <!-- Checkbox indicator (visual only) -->
+                                                <Border Grid.Row="0" Grid.Column="0"
+                                                        Width="22" Height="22"
+                                                        CornerRadius="11"
+                                                        BorderThickness="2"
+                                                        VerticalAlignment="Center"
+                                                        Margin="0,0,8,0">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+                                                            <Setter Property="Background" Value="Transparent"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsEnabled}" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <TextBlock Text="✓"
+                                                               FontSize="13"
+                                                               FontWeight="Bold"
+                                                               Foreground="White"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsEnabled}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Border>
 
                                                 <!-- Status icon -->
                                                 <TextBlock Grid.Row="0" Grid.Column="1"
                                                            Text="{Binding StatusIcon}"
                                                            FontSize="13"
                                                            VerticalAlignment="Center"
-                                                           Margin="0,0,7,0"/>
+                                                           Margin="0,0,7,0"
+                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
 
                                                 <!-- Process name -->
                                                 <TextBlock Grid.Row="0" Grid.Column="2"
@@ -590,7 +798,8 @@
                                                            Style="{StaticResource Win11TextBody}"
                                                            FontWeight="SemiBold"
                                                            TextTrimming="CharacterEllipsis"
-                                                           VerticalAlignment="Center"/>
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
 
                                                 <!-- Kind label badge -->
                                                 <Border Grid.Row="0" Grid.Column="3"
@@ -610,7 +819,8 @@
                                                             Margin="0,4,0,0">
                                                     <TextBlock Text="{Binding Description}"
                                                                Style="{StaticResource Win11TextSecondary}"
-                                                               TextTrimming="CharacterEllipsis"/>
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
                                                     <!-- Required badge -->
                                                     <Border Background="#1AFF9800"
                                                             CornerRadius="3"
@@ -627,10 +837,11 @@
                                                     <TextBlock Text="{Binding StatusText}"
                                                                Style="{StaticResource Win11TextSecondary}"
                                                                Margin="8,0,0,0"
-                                                               FontSize="10"/>
+                                                               FontSize="10"
+                                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
                                                 </StackPanel>
                                             </Grid>
-                                        </Border>
+                                        </ToggleButton>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -693,6 +904,334 @@
                     </Border>
                 </Grid>
             </Border>
+
+            <!-- ══════════════════════════════════════════════════════
+                 SLIDING PANEL OVERLAY — Create Preset Panel
+                 Appears from left with animation, overlays main content
+            ══════════════════════════════════════════════════════ -->
+            <Grid Grid.Row="0" Grid.RowSpan="4"
+                  Visibility="{Binding IsCreatePresetPanelOpen, Converter={StaticResource BoolToVisibility}}"
+                  x:Name="CreatePresetOverlay">
+                
+                <!-- Semi-transparent backdrop -->
+                <Border Background="#80000000" x:Name="Backdrop">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Opacity" Value="0"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsCreatePresetPanelOpen}" Value="True">
+                                    <DataTrigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                               To="1" Duration="0:0:0.2"
+                                                               EasingFunction="{StaticResource EaseOut}"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.EnterActions>
+                                    <DataTrigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                               To="0" Duration="0:0:0.15"
+                                                               EasingFunction="{StaticResource EaseIn}"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.ExitActions>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
+
+                <!-- Sliding panel from left -->
+                <Border x:Name="SlidingPanel"
+                        Width="500"
+                        HorizontalAlignment="Left"
+                        Background="{DynamicResource AppBackgroundBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="0,0,1,0"
+                        Effect="{StaticResource CardShadow}"
+                        RenderTransformOrigin="0,0">
+                    <Border.RenderTransform>
+                        <TranslateTransform X="-500"/>
+                    </Border.RenderTransform>
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsCreatePresetPanelOpen}" Value="True">
+                                    <DataTrigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="RenderTransform.(TranslateTransform.X)"
+                                                               To="0" Duration="0:0:0.3">
+                                                    <DoubleAnimation.EasingFunction>
+                                                        <CubicEase EasingMode="EaseOut"/>
+                                                    </DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.EnterActions>
+                                    <DataTrigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="RenderTransform.(TranslateTransform.X)"
+                                                               To="-500" Duration="0:0:0.25">
+                                                    <DoubleAnimation.EasingFunction>
+                                                        <CubicEase EasingMode="EaseIn"/>
+                                                    </DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.ExitActions>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+
+                    <Grid DataContext="{Binding CreatePresetViewModel}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>  <!-- Header -->
+                            <RowDefinition Height="*"/>     <!-- Content -->
+                            <RowDefinition Height="Auto"/>  <!-- Actions -->
+                        </Grid.RowDefinitions>
+
+                        <!-- Header -->
+                        <Border Grid.Row="0"
+                                Background="{DynamicResource SurfaceElevatedBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="0,0,0,1"
+                                Padding="20,16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Crea Nuovo Preset"
+                                               Style="{StaticResource Win11TextTitle}"
+                                               Margin="0,0,0,4"/>
+                                    <TextBlock Text="Configura un nuovo preset di installazione personalizzato"
+                                               Style="{StaticResource Win11TextSecondary}"/>
+                                </StackPanel>
+
+                                <!-- Close button -->
+                                <Button Grid.Column="1"
+                                        Command="{Binding CancelCommand}"
+                                        Style="{StaticResource Win11Button}"
+                                        Width="36" Height="36"
+                                        Padding="0"
+                                        ToolTip="Chiudi">
+                                    <TextBlock Text="✕" FontSize="16"/>
+                                </Button>
+                            </Grid>
+                        </Border>
+
+                        <!-- Content -->
+                        <ScrollViewer Grid.Row="1"
+                                      VerticalScrollBarVisibility="Auto"
+                                      Padding="20,16">
+                            <StackPanel>
+                                <!-- Validation error -->
+                                <Border Background="#1AFF3333"
+                                        BorderBrush="{DynamicResource ErrorBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource CornerRadiusSmall}"
+                                        Padding="12,8"
+                                        Margin="0,0,0,16"
+                                        Visibility="{Binding ValidationError, Converter={StaticResource StringToVisibilityConverter}}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="⚠️" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBlock Text="{Binding ValidationError}"
+                                                   Foreground="{DynamicResource ErrorBrush}"
+                                                   TextWrapping="Wrap"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Nome -->
+                                <TextBlock Text="Nome *" Style="{StaticResource Win11TextBody}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource Win11TextBox}"
+                                         Margin="0,0,0,16"/>
+
+                                <!-- Icona -->
+                                <TextBlock Text="Icona" Style="{StaticResource Win11TextBody}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <ComboBox ItemsSource="{Binding AvailableIcons}"
+                                          SelectedItem="{Binding Icon}"
+                                          Style="{StaticResource Win11ComboBox}"
+                                          Margin="0,0,0,16">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" FontSize="20"/>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+
+                                <!-- Descrizione -->
+                                <TextBlock Text="Descrizione" Style="{StaticResource Win11TextBody}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource Win11TextBox}"
+                                         AcceptsReturn="True"
+                                         TextWrapping="Wrap"
+                                         MinHeight="60"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Margin="0,0,0,16"/>
+
+                                <!-- Categoria -->
+                                <TextBlock Text="Categoria" Style="{StaticResource Win11TextBody}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <ComboBox ItemsSource="{Binding CategorySuggestions}"
+                                          Text="{Binding Category}"
+                                          IsEditable="True"
+                                          Style="{StaticResource Win11ComboBox}"
+                                          Margin="0,0,0,20"/>
+
+                                <!-- Process Selection Section -->
+                                <TextBlock Text="Processi *" Style="{StaticResource Win11TextBody}" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                <TextBlock Text="Seleziona i processi da includere nel preset"
+                                           Style="{StaticResource Win11TextSecondary}"
+                                           Margin="0,0,0,8"/>
+
+                                <!-- Search bar -->
+                                <TextBox Text="{Binding ProcessSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource Win11TextBox}"
+                                         Padding="28,6,8,6"
+                                         Margin="0,0,0,12">
+                                    <TextBox.Resources>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+                                        </Style>
+                                    </TextBox.Resources>
+                                </TextBox>
+
+                                <!-- Process list with checkboxes -->
+                                <Border Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource CornerRadiusSmall}"
+                                        MaxHeight="300">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding FilteredProcesses}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border BorderBrush="{DynamicResource BorderBrush}"
+                                                            BorderThickness="0,0,0,1"
+                                                            Padding="12,8">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <!-- Checkbox -->
+                                                            <CheckBox Grid.Column="0"
+                                                                      IsChecked="{Binding IsSelected}"
+                                                                      VerticalAlignment="Center"
+                                                                      Margin="0,0,10,0"/>
+
+                                                            <!-- Order number (when selected) -->
+                                                            <Border Grid.Column="1"
+                                                                    Background="{DynamicResource AccentBrush}"
+                                                                    CornerRadius="10"
+                                                                    Width="20" Height="20"
+                                                                    Margin="0,0,8,0"
+                                                                    Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}">
+                                                                <TextBlock Text="{Binding Order, Converter={StaticResource OrderToDisplayConverter}}"
+                                                                           Foreground="White"
+                                                                           FontSize="10"
+                                                                           FontWeight="Bold"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"/>
+                                                            </Border>
+
+                                                            <!-- Process info -->
+                                                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding Name}"
+                                                                           Style="{StaticResource Win11TextBody}"
+                                                                           FontWeight="SemiBold"/>
+                                                                <TextBlock Text="{Binding Description}"
+                                                                           Style="{StaticResource Win11TextSecondary}"
+                                                                           TextTrimming="CharacterEllipsis"/>
+                                                            </StackPanel>
+
+                                                            <!-- Type badge -->
+                                                            <Border Grid.Column="3"
+                                                                    Background="{DynamicResource SurfaceElevatedBrush}"
+                                                                    CornerRadius="3"
+                                                                    Padding="6,2"
+                                                                    Margin="8,0,8,0"
+                                                                    VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding KindLabel}"
+                                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                           FontSize="10"/>
+                                                            </Border>
+
+                                                            <!-- Reorder buttons (when selected) -->
+                                                            <StackPanel Grid.Column="4"
+                                                                        Orientation="Horizontal"
+                                                                        Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}">
+                                                                <Button Command="{Binding DataContext.MoveProcessUpCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
+                                                                        CommandParameter="{Binding}"
+                                                                        Style="{StaticResource Win11Button}"
+                                                                        Width="28" Height="28"
+                                                                        Padding="0"
+                                                                        Margin="0,0,4,0"
+                                                                        ToolTip="Sposta su">
+                                                                    <TextBlock Text="▲" FontSize="10"/>
+                                                                </Button>
+                                                                <Button Command="{Binding DataContext.MoveProcessDownCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
+                                                                        CommandParameter="{Binding}"
+                                                                        Style="{StaticResource Win11Button}"
+                                                                        Width="28" Height="28"
+                                                                        Padding="0"
+                                                                        ToolTip="Sposta giù">
+                                                                    <TextBlock Text="▼" FontSize="10"/>
+                                                                </Button>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+
+                        <!-- Action buttons -->
+                        <Border Grid.Row="2"
+                                Background="{DynamicResource SurfaceElevatedBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="0,1,0,0"
+                                Padding="20,16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Button Grid.Column="0"
+                                        Content="Annulla"
+                                        Command="{Binding CancelCommand}"
+                                        Style="{StaticResource Win11Button}"
+                                        Height="40"
+                                        Margin="0,0,8,0"/>
+
+                                <Button Grid.Column="1"
+                                        Content="Salva Preset"
+                                        Command="{Binding SaveCommand}"
+                                        Style="{StaticResource Win11AccentButton}"
+                                        Height="40"
+                                        MinWidth="140"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+            </Grid>
         </Grid>
     </Border>
 </Window>

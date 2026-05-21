@@ -52,11 +52,23 @@
     <sys:String x:Key="ThemeToggleIcon">🌙</sys:String>
     <sys:String x:Key="ThemeToggleTooltip">Passa al tema scuro</sys:String>
 
-    <!-- Theme toggle DrawingImage — Light theme shows Moon (to switch to dark) -->
+    <!-- Theme toggle DrawingImage — Light theme shows turned-ON light bulb (to switch to dark) -->
     <DrawingImage x:Key="ThemeToggleDrawingImage">
         <DrawingImage.Drawing>
-            <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}"
-                             Geometry="M12,3 C7.03,3 3,7.03 3,12 C3,16.97 7.03,21 12,21 C16.97,21 21,16.97 21,12 C21,11.54 20.96,11.08 20.9,10.64 C19.92,12.01 18.32,12.9 16.5,12.9 C13.52,12.9 11.1,10.48 11.1,7.5 C11.1,5.69 11.99,4.08 13.36,3.1 C12.92,3.04 12.46,3 12,3 Z"/>
+            <DrawingGroup>
+                <!-- Light bulb filled (on state) -->
+                <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}">
+                    <GeometryDrawing.Geometry>
+                        <PathGeometry Figures="M12,2 C9.24,2 7,4.24 7,7 C7,8.5 7.63,9.85 8.63,10.81 L8.63,14 C8.63,14.55 9.08,15 9.63,15 L14.37,15 C14.92,15 15.37,14.55 15.37,14 L15.37,10.81 C16.37,9.85 17,8.5 17,7 C17,4.24 14.76,2 12,2 Z M10,16 L10,17 C10,17.55 10.45,18 11,18 L13,18 C13.55,18 14,17.55 14,17 L14,16 L10,16 Z M10,19 L10,20 C10,20.55 10.45,21 11,21 L13,21 C13.55,21 14,20.55 14,20 L14,19 L10,19 Z"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+                <!-- Light rays -->
+                <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}">
+                    <GeometryDrawing.Geometry>
+                        <PathGeometry Figures="M12,0 L12,1.5 M12,0 L12,1.5 M4.22,4.22 L5.28,5.28 M19.78,4.22 L18.72,5.28 M1.5,12 L3,12 M21,12 L22.5,12 M4.22,19.78 L5.28,18.72 M19.78,19.78 L18.72,18.72"/>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+            </DrawingGroup>
         </DrawingImage.Drawing>
     </DrawingImage>
 

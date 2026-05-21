@@ -23,4 +23,12 @@ public class DeploymentProcess
     public bool IsRequired { get; set; }
     /// <summary>IDs of processes that must run before this one (within the merged queue).</summary>
     public List<string> DependsOn { get; set; } = new();
+    /// <summary>If true, run the process with administrator privileges.</summary>
+    public bool RunAsAdmin { get; set; }
+    /// <summary>For PowerShell/Batch scripts: inline script content (alternative to RelativePath).</summary>
+    public string ScriptContent { get; set; } = string.Empty;
+    /// <summary>Icon key from Icons.xaml (e.g., "IconPackage", "IconScript").</summary>
+    public string IconKey { get; set; } = "IconPackage";
+    /// <summary>If true, this process was created by the user (not from presets).</summary>
+    public bool IsUserCreated { get; set; }
 }

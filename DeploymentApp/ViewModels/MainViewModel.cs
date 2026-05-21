@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeploymentApp.Models;
@@ -18,9 +19,13 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly Func<LoginViewModel> _loginVmFactory;
 
     private IReadOnlyList<DeploymentProcess> _allProcesses = Array.Empty<DeploymentProcess>();
+    private readonly List<DeploymentProcess> _userCreatedProcesses = new();
+    private IReadOnlyList<DeploymentPreset> _allPresets = Array.Empty<DeploymentPreset>();
 
     public ObservableCollection<PresetViewModel> Presets { get; } = new();
+    public ObservableCollection<PresetViewModel> FilteredPresets { get; } = new();
     public ObservableCollection<ProcessStepViewModel> ExecutionQueue { get; } = new();
+    public ObservableCollection<ProcessStepViewModel> FilteredExecutionQueue { get; } = new();
 
     [ObservableProperty] private bool _isInitializing;
     [ObservableProperty] private bool _isAuthenticated;
@@ -28,8 +33,13 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _overallStatus = "Pronto";
     [ObservableProperty] private int _selectedPresetCount;
     [ObservableProperty] private string _themeToggleTooltip = "Passa al tema chiaro";
+    [ObservableProperty] private bool _isDemoMode = true;
+    [ObservableProperty] private string _presetSearchText = string.Empty;
+    [ObservableProperty] private string _processSearchText = string.Empty;
+    [ObservableProperty] private bool _isCreatePresetPanelOpen;
 
     public LogViewModel LogViewModel { get; }
+    public CreatePresetViewModel CreatePresetViewModel { get; }
 
     public MainViewModel(
         IInstallerService installerService,
@@ -50,18 +60,28 @@ public sealed partial class MainViewModel : ObservableObject
         _loginVmFactory = loginVmFactory;
         LogViewModel = logViewModel;
 
+        CreatePresetViewModel = new CreatePresetViewModel();
+        CreatePresetViewModel.CloseRequested += OnCreatePresetCloseRequested;
+
         SyncThemeProperties();
     }
 
     [RelayCommand]
     public async Task InitializeAsync()
     {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
         IsInitializing = true;
         try
         {
-            _allProcesses = await _installerService.LoadProcessesAsync();
-            var presets = await _installerService.LoadPresetsAsync();
-            foreach (var p in presets)
+            _allProcesses = await _installerService.LoadProcessesAsync(IsDemoMode);
+            _allPresets = await _installerService.LoadPresetsAsync(IsDemoMode);
+            
+            Presets.Clear();
+            foreach (var p in _allPresets)
             {
                 var vm = new PresetViewModel(p);
                 vm.PropertyChanged += (_, e) =>
@@ -71,7 +91,9 @@ public sealed partial class MainViewModel : ObservableObject
                 };
                 Presets.Add(vm);
             }
-            _log.Info($"Loaded {presets.Count} presets and {_allProcesses.Count} processes.");
+
+            ApplyPresetFilter();
+            _log.Info($"Loaded {_allPresets.Count} presets and {_allProcesses.Count} processes (Demo Mode: {IsDemoMode}).");
 
             // Background update check — fire and forget, errors are logged internally
             var packageList = _allProcesses
@@ -89,17 +111,157 @@ public sealed partial class MainViewModel : ObservableObject
         finally { IsInitializing = false; }
     }
 
+    partial void OnIsDemoModeChanged(bool value)
+    {
+        _log.Info($"Demo mode changed to: {value}");
+        _ = LoadDataAsync();
+    }
+
+    partial void OnPresetSearchTextChanged(string value)
+    {
+        ApplyPresetFilter();
+    }
+
+    partial void OnProcessSearchTextChanged(string value)
+    {
+        ApplyProcessFilter();
+    }
+
+    private void ApplyPresetFilter()
+    {
+        FilteredPresets.Clear();
+        var searchLower = PresetSearchText?.ToLowerInvariant() ?? string.Empty;
+
+        var filtered = string.IsNullOrWhiteSpace(searchLower)
+            ? Presets
+            : Presets.Where(p =>
+                p.Name.ToLowerInvariant().Contains(searchLower) ||
+                p.Description.ToLowerInvariant().Contains(searchLower) ||
+                p.Category.ToLowerInvariant().Contains(searchLower));
+
+        foreach (var preset in filtered)
+        {
+            FilteredPresets.Add(preset);
+        }
+    }
+
+    private void ApplyProcessFilter()
+    {
+        FilteredExecutionQueue.Clear();
+        var searchLower = ProcessSearchText?.ToLowerInvariant() ?? string.Empty;
+
+        var filtered = string.IsNullOrWhiteSpace(searchLower)
+            ? ExecutionQueue
+            : ExecutionQueue.Where(p => p.Name.ToLowerInvariant().Contains(searchLower));
+
+        foreach (var process in filtered)
+        {
+            FilteredExecutionQueue.Add(process);
+        }
+    }
+
     private void RebuildExecutionQueue()
     {
         var selected = Presets.Where(p => p.IsSelected).Select(p => p.Preset).ToList();
         SelectedPresetCount = selected.Count;
         ExecutionQueue.Clear();
-        if (selected.Count == 0) return;
-        var queue = _installerService.BuildExecutionQueue(selected, _allProcesses);
+        
+        if (selected.Count == 0)
+        {
+            ApplyProcessFilter();
+            return;
+        }
+
+        // Combine preset processes with user-created processes
+        var allAvailableProcesses = _allProcesses.Concat(_userCreatedProcesses).ToList();
+        var queue = _installerService.BuildExecutionQueue(selected, allAvailableProcesses);
+        
         foreach (var (process, order) in queue)
             ExecutionQueue.Add(new ProcessStepViewModel(process, order, _dialogService));
-        _log.Info($"Execution queue rebuilt: {ExecutionQueue.Count} steps from {selected.Count} preset(s).");
-        RunQueueCommand.NotifyCanExecuteChanged();
+
+        // Add user-created processes at the end if not already in queue
+        var queueIds = queue.Select(q => q.Process.Id).ToHashSet();
+        var nextOrder = queue.Any() ? queue.Max(q => q.Order) + 10 : 10;
+        
+        foreach (var userProcess in _userCreatedProcesses.Where(p => !queueIds.Contains(p.Id)))
+        {
+            ExecutionQueue.Add(new ProcessStepViewModel(userProcess, nextOrder, _dialogService));
+            nextOrder += 10;
+        }
+
+        ApplyProcessFilter();
+        _log.Info($"Execution queue rebuilt: {ExecutionQueue.Count} steps from {selected.Count} preset(s) + {_userCreatedProcesses.Count} user process(es).");
+    }
+
+    [RelayCommand]
+    private void CreateProcess()
+    {
+        var vm = new CreateProcessViewModel();
+        var dialog = new CreateProcessDialog(vm)
+        {
+            Owner = System.Windows.Application.Current.MainWindow
+        };
+
+        if (dialog.ShowDialog() == true && vm.CreatedProcess != null)
+        {
+            _userCreatedProcesses.Add(vm.CreatedProcess);
+            _log.Info($"User created process: {vm.CreatedProcess.Name}");
+            
+            // Rebuild queue to include new process
+            RebuildExecutionQueue();
+        }
+    }
+
+    [RelayCommand]
+    private void OpenCreatePreset()
+    {
+        // Initialize the CreatePresetViewModel with all available processes
+        var allProcesses = _installerService.GetAllAvailableProcesses()
+            .Concat(_userCreatedProcesses)
+            .ToList();
+        
+        CreatePresetViewModel.Initialize(allProcesses);
+        IsCreatePresetPanelOpen = true;
+        _log.Info("Opening create preset panel.");
+    }
+
+    private void OnCreatePresetCloseRequested(object? sender, EventArgs e)
+    {
+        IsCreatePresetPanelOpen = false;
+
+        if (CreatePresetViewModel.CreatedPreset != null)
+        {
+            // Add the new preset to the service
+            _installerService.AddUserPreset(CreatePresetViewModel.CreatedPreset);
+            
+            // Add to the UI collection
+            var presetVm = new PresetViewModel(CreatePresetViewModel.CreatedPreset);
+            presetVm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(PresetViewModel.IsSelected))
+                    RebuildExecutionQueue();
+            };
+            Presets.Add(presetVm);
+            ApplyPresetFilter();
+            
+            _log.Info($"Created new preset: {CreatePresetViewModel.CreatedPreset.Name}");
+        }
+        else
+        {
+            _log.Info("Create preset cancelled.");
+        }
+    }
+
+    [RelayCommand]
+    private void ClearPresetSearch()
+    {
+        PresetSearchText = string.Empty;
+    }
+
+    [RelayCommand]
+    private void ClearProcessSearch()
+    {
+        ProcessSearchText = string.Empty;
     }
 
     [RelayCommand(CanExecute = nameof(CanRunQueue))]
@@ -117,7 +279,6 @@ public sealed partial class MainViewModel : ObservableObject
 
         IsRunning = true;
         OverallStatus = "Esecuzione in corso...";
-        RunQueueCommand.NotifyCanExecuteChanged();
 
         try
         {
@@ -141,14 +302,10 @@ public sealed partial class MainViewModel : ObservableObject
         finally
         {
             IsRunning = false;
-            RunQueueCommand.NotifyCanExecuteChanged();
         }
     }
 
     private bool CanRunQueue() => ExecutionQueue.Count > 0 && !IsRunning && !IsInitializing;
-
-    partial void OnIsRunningChanged(bool value) => RunQueueCommand.NotifyCanExecuteChanged();
-    partial void OnIsInitializingChanged(bool value) => RunQueueCommand.NotifyCanExecuteChanged();
 
     [RelayCommand]
     private void OpenLogin()

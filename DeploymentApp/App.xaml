@@ -21,6 +21,7 @@
             <conv:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
             <conv:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
             <conv:BusyToTextConverter x:Key="BusyToTextConverter"/>
+            <conv:OrderToDisplayConverter x:Key="OrderToDisplayConverter"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

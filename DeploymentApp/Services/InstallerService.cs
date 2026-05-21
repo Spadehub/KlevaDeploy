@@ -8,12 +8,57 @@ public sealed class InstallerService : IInstallerService
 {
     private readonly ILogService _log;
     private readonly string _baseDir = AppContext.BaseDirectory;
+    private readonly List<DeploymentPreset> _userCreatedPresets = new();
+    private IReadOnlyList<DeploymentProcess> _cachedProcesses = Array.Empty<DeploymentProcess>();
+    private IReadOnlyList<DeploymentPreset> _cachedPresets = Array.Empty<DeploymentPreset>();
 
     public InstallerService(ILogService log) => _log = log;
 
-    public Task<IReadOnlyList<DeploymentProcess>> LoadProcessesAsync()
+    public Task<IReadOnlyList<DeploymentProcess>> LoadProcessesAsync(bool isDemoMode)
     {
-        _log.Info("Loading deployment processes...");
+        _log.Info($"Loading deployment processes (Demo Mode: {isDemoMode})...");
+        
+        
+        if (!isDemoMode)
+        {
+            // Production mode: return minimal placeholder data
+            var productionProcesses = new List<DeploymentProcess>
+            {
+                new()
+                {
+                    Id = "vcredist",
+                    Name = "Visual C++ Redistributable 2022",
+                    Description = "Runtime Microsoft Visual C++ richiesto da molte applicazioni.",
+                    Kind = ProcessKind.Installer,
+                    RelativePath = @"Installers\vcredist_x64.exe",
+                    Arguments = "/install /quiet /norestart",
+                    DownloadUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    IsRequired = true,
+                    EnabledByDefault = true,
+                },
+                new()
+                {
+                    Id = "dotnet-runtime",
+                    Name = ".NET 8 Desktop Runtime",
+                    Description = "Runtime .NET 8 necessario per applicazioni moderne.",
+                    Kind = ProcessKind.Installer,
+                    RelativePath = @"Installers\dotnet-runtime-8-win-x64.exe",
+                    Arguments = "/install /quiet /norestart",
+                    DownloadUrl = "https://download.microsoft.com/dotnet/8.0/runtime/dotnet-runtime-8.0-win-x64.exe",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    IsRequired = true,
+                    EnabledByDefault = true,
+                    DependsOn = new() { "vcredist" },
+                },
+            };
+            _cachedProcesses = productionProcesses;
+            return Task.FromResult<IReadOnlyList<DeploymentProcess>>(productionProcesses);
+        }
+        
+        // Demo mode: return full demo data
         var processes = new List<DeploymentProcess>
         {
             new()
@@ -189,12 +234,38 @@ public sealed class InstallerService : IInstallerService
                 EnabledByDefault = false,
             },
         };
+        _cachedProcesses = processes;
         return Task.FromResult<IReadOnlyList<DeploymentProcess>>(processes);
     }
 
-    public Task<IReadOnlyList<DeploymentPreset>> LoadPresetsAsync()
+    public Task<IReadOnlyList<DeploymentPreset>> LoadPresetsAsync(bool isDemoMode)
     {
-        _log.Info("Loading deployment presets...");
+        _log.Info($"Loading deployment presets (Demo Mode: {isDemoMode})...");
+        
+        if (!isDemoMode)
+        {
+            // Production mode: return minimal placeholder data
+            var productionPresets = new List<DeploymentPreset>
+            {
+                new()
+                {
+                    Id = "base-workstation",
+                    Name = "Postazione Base",
+                    Description = "Setup minimo per qualsiasi postazione: runtime, browser.",
+                    Category = "Generale",
+                    Icon = "🖥️",
+                    Steps = new()
+                    {
+                        new() { ProcessId = "vcredist",       Order = 10 },
+                        new() { ProcessId = "dotnet-runtime", Order = 20 },
+                    }
+                },
+            };
+            _cachedPresets = productionPresets;
+            return Task.FromResult<IReadOnlyList<DeploymentPreset>>(productionPresets);
+        }
+        
+        // Demo mode: return full demo data
         var presets = new List<DeploymentPreset>
         {
             new()
@@ -297,6 +368,7 @@ public sealed class InstallerService : IInstallerService
                 }
             },
         };
+        _cachedPresets = presets;
         return Task.FromResult<IReadOnlyList<DeploymentPreset>>(presets);
     }
 
@@ -324,4 +396,21 @@ public sealed class InstallerService : IInstallerService
 
     public string ResolveProcessPath(DeploymentProcess process) =>
         Path.Combine(_baseDir, process.RelativePath);
+
+    public void AddUserPreset(DeploymentPreset preset)
+    {
+        _userCreatedPresets.Add(preset);
+        _log.Info($"User created preset: {preset.Name} with {preset.Steps.Count} steps.");
+    }
+
+    public IReadOnlyList<DeploymentProcess> GetAllAvailableProcesses()
+    {
+        return _cachedProcesses;
+    }
+
+    public IReadOnlyList<DeploymentPreset> GetAllPresets()
+    {
+        // Combine cached presets with user-created presets
+        return _cachedPresets.Concat(_userCreatedPresets).ToList();
+    }
 }
