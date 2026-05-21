@@ -16,20 +16,35 @@ public sealed partial class ProcessStepViewModel : ObservableObject
 
     // Manual property — intercepts attempts to disable a required step.
     private bool _isEnabled;
+    private bool _suppressWarning = false;
+    
     public bool IsEnabled
     {
         get => _isEnabled;
         set
         {
-            // Only show warning if user is trying to turn OFF a required step
-            // that IS currently in a selected preset (not when presets are deselected)
-            if (!value && IsRequired && IsInSelectedPreset)
+            // Only show warning if:
+            // 1. User is trying to turn OFF a required step
+            // 2. The step IS currently in a selected preset
+            // 3. The change is from user interaction (not programmatic)
+            // 4. Warning is not suppressed
+            if (!value && IsRequired && IsInSelectedPreset && !_suppressWarning && _isEnabled != value)
             {
                 var confirmed = _dialogService.ShowDisableRequiredWarning(Process.Name);
                 if (!confirmed) return;   // User cancelled — keep the step enabled.
             }
             SetProperty(ref _isEnabled, value);
         }
+    }
+    
+    /// <summary>
+    /// Sets IsEnabled without triggering the warning dialog (for programmatic changes).
+    /// </summary>
+    public void SetIsEnabledSilently(bool value)
+    {
+        _suppressWarning = true;
+        IsEnabled = value;
+        _suppressWarning = false;
     }
 
     [ObservableProperty] private string _statusIcon = "⏳";

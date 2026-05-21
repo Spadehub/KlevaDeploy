@@ -8,7 +8,7 @@ using DeploymentApp.Models;
 namespace DeploymentApp.ViewModels;
 
 /// <summary>
-/// ViewModel for creating a new deployment preset with a sliding panel UI.
+/// ViewModel for creating or editing a deployment preset with a sliding panel UI.
 /// </summary>
 public sealed partial class CreatePresetViewModel : ObservableObject
 {
@@ -18,6 +18,9 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     [ObservableProperty] private string _category = string.Empty;
     [ObservableProperty] private string _processSearchText = string.Empty;
     [ObservableProperty] private string? _validationError;
+
+    private DeploymentPreset? _editingPreset;
+    public bool IsEditMode => _editingPreset != null;
 
     public ObservableCollection<ProcessSelectionItem> AllProcesses { get; } = new();
     public ObservableCollection<ProcessSelectionItem> FilteredProcesses { get; } = new();
@@ -45,10 +48,16 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Initialize the ViewModel with available processes.
+    /// Initialize the ViewModel with available processes for creating a new preset.
     /// </summary>
     public void Initialize(IEnumerable<DeploymentProcess> availableProcesses)
     {
+        _editingPreset = null;
+        Name = string.Empty;
+        Icon = "📦";
+        Description = string.Empty;
+        Category = string.Empty;
+        
         AllProcesses.Clear();
         foreach (var process in availableProcesses)
         {
@@ -64,6 +73,50 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             AllProcesses.Add(item);
         }
         ApplyProcessFilter();
+        OnPropertyChanged(nameof(IsEditMode));
+    }
+
+    /// <summary>
+    /// Initialize the ViewModel for editing an existing preset.
+    /// </summary>
+    public void InitializeForEdit(DeploymentPreset preset, IEnumerable<DeploymentProcess> availableProcesses)
+    {
+        _editingPreset = preset;
+        Name = preset.Name;
+        Icon = preset.Icon;
+        Description = preset.Description;
+        Category = preset.Category;
+        
+        AllProcesses.Clear();
+        
+        // Create a dictionary of process steps for quick lookup
+        var stepDict = preset.Steps.ToDictionary(s => s.ProcessId);
+        
+        foreach (var process in availableProcesses)
+        {
+            var item = new ProcessSelectionItem(process);
+            
+            // If this process is in the preset, mark it as selected and set its properties
+            if (stepDict.TryGetValue(process.Id, out var step))
+            {
+                item.IsSelected = true;
+                item.Order = step.Order;
+                item.IsRequired = step.IsRequired;
+            }
+            
+            item.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(ProcessSelectionItem.IsSelected))
+                {
+                    UpdateProcessOrdering();
+                    ValidationError = null;
+                }
+            };
+            AllProcesses.Add(item);
+        }
+        
+        ApplyProcessFilter();
+        OnPropertyChanged(nameof(IsEditMode));
     }
 
     partial void OnProcessSearchTextChanged(string value)
@@ -182,15 +235,29 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             IsRequired = p.IsRequired
         }).ToList();
 
-        return new DeploymentPreset
+        if (IsEditMode && _editingPreset != null)
         {
-            Id = Guid.NewGuid().ToString("N"),
-            Name = Name.Trim(),
-            Icon = Icon,
-            Description = Description.Trim(),
-            Category = string.IsNullOrWhiteSpace(Category) ? "Personalizzato" : Category.Trim(),
-            Steps = steps
-        };
+            // Update existing preset
+            _editingPreset.Name = Name.Trim();
+            _editingPreset.Icon = Icon;
+            _editingPreset.Description = Description.Trim();
+            _editingPreset.Category = string.IsNullOrWhiteSpace(Category) ? "Personalizzato" : Category.Trim();
+            _editingPreset.Steps = steps;
+            return _editingPreset;
+        }
+        else
+        {
+            // Create new preset
+            return new DeploymentPreset
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Name = Name.Trim(),
+                Icon = Icon,
+                Description = Description.Trim(),
+                Category = string.IsNullOrWhiteSpace(Category) ? "Personalizzato" : Category.Trim(),
+                Steps = steps
+            };
+        }
     }
 
     public DeploymentPreset? CreatedPreset { get; private set; }

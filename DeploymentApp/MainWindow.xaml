@@ -479,74 +479,90 @@
                             <ItemsControl ItemsSource="{Binding FilteredPresets}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <ToggleButton Style="{StaticResource PresetCardToggleButton}"
-                                                      IsChecked="{Binding IsSelected, Mode=TwoWay}">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>  <!-- Icon -->
-                                                    <ColumnDefinition Width="*"/>     <!-- Name + desc -->
-                                                    <ColumnDefinition Width="Auto"/>  <!-- Checkmark badge / step count -->
-                                                </Grid.ColumnDefinitions>
+                                        <Grid>
+                                            <ToggleButton Style="{StaticResource PresetCardToggleButton}"
+                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>  <!-- Icon -->
+                                                        <ColumnDefinition Width="*"/>     <!-- Name + desc -->
+                                                        <ColumnDefinition Width="Auto"/>  <!-- Checkmark badge / step count -->
+                                                    </Grid.ColumnDefinitions>
 
-                                                <!-- Emoji icon -->
-                                                <Border Grid.Column="0"
-                                                        Width="40" Height="40"
-                                                        CornerRadius="{StaticResource CornerRadiusMedium}"
-                                                        Background="{DynamicResource SurfaceElevatedBrush}"
-                                                        Margin="0,0,12,0">
-                                                    <TextBlock Text="{Binding Icon, Mode=OneWay}"
-                                                               FontSize="18"
-                                                               HorizontalAlignment="Center"
-                                                               VerticalAlignment="Center"/>
-                                                </Border>
-
-                                                <!-- Name + description + category -->
-                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding Name, Mode=OneWay}"
-                                                               FontWeight="SemiBold"
-                                                               FontSize="13"
-                                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
-                                                    <TextBlock Text="{Binding Description, Mode=OneWay}"
-                                                               FontSize="11"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               Margin="0,2,0,0"
-                                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
-                                                    <TextBlock FontSize="11"
-                                                               Margin="0,2,0,0"
-                                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}">
-                                                        <Run Text="{Binding Category, Mode=OneWay}"/>
-                                                        <Run Text=" · "/>
-                                                        <Run Text="{Binding StepCount, Mode=OneWay}"/>
-                                                        <Run Text=" step"/>
-                                                    </TextBlock>
-                                                </StackPanel>
-
-                                                <!-- Right column: checkmark badge (selected) or step count badge (unselected) -->
-                                                <Grid Grid.Column="2" VerticalAlignment="Top" Margin="8,0,0,0">
-                                                    <!-- Step count badge — visible when NOT selected -->
-                                                    <Border Background="{DynamicResource SurfaceElevatedBrush}"
-                                                            CornerRadius="{StaticResource CornerRadiusSmall}"
-                                                            Padding="8,3"
-                                                            Visibility="{Binding IsSelected, Converter={StaticResource InverseBoolToVisibility}}">
-                                                        <TextBlock Text="{Binding StepCount, StringFormat='{}{0} step', Mode=OneWay}"
-                                                                   Foreground="{DynamicResource TextSecondaryBrush}"
-                                                                   FontSize="11"/>
-                                                    </Border>
-                                                    <!-- Checkmark badge — visible when selected -->
-                                                    <Border Width="22" Height="22"
-                                                            Background="White"
-                                                            CornerRadius="11"
-                                                            Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}">
-                                                        <TextBlock Text="✓"
-                                                                   FontSize="12"
-                                                                   FontWeight="Bold"
-                                                                   Foreground="{DynamicResource AccentBrush}"
+                                                    <!-- Emoji icon -->
+                                                    <Border Grid.Column="0"
+                                                            Width="40" Height="40"
+                                                            CornerRadius="{StaticResource CornerRadiusMedium}"
+                                                            Background="{DynamicResource SurfaceElevatedBrush}"
+                                                            Margin="0,0,12,0">
+                                                        <TextBlock Text="{Binding Icon, Mode=OneWay}"
+                                                                   FontSize="18"
                                                                    HorizontalAlignment="Center"
                                                                    VerticalAlignment="Center"/>
                                                     </Border>
+
+                                                    <!-- Name + description + category -->
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Name, Mode=OneWay}"
+                                                                   FontWeight="SemiBold"
+                                                                   FontSize="13"
+                                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
+                                                        <TextBlock Text="{Binding Description, Mode=OneWay}"
+                                                                   FontSize="11"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Margin="0,2,0,0"
+                                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
+                                                        <TextBlock FontSize="11"
+                                                                   Margin="0,2,0,0"
+                                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}">
+                                                            <Run Text="{Binding Category, Mode=OneWay}"/>
+                                                            <Run Text=" · "/>
+                                                            <Run Text="{Binding StepCount, Mode=OneWay}"/>
+                                                            <Run Text=" step"/>
+                                                        </TextBlock>
+                                                    </StackPanel>
+
+                                                    <!-- Right column: checkmark badge (selected) or step count badge (unselected) -->
+                                                    <Grid Grid.Column="2" VerticalAlignment="Top" Margin="8,0,0,0">
+                                                        <!-- Step count badge — visible when NOT selected -->
+                                                        <Border Background="{DynamicResource SurfaceElevatedBrush}"
+                                                                CornerRadius="{StaticResource CornerRadiusSmall}"
+                                                                Padding="8,3"
+                                                                Visibility="{Binding IsSelected, Converter={StaticResource InverseBoolToVisibility}}">
+                                                            <TextBlock Text="{Binding StepCount, StringFormat='{}{0} step', Mode=OneWay}"
+                                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                       FontSize="11"/>
+                                                        </Border>
+                                                        <!-- Checkmark badge — visible when selected -->
+                                                        <Border Width="22" Height="22"
+                                                                Background="White"
+                                                                CornerRadius="11"
+                                                                Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}">
+                                                            <TextBlock Text="✓"
+                                                                       FontSize="12"
+                                                                       FontWeight="Bold"
+                                                                       Foreground="{DynamicResource AccentBrush}"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </Grid>
                                                 </Grid>
-                                            </Grid>
-                                        </ToggleButton>
+                                            </ToggleButton>
+                                            
+                                            <!-- Edit button (pencil icon) - overlaid on bottom right -->
+                                            <Button Command="{Binding DataContext.EditPresetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}"
+                                                    Style="{StaticResource Win11Button}"
+                                                    Width="28" Height="28"
+                                                    Padding="0"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Bottom"
+                                                    Margin="0,0,8,8"
+                                                    ToolTip="Modifica Preset"
+                                                    Background="{DynamicResource SurfaceElevatedBrush}">
+                                                <TextBlock Text="✏️" FontSize="12"/>
+                                            </Button>
+                                        </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -1027,11 +1043,30 @@
                                 </Grid.ColumnDefinitions>
                                 
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Text="Crea Nuovo Preset"
-                                               Style="{StaticResource Win11TextTitle}"
-                                               Margin="0,0,0,4"/>
-                                    <TextBlock Text="Configura un nuovo preset di installazione personalizzato"
-                                               Style="{StaticResource Win11TextSecondary}"/>
+                                    <TextBlock Margin="0,0,0,4">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Win11TextTitle}">
+                                                <Setter Property="Text" Value="Crea Nuovo Preset"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsEditMode}" Value="True">
+                                                        <Setter Property="Text" Value="Modifica Preset"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock>
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource Win11TextSecondary}">
+                                                <Setter Property="Text" Value="Configura un nuovo preset di installazione personalizzato"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsEditMode}" Value="True">
+                                                        <Setter Property="Text" Value="Modifica il preset di installazione"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
                                 </StackPanel>
 
                                 <!-- Close button -->
@@ -1254,11 +1289,20 @@
                                         Margin="0,0,8,0"/>
 
                                 <Button Grid.Column="1"
-                                        Content="Salva Preset"
                                         Command="{Binding SaveCommand}"
-                                        Style="{StaticResource Win11AccentButton}"
                                         Height="40"
-                                        MinWidth="140"/>
+                                        MinWidth="140">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource Win11AccentButton}">
+                                            <Setter Property="Content" Value="Salva Preset"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsEditMode}" Value="True">
+                                                    <Setter Property="Content" Value="Salva Modifiche"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
                             </Grid>
                         </Border>
                     </Grid>

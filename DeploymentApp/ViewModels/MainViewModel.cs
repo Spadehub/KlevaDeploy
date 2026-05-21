@@ -217,12 +217,12 @@ public sealed partial class MainViewModel : ObservableObject
             // Apply user manual deselection if exists
             if (_userManualDeselections.ContainsKey(process.Id))
             {
-                stepVm.IsEnabled = false;
+                stepVm.SetIsEnabledSilently(false);
             }
             else
             {
-                // Only enable if in selected preset
-                stepVm.IsEnabled = isInSelectedPreset;
+                // Only enable if in selected preset (use silent method to avoid warning dialog)
+                stepVm.SetIsEnabledSilently(isInSelectedPreset);
             }
             
             tempList.Add(stepVm);
@@ -275,30 +275,66 @@ public sealed partial class MainViewModel : ObservableObject
         _log.Info("Opening create preset panel.");
     }
 
+    [RelayCommand]
+    private void EditPreset(PresetViewModel presetVm)
+    {
+        // Initialize the CreatePresetViewModel for editing
+        var allProcesses = _installerService.GetAllAvailableProcesses()
+            .Concat(_userCreatedProcesses)
+            .ToList();
+        
+        CreatePresetViewModel.InitializeForEdit(presetVm.Preset, allProcesses);
+        IsCreatePresetPanelOpen = true;
+        _log.Info($"Opening edit preset panel for: {presetVm.Name}");
+    }
+
     private void OnCreatePresetCloseRequested(object? sender, EventArgs e)
     {
         IsCreatePresetPanelOpen = false;
 
         if (CreatePresetViewModel.CreatedPreset != null)
         {
-            // Add the new preset to the service
-            _installerService.AddUserPreset(CreatePresetViewModel.CreatedPreset);
-            
-            // Add to the UI collection
-            var presetVm = new PresetViewModel(CreatePresetViewModel.CreatedPreset);
-            presetVm.PropertyChanged += (_, e) =>
+            if (CreatePresetViewModel.IsEditMode)
             {
-                if (e.PropertyName == nameof(PresetViewModel.IsSelected))
-                    RebuildExecutionQueue();
-            };
-            Presets.Add(presetVm);
-            ApplyPresetFilter();
-            
-            _log.Info($"Created new preset: {CreatePresetViewModel.CreatedPreset.Name}");
+                // Editing existing preset - find and update the PresetViewModel
+                var existingVm = Presets.FirstOrDefault(p => p.Preset.Id == CreatePresetViewModel.CreatedPreset.Id);
+                if (existingVm != null)
+                {
+                    // If the preset was selected, rebuild the queue to reflect changes
+                    bool wasSelected = existingVm.IsSelected;
+                    
+                    // Refresh the preset list to show updated values
+                    ApplyPresetFilter();
+                    
+                    // If it was selected, rebuild the execution queue to reflect changes
+                    if (wasSelected)
+                    {
+                        RebuildExecutionQueue();
+                    }
+                    
+                    _log.Info($"Updated preset: {CreatePresetViewModel.CreatedPreset.Name}");
+                }
+            }
+            else
+            {
+                // Creating new preset - add to the service and UI collection
+                _installerService.AddUserPreset(CreatePresetViewModel.CreatedPreset);
+                
+                var presetVm = new PresetViewModel(CreatePresetViewModel.CreatedPreset);
+                presetVm.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(PresetViewModel.IsSelected))
+                        RebuildExecutionQueue();
+                };
+                Presets.Add(presetVm);
+                ApplyPresetFilter();
+                
+                _log.Info($"Created new preset: {CreatePresetViewModel.CreatedPreset.Name}");
+            }
         }
         else
         {
-            _log.Info("Create preset cancelled.");
+            _log.Info("Preset operation cancelled.");
         }
     }
 
