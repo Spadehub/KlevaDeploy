@@ -11,6 +11,8 @@ public sealed partial class ProcessStepViewModel : ObservableObject
     public DeploymentProcess Process { get; }
     public int Order { get; }
 
+    [ObservableProperty] private bool _isInSelectedPreset;
+
     // Manual property — intercepts attempts to disable a required step.
     private bool _isEnabled;
     public bool IsEnabled
@@ -18,8 +20,9 @@ public sealed partial class ProcessStepViewModel : ObservableObject
         get => _isEnabled;
         set
         {
-            // If the user is trying to turn OFF a required step, show the warning dialog.
-            if (!value && IsRequired)
+            // ISSUE 1 FIX: Only show warning if user is trying to turn OFF a required step
+            // that IS currently in a selected preset (not when presets are deselected)
+            if (!value && IsRequired && IsInSelectedPreset)
             {
                 var confirmed = _dialogService.ShowDisableRequiredWarning(Process.Name);
                 if (!confirmed) return;   // User cancelled — keep the step enabled.
@@ -44,12 +47,13 @@ public sealed partial class ProcessStepViewModel : ObservableObject
         _                          => "Unknown"
     };
 
-    public ProcessStepViewModel(DeploymentProcess process, int order, IDialogService dialogService)
+    public ProcessStepViewModel(DeploymentProcess process, int order, IDialogService dialogService, bool isInSelectedPreset = true)
     {
         Process = process;
         Order = order;
         _dialogService = dialogService;
         _isEnabled = process.EnabledByDefault;
+        _isInSelectedPreset = isInSelectedPreset;
     }
 
     public void SetStatus(string icon, string text)

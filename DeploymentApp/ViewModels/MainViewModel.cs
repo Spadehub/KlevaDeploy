@@ -21,6 +21,7 @@ public sealed partial class MainViewModel : ObservableObject
     private IReadOnlyList<DeploymentProcess> _allProcesses = Array.Empty<DeploymentProcess>();
     private readonly List<DeploymentProcess> _userCreatedProcesses = new();
     private IReadOnlyList<DeploymentPreset> _allPresets = Array.Empty<DeploymentPreset>();
+    private readonly Dictionary<string, bool> _userManualDeselections = new();
 
     public ObservableCollection<PresetViewModel> Presets { get; } = new();
     public ObservableCollection<PresetViewModel> FilteredPresets { get; } = new();
@@ -70,6 +71,8 @@ public sealed partial class MainViewModel : ObservableObject
     public async Task InitializeAsync()
     {
         await LoadDataAsync();
+        // ISSUE 3 FIX: Rebuild execution queue at startup to show all processes
+        RebuildExecutionQueue();
     }
 
     private async Task LoadDataAsync()
@@ -164,33 +167,77 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var selected = Presets.Where(p => p.IsSelected).Select(p => p.Preset).ToList();
         SelectedPresetCount = selected.Count;
+        
+        // Store current user manual deselections before clearing
+        foreach (var step in ExecutionQueue)
+        {
+            if (!step.IsEnabled && step.IsInSelectedPreset)
+            {
+                // User manually deselected this process even though it was in a preset
+                _userManualDeselections[step.Process.Id] = true;
+            }
+            else if (step.IsEnabled && !step.IsInSelectedPreset)
+            {
+                // User manually selected this process even though it wasn't in a preset
+                _userManualDeselections.Remove(step.Process.Id);
+            }
+        }
+        
         ExecutionQueue.Clear();
         
-        if (selected.Count == 0)
-        {
-            ApplyProcessFilter();
-            return;
-        }
-
-        // Combine preset processes with user-created processes
+        // Combine all available processes
         var allAvailableProcesses = _allProcesses.Concat(_userCreatedProcesses).ToList();
-        var queue = _installerService.BuildExecutionQueue(selected, allAvailableProcesses);
         
-        foreach (var (process, order) in queue)
-            ExecutionQueue.Add(new ProcessStepViewModel(process, order, _dialogService));
-
-        // Add user-created processes at the end if not already in queue
-        var queueIds = queue.Select(q => q.Process.Id).ToHashSet();
-        var nextOrder = queue.Any() ? queue.Max(q => q.Order) + 10 : 10;
-        
-        foreach (var userProcess in _userCreatedProcesses.Where(p => !queueIds.Contains(p.Id)))
+        // Determine which processes are in selected presets
+        HashSet<string> processesInSelectedPresets = new();
+        Dictionary<string, int> processOrderInPreset = new();
+        if (selected.Count > 0)
         {
-            ExecutionQueue.Add(new ProcessStepViewModel(userProcess, nextOrder, _dialogService));
-            nextOrder += 10;
+            var queue = _installerService.BuildExecutionQueue(selected, allAvailableProcesses);
+            var order = 10;
+            foreach (var item in queue)
+            {
+                processesInSelectedPresets.Add(item.Process.Id);
+                processOrderInPreset[item.Process.Id] = order;
+                order += 10;
+            }
+        }
+        
+        // Always show ALL processes
+        var tempList = new List<ProcessStepViewModel>();
+        foreach (var process in allAvailableProcesses)
+        {
+            bool isInSelectedPreset = processesInSelectedPresets.Contains(process.Id);
+            int order = isInSelectedPreset ? processOrderInPreset[process.Id] : 9999;
+            var stepVm = new ProcessStepViewModel(process, order, _dialogService, isInSelectedPreset);
+            
+            // Apply user manual deselection if exists
+            if (_userManualDeselections.ContainsKey(process.Id))
+            {
+                stepVm.IsEnabled = false;
+            }
+            else
+            {
+                // ISSUE 7 FIX: Only enable if in selected preset (regardless of IsRequired)
+                stepVm.IsEnabled = isInSelectedPreset;
+            }
+            
+            tempList.Add(stepVm);
+        }
+        
+        // ISSUE 5 FIX: Sort by enabled status first (selected on top), then by order
+        var sortedList = tempList
+            .OrderByDescending(s => s.IsEnabled)
+            .ThenBy(s => s.Order)
+            .ToList();
+        
+        foreach (var step in sortedList)
+        {
+            ExecutionQueue.Add(step);
         }
 
         ApplyProcessFilter();
-        _log.Info($"Execution queue rebuilt: {ExecutionQueue.Count} steps from {selected.Count} preset(s) + {_userCreatedProcesses.Count} user process(es).");
+        _log.Info($"Execution queue rebuilt: {ExecutionQueue.Count} total processes ({processesInSelectedPresets.Count} in selected presets).");
     }
 
     [RelayCommand]

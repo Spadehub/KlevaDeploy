@@ -1,3 +1,4 @@
+using DeploymentApp.Models;
 using DeploymentApp.Services.Interfaces;
 using DeploymentApp.Views;
 
@@ -11,7 +12,27 @@ public sealed class DialogService : IDialogService
 {
     public bool ShowDisableRequiredWarning(string processName)
     {
-        var dialog = new DisableFeatureWarningDialog(processName);
-        return dialog.ShowDialog() == true;
+        // Check if user has chosen to suppress this warning
+        if (UserPreferences.SuppressRequiredProcessWarning)
+            return true; // Allow disable without showing dialog
+
+        var dialog = new DisableFeatureWarningDialog(processName)
+        {
+            // ISSUE 2 FIX: Set Owner to ensure dialog appears centered and buttons are visible
+            Owner = System.Windows.Application.Current.MainWindow
+        };
+        
+        bool? result = dialog.ShowDialog();
+        
+        // If user checked "Don't show again", save the preference
+        if (dialog.DontShowAgain)
+            UserPreferences.SuppressRequiredProcessWarning = true;
+        
+        return result == true;
+    }
+
+    public void ResetDisableRequiredWarningPreference()
+    {
+        UserPreferences.SuppressRequiredProcessWarning = false;
     }
 }

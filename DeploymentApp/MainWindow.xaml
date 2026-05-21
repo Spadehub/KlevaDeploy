@@ -697,7 +697,7 @@
                                         Padding="10,8">
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                         <TextBlock Text="➕" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                        <TextBlock Text="Create Custom Process" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Nuovo Processo" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
                             </Grid>
@@ -728,9 +728,27 @@
                                             <ToggleButton.Style>
                                                 <Style TargetType="ToggleButton" BasedOn="{StaticResource ProcessCardToggleButton}">
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsEnabled}" Value="False">
-                                                            <Setter Property="Opacity" Value="0.5"/>
+                                                        <!-- ISSUE 4 & 6 FIX: Grey out ONLY when not in selected preset AND not manually enabled -->
+                                                        <!-- If IsEnabled=true, always show at full opacity (1.0) -->
+                                                        <DataTrigger Binding="{Binding IsEnabled}" Value="True">
+                                                            <Setter Property="Opacity" Value="1.0"/>
                                                         </DataTrigger>
+                                                        <!-- If IsEnabled=false AND not in preset, grey out more -->
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Binding="{Binding IsEnabled}" Value="False"/>
+                                                                <Condition Binding="{Binding IsInSelectedPreset}" Value="False"/>
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter Property="Opacity" Value="0.3"/>
+                                                        </MultiDataTrigger>
+                                                        <!-- If IsEnabled=false BUT in preset (manually deselected), moderate grey -->
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Binding="{Binding IsEnabled}" Value="False"/>
+                                                                <Condition Binding="{Binding IsInSelectedPreset}" Value="True"/>
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter Property="Opacity" Value="0.5"/>
+                                                        </MultiDataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </ToggleButton.Style>

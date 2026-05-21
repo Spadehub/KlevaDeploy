@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:models="clr-namespace:DeploymentApp.Models"
         mc:Ignorable="d"
-        Title="Create Custom Process"
+        Title="Nuovo Processo"
         Width="600" Height="650"
         MinWidth="500" MinHeight="550"
         WindowStartupLocation="CenterOwner"
@@ -44,7 +44,7 @@
                                VerticalAlignment="Center"
                                Margin="0,0,10,0"
                                RenderOptions.BitmapScalingMode="HighQuality"/>
-                        <TextBlock Text="Create Custom Process"
+                        <TextBlock Text="Nuovo Processo"
                                    Style="{StaticResource Win11TextSubtitle}"
                                    VerticalAlignment="Center"/>
                     </StackPanel>
@@ -255,7 +255,7 @@
                             Padding="20,8"
                             Margin="0,0,8,0"
                             MinWidth="100"/>
-                    <Button Content="Create Process"
+                    <Button Content="Crea Processo"
                             Command="{Binding SaveCommand}"
                             Style="{StaticResource Win11AccentButton}"
                             Padding="20,8"

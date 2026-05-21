@@ -2,14 +2,17 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Attenzione — Funzionalità richiesta"
-        Width="440" Height="240"
+        Width="440" Height="300"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
         Background="{DynamicResource AppBackgroundBrush}"
-        FontFamily="Segoe UI Variable, Segoe UI, sans-serif">
+        FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
+        SizeToContent="Height"
+        MinHeight="280"
+        MaxHeight="400">
 
-    <Border Margin="28">
+    <Border Margin="24">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>  <!-- Icon + title -->
