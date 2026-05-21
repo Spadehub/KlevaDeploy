@@ -1,0 +1,69 @@
+<Window x:Class="DeploymentApp.Views.DisableFeatureWarningDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Attenzione — Funzionalità richiesta"
+        Width="440" Height="240"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="{DynamicResource AppBackgroundBrush}"
+        FontFamily="Segoe UI Variable, Segoe UI, sans-serif">
+
+    <Border Margin="28">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>  <!-- Icon + title -->
+                <RowDefinition Height="12"/>
+                <RowDefinition Height="Auto"/>  <!-- Body text -->
+                <RowDefinition Height="16"/>
+                <RowDefinition Height="Auto"/>  <!-- Don't show again -->
+                <RowDefinition Height="16"/>
+                <RowDefinition Height="Auto"/>  <!-- Buttons -->
+            </Grid.RowDefinitions>
+
+            <!-- Icon + title -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal">
+                <TextBlock Text="⚠" FontSize="22" Margin="0,0,10,0"
+                           Foreground="{DynamicResource WarningBrush}"
+                           VerticalAlignment="Center"/>
+                <TextBlock Text="Funzionalità richiesta dal preset"
+                           Style="{StaticResource Win11TextSubtitle}"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Body -->
+            <TextBlock Grid.Row="2"
+                       x:Name="BodyText"
+                       TextWrapping="Wrap"
+                       Style="{StaticResource Win11TextBody}"
+                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+            <!-- Don't show again -->
+            <StackPanel Grid.Row="4" Orientation="Horizontal">
+                <CheckBox x:Name="DontShowAgainCheckBox"
+                          VerticalAlignment="Center"
+                          Foreground="{DynamicResource TextSecondaryBrush}"
+                          FontSize="12">
+                    <TextBlock Text="Non mostrare più questo avviso"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               FontSize="12"/>
+                </CheckBox>
+            </StackPanel>
+
+            <!-- Buttons -->
+            <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="CancelButton"
+                        Content="Annulla"
+                        Style="{StaticResource Win11Button}"
+                        Width="90" Height="32"
+                        Margin="0,0,8,0"
+                        IsCancel="True"/>
+                <Button x:Name="ConfirmButton"
+                        Content="Disattiva comunque"
+                        Style="{StaticResource Win11AccentButton}"
+                        Width="150" Height="32"
+                        IsDefault="True"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>
