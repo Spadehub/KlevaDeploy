@@ -1107,7 +1107,7 @@
 
                                 <!-- Process Selection Section -->
                                 <TextBlock Text="Processi *" Style="{StaticResource Win11TextBody}" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                <TextBlock Text="Seleziona i processi da includere nel preset"
+                                <TextBlock Text="Seleziona i processi da includere nel preset e marca quelli richiesti"
                                            Style="{StaticResource Win11TextSecondary}"
                                            Margin="0,0,0,8"/>
 
@@ -1128,15 +1128,19 @@
                                         BorderBrush="{DynamicResource BorderBrush}"
                                         BorderThickness="1"
                                         CornerRadius="{StaticResource CornerRadiusSmall}"
-                                        MaxHeight="300">
+                                        MaxHeight="400">
                                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                                         <ItemsControl ItemsSource="{Binding FilteredProcesses}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <Border BorderBrush="{DynamicResource BorderBrush}"
                                                             BorderThickness="0,0,0,1"
-                                                            Padding="12,8">
+                                                            Padding="12,10">
                                                         <Grid>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto"/>
+                                                                <RowDefinition Height="Auto"/>
+                                                            </Grid.RowDefinitions>
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="Auto"/>
                                                                 <ColumnDefinition Width="Auto"/>
@@ -1146,13 +1150,13 @@
                                                             </Grid.ColumnDefinitions>
 
                                                             <!-- Checkbox -->
-                                                            <CheckBox Grid.Column="0"
+                                                            <CheckBox Grid.Row="0" Grid.Column="0"
                                                                       IsChecked="{Binding IsSelected}"
                                                                       VerticalAlignment="Center"
                                                                       Margin="0,0,10,0"/>
 
                                                             <!-- Order number (when selected) -->
-                                                            <Border Grid.Column="1"
+                                                            <Border Grid.Row="0" Grid.Column="1"
                                                                     Background="{DynamicResource AccentBrush}"
                                                                     CornerRadius="10"
                                                                     Width="20" Height="20"
@@ -1167,7 +1171,7 @@
                                                             </Border>
 
                                                             <!-- Process info -->
-                                                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                            <StackPanel Grid.Row="0" Grid.Column="2" VerticalAlignment="Center">
                                                                 <TextBlock Text="{Binding Name}"
                                                                            Style="{StaticResource Win11TextBody}"
                                                                            FontWeight="SemiBold"/>
@@ -1177,7 +1181,7 @@
                                                             </StackPanel>
 
                                                             <!-- Type badge -->
-                                                            <Border Grid.Column="3"
+                                                            <Border Grid.Row="0" Grid.Column="3"
                                                                     Background="{DynamicResource SurfaceElevatedBrush}"
                                                                     CornerRadius="3"
                                                                     Padding="6,2"
@@ -1189,7 +1193,7 @@
                                                             </Border>
 
                                                             <!-- Reorder buttons (when selected) -->
-                                                            <StackPanel Grid.Column="4"
+                                                            <StackPanel Grid.Row="0" Grid.Column="4"
                                                                         Orientation="Horizontal"
                                                                         Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}">
                                                                 <Button Command="{Binding DataContext.MoveProcessUpCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
@@ -1210,6 +1214,16 @@
                                                                     <TextBlock Text="▼" FontSize="10"/>
                                                                 </Button>
                                                             </StackPanel>
+                                                            
+                                                            <!-- Required checkbox (when selected) -->
+                                                            <CheckBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"
+                                                                      IsChecked="{Binding IsRequired}"
+                                                                      Margin="0,6,0,0"
+                                                                      Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}">
+                                                                <TextBlock Text="Richiesto (non può essere disabilitato)"
+                                                                           Style="{StaticResource Win11TextSecondary}"
+                                                                           FontSize="11"/>
+                                                            </CheckBox>
                                                         </Grid>
                                                     </Border>
                                                 </DataTemplate>

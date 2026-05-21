@@ -16,7 +16,6 @@ public sealed partial class CreateProcessViewModel : ObservableObject
     [ObservableProperty] private string _arguments = string.Empty;
     [ObservableProperty] private string _scriptContent = string.Empty;
     [ObservableProperty] private bool _runAsAdmin;
-    [ObservableProperty] private bool _isRequired;
     [ObservableProperty] private string _selectedIconKey = "IconPackage";
     [ObservableProperty] private string? _validationError;
 
@@ -99,7 +98,7 @@ public sealed partial class CreateProcessViewModel : ObservableObject
             Kind = SelectedProcessKind,
             Arguments = Arguments.Trim(),
             RunAsAdmin = RunAsAdmin,
-            IsRequired = IsRequired,
+            IsRequired = false, // Required logic is now handled by presets
             IconKey = SelectedIconKey,
             IsUserCreated = true,
             EnabledByDefault = true
@@ -139,7 +138,7 @@ public sealed partial class CreateProcessViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(ProcessName))
         {
-            ValidationError = "Process name is required.";
+            ValidationError = "Il nome del processo è obbligatorio.";
             return false;
         }
 
@@ -147,20 +146,20 @@ public sealed partial class CreateProcessViewModel : ObservableObject
         {
             if (string.IsNullOrWhiteSpace(FilePath))
             {
-                ValidationError = "File path is required for installers.";
+                ValidationError = "Il percorso del file è obbligatorio per gli installer.";
                 return false;
             }
 
             if (!File.Exists(FilePath))
             {
-                ValidationError = "The specified file does not exist.";
+                ValidationError = "Il file specificato non esiste.";
                 return false;
             }
 
             var ext = Path.GetExtension(FilePath).ToLowerInvariant();
             if (ext != ".exe" && ext != ".msi" && ext != ".zip")
             {
-                ValidationError = "Installer must be .exe, .msi, or .zip file.";
+                ValidationError = "L'installer deve essere un file .exe, .msi o .zip.";
                 return false;
             }
         }
@@ -172,13 +171,13 @@ public sealed partial class CreateProcessViewModel : ObservableObject
 
             if (!hasContent && !hasFile)
             {
-                ValidationError = "Either script content or file path is required.";
+                ValidationError = "È richiesto il contenuto dello script o il percorso del file.";
                 return false;
             }
 
             if (hasFile && !File.Exists(FilePath))
             {
-                ValidationError = "The specified script file does not exist.";
+                ValidationError = "Il file script specificato non esiste.";
                 return false;
             }
         }

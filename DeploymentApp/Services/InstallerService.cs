@@ -372,25 +372,35 @@ public sealed class InstallerService : IInstallerService
         return Task.FromResult<IReadOnlyList<DeploymentPreset>>(presets);
     }
 
-    public IReadOnlyList<(DeploymentProcess Process, int Order)> BuildExecutionQueue(
+    public IReadOnlyList<(DeploymentProcess Process, int Order, bool IsRequired)> BuildExecutionQueue(
         IEnumerable<DeploymentPreset> selectedPresets,
         IReadOnlyList<DeploymentProcess> allProcesses)
     {
         var processMap = allProcesses.ToDictionary(p => p.Id);
         // Collect all steps from all selected presets; if a process appears multiple times, keep lowest Order
-        var merged = new Dictionary<string, int>();
+        // IsRequired is true if ANY preset marks it as required
+        var merged = new Dictionary<string, (int Order, bool IsRequired)>();
         foreach (var preset in selectedPresets)
         {
             foreach (var step in preset.Steps)
             {
-                if (!merged.TryGetValue(step.ProcessId, out var existing) || step.Order < existing)
-                    merged[step.ProcessId] = step.Order;
+                if (!merged.TryGetValue(step.ProcessId, out var existing))
+                {
+                    merged[step.ProcessId] = (step.Order, step.IsRequired);
+                }
+                else
+                {
+                    // Keep lowest order, but IsRequired is true if ANY preset marks it as required
+                    var newOrder = step.Order < existing.Order ? step.Order : existing.Order;
+                    var isRequired = existing.IsRequired || step.IsRequired;
+                    merged[step.ProcessId] = (newOrder, isRequired);
+                }
             }
         }
         return merged
             .Where(kv => processMap.ContainsKey(kv.Key))
-            .OrderBy(kv => kv.Value)
-            .Select(kv => (processMap[kv.Key], kv.Value))
+            .OrderBy(kv => kv.Value.Order)
+            .Select(kv => (processMap[kv.Key], kv.Value.Order, kv.Value.IsRequired))
             .ToList();
     }
 

@@ -65,7 +65,7 @@
                           Padding="20,16">
                 <StackPanel>
                     <!-- Process Name -->
-                    <TextBlock Text="Process Name *"
+                    <TextBlock Text="Nome Processo *"
                                Style="{StaticResource Win11TextBody}"
                                FontWeight="SemiBold"
                                Margin="0,0,0,6"/>
@@ -74,7 +74,7 @@
                              Margin="0,0,0,16"/>
 
                     <!-- Description -->
-                    <TextBlock Text="Description"
+                    <TextBlock Text="Descrizione"
                                Style="{StaticResource Win11TextBody}"
                                FontWeight="SemiBold"
                                Margin="0,0,0,6"/>
@@ -83,7 +83,7 @@
                              Margin="0,0,0,16"/>
 
                     <!-- Process Type -->
-                    <TextBlock Text="Process Type *"
+                    <TextBlock Text="Tipo di Processo *"
                                Style="{StaticResource Win11TextBody}"
                                FontWeight="SemiBold"
                                Margin="0,0,0,6"/>
@@ -118,7 +118,7 @@
                     <!-- Installer Mode Fields -->
                     <StackPanel Visibility="{Binding IsInstallerMode, Converter={StaticResource BoolToVis}}">
                         <!-- File Path -->
-                        <TextBlock Text="Installer File Path *"
+                        <TextBlock Text="Percorso File Installer *"
                                    Style="{StaticResource Win11TextBody}"
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,6"/>
@@ -132,14 +132,14 @@
                                      Style="{StaticResource Win11TextBox}"
                                      Margin="0,0,8,0"/>
                             <Button Grid.Column="1"
-                                    Content="Browse..."
+                                    Content="Sfoglia..."
                                     Command="{Binding BrowseFileCommand}"
                                     Style="{StaticResource Win11Button}"
                                     Padding="12,6"/>
                         </Grid>
 
                         <!-- Arguments -->
-                        <TextBlock Text="Command-Line Arguments"
+                        <TextBlock Text="Argomenti Riga di Comando"
                                    Style="{StaticResource Win11TextBody}"
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,6"/>
@@ -151,7 +151,7 @@
                     <!-- Script Mode Fields -->
                     <StackPanel Visibility="{Binding IsScriptMode, Converter={StaticResource BoolToVis}}">
                         <!-- Script Content -->
-                        <TextBlock Text="Script Content (inline)"
+                        <TextBlock Text="Contenuto Script (inline)"
                                    Style="{StaticResource Win11TextBody}"
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,6"/>
@@ -164,13 +164,13 @@
                                  FontFamily="Cascadia Code, Consolas, monospace"
                                  FontSize="11"
                                  Margin="0,0,0,8"/>
-                        <TextBlock Text="— OR —"
+                        <TextBlock Text="— OPPURE —"
                                    Style="{StaticResource Win11TextSecondary}"
                                    HorizontalAlignment="Center"
                                    Margin="0,0,0,8"/>
 
                         <!-- Script File Path -->
-                        <TextBlock Text="Script File Path"
+                        <TextBlock Text="Percorso File Script"
                                    Style="{StaticResource Win11TextBody}"
                                    FontWeight="SemiBold"
                                    Margin="0,0,0,6"/>
@@ -184,7 +184,7 @@
                                      Style="{StaticResource Win11TextBox}"
                                      Margin="0,0,8,0"/>
                             <Button Grid.Column="1"
-                                    Content="Browse..."
+                                    Content="Sfoglia..."
                                     Command="{Binding BrowseFileCommand}"
                                     Style="{StaticResource Win11Button}"
                                     Padding="12,6"/>
@@ -192,7 +192,7 @@
                     </StackPanel>
 
                     <!-- Icon Picker -->
-                    <TextBlock Text="Icon"
+                    <TextBlock Text="Icona"
                                Style="{StaticResource Win11TextBody}"
                                FontWeight="SemiBold"
                                Margin="0,0,0,6"/>
@@ -206,15 +206,8 @@
                     <!-- Checkboxes -->
                     <CheckBox IsChecked="{Binding RunAsAdmin}"
                               Style="{StaticResource Win11CheckBox}"
-                              Margin="0,0,0,8">
-                        <TextBlock Text="Run as Administrator"
-                                   Style="{StaticResource Win11TextBody}"/>
-                    </CheckBox>
-
-                    <CheckBox IsChecked="{Binding IsRequired}"
-                              Style="{StaticResource Win11CheckBox}"
                               Margin="0,0,0,16">
-                        <TextBlock Text="Required (cannot be disabled)"
+                        <TextBlock Text="Esegui come Amministratore"
                                    Style="{StaticResource Win11TextBody}"/>
                     </CheckBox>
 
@@ -249,7 +242,7 @@
                     Padding="20,16">
                 <StackPanel Orientation="Horizontal"
                             HorizontalAlignment="Right">
-                    <Button Content="Cancel"
+                    <Button Content="Annulla"
                             Command="{Binding CancelCommand}"
                             Style="{StaticResource Win11Button}"
                             Padding="20,8"

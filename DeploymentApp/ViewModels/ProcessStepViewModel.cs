@@ -10,6 +10,7 @@ public sealed partial class ProcessStepViewModel : ObservableObject
 
     public DeploymentProcess Process { get; }
     public int Order { get; }
+    public bool IsRequired { get; }
 
     [ObservableProperty] private bool _isInSelectedPreset;
 
@@ -20,7 +21,7 @@ public sealed partial class ProcessStepViewModel : ObservableObject
         get => _isEnabled;
         set
         {
-            // ISSUE 1 FIX: Only show warning if user is trying to turn OFF a required step
+            // Only show warning if user is trying to turn OFF a required step
             // that IS currently in a selected preset (not when presets are deselected)
             if (!value && IsRequired && IsInSelectedPreset)
             {
@@ -34,7 +35,6 @@ public sealed partial class ProcessStepViewModel : ObservableObject
     [ObservableProperty] private string _statusIcon = "⏳";
     [ObservableProperty] private string _statusText = "In attesa";
 
-    public bool IsRequired => Process.IsRequired;
     public string Name => Process.Name;
     public string Description => Process.Description;
     public string KindLabel => Process.Kind switch
@@ -47,10 +47,11 @@ public sealed partial class ProcessStepViewModel : ObservableObject
         _                          => "Unknown"
     };
 
-    public ProcessStepViewModel(DeploymentProcess process, int order, IDialogService dialogService, bool isInSelectedPreset = true)
+    public ProcessStepViewModel(DeploymentProcess process, int order, IDialogService dialogService, bool isInSelectedPreset = true, bool isRequired = false)
     {
         Process = process;
         Order = order;
+        IsRequired = isRequired;
         _dialogService = dialogService;
         _isEnabled = process.EnabledByDefault;
         _isInSelectedPreset = isInSelectedPreset;

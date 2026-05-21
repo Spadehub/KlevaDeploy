@@ -8,4 +8,6 @@ public class PresetProcessStep
     public int Order { get; set; }
     /// <summary>Override the default enabled state for this preset.</summary>
     public bool? EnabledOverride { get; set; }
+    /// <summary>If true, this process is required for this preset and cannot be disabled.</summary>
+    public bool IsRequired { get; set; }
 }

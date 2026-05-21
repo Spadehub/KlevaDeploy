@@ -178,7 +178,8 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         {
             ProcessId = p.Process.Id,
             Order = p.Order,
-            EnabledOverride = null
+            EnabledOverride = null,
+            IsRequired = p.IsRequired
         }).ToList();
 
         return new DeploymentPreset

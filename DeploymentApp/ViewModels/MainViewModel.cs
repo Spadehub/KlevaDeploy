@@ -191,6 +191,7 @@ public sealed partial class MainViewModel : ObservableObject
         // Determine which processes are in selected presets
         HashSet<string> processesInSelectedPresets = new();
         Dictionary<string, int> processOrderInPreset = new();
+        Dictionary<string, bool> processRequiredInPreset = new();
         if (selected.Count > 0)
         {
             var queue = _installerService.BuildExecutionQueue(selected, allAvailableProcesses);
@@ -199,6 +200,7 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 processesInSelectedPresets.Add(item.Process.Id);
                 processOrderInPreset[item.Process.Id] = order;
+                processRequiredInPreset[item.Process.Id] = item.IsRequired;
                 order += 10;
             }
         }
@@ -209,7 +211,8 @@ public sealed partial class MainViewModel : ObservableObject
         {
             bool isInSelectedPreset = processesInSelectedPresets.Contains(process.Id);
             int order = isInSelectedPreset ? processOrderInPreset[process.Id] : 9999;
-            var stepVm = new ProcessStepViewModel(process, order, _dialogService, isInSelectedPreset);
+            bool isRequired = isInSelectedPreset && processRequiredInPreset.GetValueOrDefault(process.Id, false);
+            var stepVm = new ProcessStepViewModel(process, order, _dialogService, isInSelectedPreset, isRequired);
             
             // Apply user manual deselection if exists
             if (_userManualDeselections.ContainsKey(process.Id))
@@ -218,14 +221,14 @@ public sealed partial class MainViewModel : ObservableObject
             }
             else
             {
-                // ISSUE 7 FIX: Only enable if in selected preset (regardless of IsRequired)
+                // Only enable if in selected preset
                 stepVm.IsEnabled = isInSelectedPreset;
             }
             
             tempList.Add(stepVm);
         }
         
-        // ISSUE 5 FIX: Sort by enabled status first (selected on top), then by order
+        // Sort by enabled status first (selected on top), then by order
         var sortedList = tempList
             .OrderByDescending(s => s.IsEnabled)
             .ThenBy(s => s.Order)

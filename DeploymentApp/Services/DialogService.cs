@@ -24,8 +24,8 @@ public sealed class DialogService : IDialogService
         
         bool? result = dialog.ShowDialog();
         
-        // If user checked "Don't show again", save the preference
-        if (dialog.DontShowAgain)
+        // Only save "Don't show again" preference if user confirmed (not cancelled)
+        if (result == true && dialog.DontShowAgain)
             UserPreferences.SuppressRequiredProcessWarning = true;
         
         return result == true;

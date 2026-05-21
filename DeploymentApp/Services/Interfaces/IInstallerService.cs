@@ -9,8 +9,9 @@ public interface IInstallerService
     /// <summary>
     /// Given selected presets, returns the merged, deduplicated, ordered list of process steps.
     /// If a process appears in multiple presets, use the lowest Order value.
+    /// IsRequired is true if ANY preset marks the process as required.
     /// </summary>
-    IReadOnlyList<(DeploymentProcess Process, int Order)> BuildExecutionQueue(
+    IReadOnlyList<(DeploymentProcess Process, int Order, bool IsRequired)> BuildExecutionQueue(
         IEnumerable<DeploymentPreset> selectedPresets,
         IReadOnlyList<DeploymentProcess> allProcesses);
     string ResolveProcessPath(DeploymentProcess process);
