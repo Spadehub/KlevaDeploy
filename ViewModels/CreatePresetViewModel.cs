@@ -16,23 +16,19 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     [ObservableProperty] private string _icon = "📦";
     [ObservableProperty] private string _description = string.Empty;
     [ObservableProperty] private string _category = string.Empty;
-    [ObservableProperty] private string _processSearchText = string.Empty;
+    [ObservableProperty] private string _availableSearchText = string.Empty;
+    [ObservableProperty] private string _selectedSearchText = string.Empty;
     [ObservableProperty] private string? _validationError;
 
     private DeploymentPreset? _editingPreset;
     public bool IsEditMode => _editingPreset != null;
 
-    public ObservableCollection<ProcessSelectionItem> AllProcesses { get; } = new();
-    public ObservableCollection<ProcessSelectionItem> FilteredProcesses { get; } = new();
-    public ObservableCollection<string> CategorySuggestions { get; } = new()
-    {
-        "Base",
-        "Generale",
-        "Ufficio",
-        "Sviluppo",
-        "Server",
-        "Tecnico"
-    };
+    // Two columns logic
+    public ObservableCollection<ProcessSelectionItem> AvailableProcesses { get; } = new();
+    public ObservableCollection<ProcessSelectionItem> FilteredAvailableProcesses { get; } = new();
+    
+    public ObservableCollection<ProcessSelectionItem> SelectedProcesses { get; } = new();
+    public ObservableCollection<ProcessSelectionItem> FilteredSelectedProcesses { get; } = new();
 
     // Available icons from Icons.xaml
     public ObservableCollection<string> AvailableIcons { get; } = new()
@@ -47,33 +43,43 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     {
     }
 
+    public DeploymentPreset? CreatedPreset { get; private set; }
+
     /// <summary>
     /// Initialize the ViewModel with available processes for creating a new preset.
     /// </summary>
     public void Initialize(IEnumerable<DeploymentProcess> availableProcesses)
     {
-        _editingPreset = null;
-        Name = string.Empty;
-        Icon = "📦";
-        Description = string.Empty;
-        Category = string.Empty;
-        
-        AllProcesses.Clear();
-        foreach (var process in availableProcesses)
+        try
         {
-            var item = new ProcessSelectionItem(process);
-            item.PropertyChanged += (_, e) =>
+            _editingPreset = null;
+            Name = string.Empty;
+            Icon = "📦";
+            Description = string.Empty;
+            Category = string.Empty;
+            
+            AvailableProcesses.Clear();
+            SelectedProcesses.Clear();
+
+            if (availableProcesses != null)
             {
-                if (e.PropertyName == nameof(ProcessSelectionItem.IsSelected))
+                foreach (var process in availableProcesses)
                 {
-                    UpdateProcessOrdering();
-                    ValidationError = null;
+                    var item = new ProcessSelectionItem(process);
+                    AvailableProcesses.Add(item);
                 }
-            };
-            AllProcesses.Add(item);
+            }
+            
+            ApplyAvailableFilter();
+            ApplySelectedFilter();
+            OnPropertyChanged(nameof(IsEditMode));
+            ValidationError = null;
         }
-        ApplyProcessFilter();
-        OnPropertyChanged(nameof(IsEditMode));
+        catch (Exception ex)
+        {
+            ValidationError = "Errore durante l'inizializzazione del pannello.";
+            // Nota: qui potremmo iniettare ILogService se volessimo loggare anche qui
+        }
     }
 
     /// <summary>
@@ -81,116 +87,173 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     /// </summary>
     public void InitializeForEdit(DeploymentPreset preset, IEnumerable<DeploymentProcess> availableProcesses)
     {
-        _editingPreset = preset;
-        Name = preset.Name;
-        Icon = preset.Icon;
-        Description = preset.Description;
-        Category = preset.Category;
-        
-        AllProcesses.Clear();
-        
-        // Create a dictionary of process steps for quick lookup
-        var stepDict = preset.Steps.ToDictionary(s => s.ProcessId);
-        
-        foreach (var process in availableProcesses)
+        try
         {
-            var item = new ProcessSelectionItem(process);
+            if (preset == null) return;
+
+            _editingPreset = preset;
+            Name = preset.Name;
+            Icon = preset.Icon;
+            Description = preset.Description;
+            Category = preset.Category;
             
-            // If this process is in the preset, mark it as selected and set its properties
-            if (stepDict.TryGetValue(process.Id, out var step))
+            AvailableProcesses.Clear();
+            SelectedProcesses.Clear();
+            
+            var stepDict = preset.Steps?.ToDictionary(s => s.ProcessId) ?? new();
+            var orderedSteps = preset.Steps?.OrderBy(s => s.Order).ToList() ?? new();
+            
+            // Add to selected in order
+            foreach (var step in orderedSteps)
             {
-                item.IsSelected = true;
-                item.Order = step.Order;
-                item.IsRequired = step.IsRequired;
+                var process = availableProcesses?.FirstOrDefault(p => p.Id == step.ProcessId);
+                if (process != null)
+                {
+                    var item = new ProcessSelectionItem(process)
+                    {
+                        IsSelected = true,
+                        Order = step.Order,
+                        IsRequired = step.IsRequired
+                    };
+                    SelectedProcesses.Add(item);
+                }
+            }
+
+            // Add remaining to available
+            if (availableProcesses != null)
+            {
+                foreach (var process in availableProcesses)
+                {
+                    if (!stepDict.ContainsKey(process.Id))
+                    {
+                        var item = new ProcessSelectionItem(process);
+                        AvailableProcesses.Add(item);
+                    }
+                }
             }
             
-            item.PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName == nameof(ProcessSelectionItem.IsSelected))
-                {
-                    UpdateProcessOrdering();
-                    ValidationError = null;
-                }
-            };
-            AllProcesses.Add(item);
+            ApplyAvailableFilter();
+            ApplySelectedFilter();
+            OnPropertyChanged(nameof(IsEditMode));
+            ValidationError = null;
         }
-        
-        ApplyProcessFilter();
-        OnPropertyChanged(nameof(IsEditMode));
+        catch (Exception ex)
+        {
+            ValidationError = "Errore durante il caricamento del preset per la modifica.";
+        }
     }
 
-    partial void OnProcessSearchTextChanged(string value)
-    {
-        ApplyProcessFilter();
-    }
+    partial void OnAvailableSearchTextChanged(string value) => ApplyAvailableFilter();
+    partial void OnSelectedSearchTextChanged(string value) => ApplySelectedFilter();
 
-    private void ApplyProcessFilter()
+    private void ApplyAvailableFilter()
     {
-        FilteredProcesses.Clear();
-        var searchLower = ProcessSearchText?.ToLowerInvariant() ?? string.Empty;
+        FilteredAvailableProcesses.Clear();
+        var searchLower = AvailableSearchText?.ToLowerInvariant() ?? string.Empty;
 
         var filtered = string.IsNullOrWhiteSpace(searchLower)
-            ? AllProcesses
-            : AllProcesses.Where(p =>
+            ? AvailableProcesses
+            : AvailableProcesses.Where(p =>
                 p.Name.ToLowerInvariant().Contains(searchLower) ||
-                p.Description.ToLowerInvariant().Contains(searchLower) ||
-                p.KindLabel.ToLowerInvariant().Contains(searchLower));
+                p.Description.ToLowerInvariant().Contains(searchLower));
 
-        foreach (var process in filtered)
-        {
-            FilteredProcesses.Add(process);
-        }
+        foreach (var process in filtered) FilteredAvailableProcesses.Add(process);
+    }
+
+    private void ApplySelectedFilter()
+    {
+        FilteredSelectedProcesses.Clear();
+        var searchLower = SelectedSearchText?.ToLowerInvariant() ?? string.Empty;
+
+        var filtered = string.IsNullOrWhiteSpace(searchLower)
+            ? SelectedProcesses.OrderBy(p => p.Order)
+            : SelectedProcesses.Where(p =>
+                p.Name.ToLowerInvariant().Contains(searchLower) ||
+                p.Description.ToLowerInvariant().Contains(searchLower))
+                .OrderBy(p => p.Order);
+
+        foreach (var process in filtered) FilteredSelectedProcesses.Add(process);
+    }
+
+    [RelayCommand]
+    private void ActivateProcess(ProcessSelectionItem item)
+    {
+        AvailableProcesses.Remove(item);
+        item.IsSelected = true;
+        
+        // Find max order and add 10
+        int maxOrder = SelectedProcesses.Any() ? SelectedProcesses.Max(p => p.Order) : 0;
+        item.Order = maxOrder + 10;
+        
+        SelectedProcesses.Add(item);
+        
+        ApplyAvailableFilter();
+        ApplySelectedFilter();
+        ValidationError = null;
+    }
+
+    [RelayCommand]
+    private void DeactivateProcess(ProcessSelectionItem item)
+    {
+        SelectedProcesses.Remove(item);
+        item.IsSelected = false;
+        item.Order = 0;
+        item.IsRequired = false;
+        
+        AvailableProcesses.Add(item);
+        
+        // Re-order remaining selected
+        UpdateProcessOrdering();
+        
+        ApplyAvailableFilter();
+        ApplySelectedFilter();
     }
 
     private void UpdateProcessOrdering()
     {
-        var selected = AllProcesses.Where(p => p.IsSelected).ToList();
-        for (int i = 0; i < selected.Count; i++)
+        var ordered = SelectedProcesses.OrderBy(p => p.Order).ToList();
+        for (int i = 0; i < ordered.Count; i++)
         {
-            selected[i].Order = (i + 1) * 10;
+            ordered[i].Order = (i + 1) * 10;
         }
     }
 
     [RelayCommand]
     private void MoveProcessUp(ProcessSelectionItem item)
     {
-        var selected = AllProcesses.Where(p => p.IsSelected).OrderBy(p => p.Order).ToList();
-        var index = selected.IndexOf(item);
+        var ordered = SelectedProcesses.OrderBy(p => p.Order).ToList();
+        var index = ordered.IndexOf(item);
         
         if (index > 0)
         {
-            // Swap orders
-            var temp = selected[index].Order;
-            selected[index].Order = selected[index - 1].Order;
-            selected[index - 1].Order = temp;
+            var temp = ordered[index].Order;
+            ordered[index].Order = ordered[index - 1].Order;
+            ordered[index - 1].Order = temp;
+            ApplySelectedFilter();
         }
     }
 
     [RelayCommand]
     private void MoveProcessDown(ProcessSelectionItem item)
     {
-        var selected = AllProcesses.Where(p => p.IsSelected).OrderBy(p => p.Order).ToList();
-        var index = selected.IndexOf(item);
+        var ordered = SelectedProcesses.OrderBy(p => p.Order).ToList();
+        var index = ordered.IndexOf(item);
         
-        if (index < selected.Count - 1)
+        if (index < ordered.Count - 1)
         {
-            // Swap orders
-            var temp = selected[index].Order;
-            selected[index].Order = selected[index + 1].Order;
-            selected[index + 1].Order = temp;
+            var temp = ordered[index].Order;
+            ordered[index].Order = ordered[index + 1].Order;
+            ordered[index + 1].Order = temp;
+            ApplySelectedFilter();
         }
     }
 
     [RelayCommand]
     private void Save()
     {
-        if (!ValidateInput())
-        {
-            return;
-        }
+        if (!ValidateInput()) return;
 
-        var preset = CreatePreset();
-        CreatedPreset = preset;
+        CreatedPreset = CreatePreset();
         CloseRequested?.Invoke(this, EventArgs.Empty);
     }
 
@@ -209,8 +272,7 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             return false;
         }
 
-        var selectedProcesses = AllProcesses.Where(p => p.IsSelected).ToList();
-        if (selectedProcesses.Count == 0)
+        if (SelectedProcesses.Count == 0)
         {
             ValidationError = "Seleziona almeno un processo per il preset.";
             return false;
@@ -222,22 +284,18 @@ public sealed partial class CreatePresetViewModel : ObservableObject
 
     private DeploymentPreset CreatePreset()
     {
-        var selectedProcesses = AllProcesses
-            .Where(p => p.IsSelected)
+        var steps = SelectedProcesses
             .OrderBy(p => p.Order)
-            .ToList();
-
-        var steps = selectedProcesses.Select(p => new PresetProcessStep
-        {
-            ProcessId = p.Process.Id,
-            Order = p.Order,
-            EnabledOverride = null,
-            IsRequired = p.IsRequired
-        }).ToList();
+            .Select(p => new PresetProcessStep
+            {
+                ProcessId = p.Process.Id,
+                Order = p.Order,
+                EnabledOverride = null,
+                IsRequired = p.IsRequired
+            }).ToList();
 
         if (IsEditMode && _editingPreset != null)
         {
-            // Update existing preset
             _editingPreset.Name = Name.Trim();
             _editingPreset.Icon = Icon;
             _editingPreset.Description = Description.Trim();
@@ -245,20 +303,15 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             _editingPreset.Steps = steps;
             return _editingPreset;
         }
-        else
+        
+        return new DeploymentPreset
         {
-            // Create new preset
-            return new DeploymentPreset
-            {
-                Id = Guid.NewGuid().ToString("N"),
-                Name = Name.Trim(),
-                Icon = Icon,
-                Description = Description.Trim(),
-                Category = string.IsNullOrWhiteSpace(Category) ? "Personalizzato" : Category.Trim(),
-                Steps = steps
-            };
-        }
+            Id = Guid.NewGuid().ToString("N"),
+            Name = Name.Trim(),
+            Icon = Icon,
+            Description = Description.Trim(),
+            Category = string.IsNullOrWhiteSpace(Category) ? "Personalizzato" : Category.Trim(),
+            Steps = steps
+        };
     }
-
-    public DeploymentPreset? CreatedPreset { get; private set; }
 }

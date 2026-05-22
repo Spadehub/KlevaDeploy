@@ -1,2 +1,13 @@
-// This file is intentionally empty.
-// The MainWindow partial class lives at the project root: MainWindow.xaml.cs (namespace DeploymentApp).
+using System.Windows;
+
+namespace DeploymentApp.Views
+{
+    // This file is a stub to satisfy the project structure.
+    // The actual implementation is at the project root.
+    public partial class MainWindowStub : Window
+    {
+        public MainWindowStub()
+        {
+        }
+    }
+}

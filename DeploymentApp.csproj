@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -15,14 +15,6 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.8" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.8" />
-  </ItemGroup>
-
-  <!-- Views/MainWindow.xaml is a stub — the real MainWindow is at the project root -->
-  <ItemGroup>
-    <Page Remove="Views\MainWindow.xaml" />
-    <Compile Remove="Views\MainWindow.xaml.cs" />
-    <None Include="Views\MainWindow.xaml" />
-    <None Include="Views\MainWindow.xaml.cs" />
   </ItemGroup>
 
 </Project>

@@ -1085,7 +1085,7 @@
 
                 <!-- Sliding panel from left -->
                 <Border x:Name="SlidingPanel"
-                        Width="500"
+                        Width="900"
                         HorizontalAlignment="Left"
                         Background="{DynamicResource AppBackgroundBrush}"
                         BorderBrush="{DynamicResource BorderBrush}"
@@ -1093,7 +1093,7 @@
                         Effect="{StaticResource CardShadow}"
                         RenderTransformOrigin="0,0">
                     <Border.RenderTransform>
-                        <TranslateTransform X="-500"/>
+                        <TranslateTransform X="-900"/>
                     </Border.RenderTransform>
                     <Border.Style>
                         <Style TargetType="Border">
@@ -1115,7 +1115,7 @@
                                         <BeginStoryboard>
                                             <Storyboard>
                                                 <DoubleAnimation Storyboard.TargetProperty="RenderTransform.(TranslateTransform.X)"
-                                                               To="-500" Duration="0:0:0.25">
+                                                               To="-900" Duration="0:0:0.25">
                                                     <DoubleAnimation.EasingFunction>
                                                         <CubicEase EasingMode="EaseIn"/>
                                                     </DoubleAnimation.EasingFunction>
@@ -1239,138 +1239,158 @@
 
                                 <!-- Categoria -->
                                 <TextBlock Text="Categoria" Style="{StaticResource Win11TextBody}" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                <ComboBox ItemsSource="{Binding CategorySuggestions}"
-                                          Text="{Binding Category}"
-                                          IsEditable="True"
-                                          Style="{StaticResource Win11ComboBox}"
-                                          Margin="0,0,0,20"/>
+                                <TextBox Text="{Binding Category, UpdateSourceTrigger=PropertyChanged}"
+                                         Style="{StaticResource Win11TextBox}"
+                                         Margin="0,0,0,20"/>
 
                                 <!-- Process Selection Section -->
                                 <TextBlock Text="Processi *" Style="{StaticResource Win11TextBody}" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                <TextBlock Text="Seleziona i processi da includere nel preset e marca quelli richiesti"
+                                <TextBlock Text="Trascina o sposta i processi nella colonna di destra per includerli nel preset."
                                            Style="{StaticResource Win11TextSecondary}"
-                                           Margin="0,0,0,8"/>
+                                           Margin="0,0,0,12"/>
 
-                                <!-- Search bar -->
-                                <TextBox Text="{Binding ProcessSearchText, UpdateSourceTrigger=PropertyChanged}"
-                                         Style="{StaticResource Win11TextBox}"
-                                         Padding="28,6,8,6"
-                                         Margin="0,0,0,12">
-                                    <TextBox.Resources>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
-                                        </Style>
-                                    </TextBox.Resources>
-                                </TextBox>
+                                <!-- Two Columns Layout for Process Selection -->
+                                <Grid Height="500">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
 
-                                <!-- Process list with checkboxes -->
-                                <Border Background="{DynamicResource SurfaceBrush}"
-                                        BorderBrush="{DynamicResource BorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="{StaticResource CornerRadiusSmall}"
-                                        MaxHeight="400">
-                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                        <ItemsControl ItemsSource="{Binding FilteredProcesses}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate>
-                                                    <Border BorderBrush="{DynamicResource BorderBrush}"
-                                                            BorderThickness="0,0,0,1"
-                                                            Padding="12,10">
-                                                        <Grid>
-                                                            <Grid.RowDefinitions>
-                                                                <RowDefinition Height="Auto"/>
-                                                                <RowDefinition Height="Auto"/>
-                                                            </Grid.RowDefinitions>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                                <ColumnDefinition Width="*"/>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                                <ColumnDefinition Width="Auto"/>
-                                                            </Grid.ColumnDefinitions>
+                                    <!-- Left Column: Available Processes -->
+                                    <Border Grid.Column="0" 
+                                            Style="{StaticResource Win11Card}" 
+                                            Padding="0">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+                                            
+                                            <Border Background="{DynamicResource SurfaceElevatedBrush}" Padding="10,8" CornerRadius="8,8,0,0">
+                                                <TextBlock Text="Disponibili" FontWeight="SemiBold" FontSize="12"/>
+                                            </Border>
 
-                                                            <!-- Checkbox -->
-                                                            <CheckBox Grid.Row="0" Grid.Column="0"
-                                                                      IsChecked="{Binding IsSelected}"
-                                                                      VerticalAlignment="Center"
-                                                                      Margin="0,0,10,0"/>
+                                            <TextBox Grid.Row="1"
+                                                     Text="{Binding AvailableSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                                     Style="{StaticResource Win11TextBox}"
+                                                     Margin="8"
+                                                     Padding="8,4"
+                                                     FontSize="11"/>
 
-                                                            <!-- Order number (when selected) -->
-                                                            <Border Grid.Row="0" Grid.Column="1"
-                                                                    Background="{DynamicResource AccentBrush}"
-                                                                    CornerRadius="10"
-                                                                    Width="20" Height="20"
-                                                                    Margin="0,0,8,0"
-                                                                    Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}">
-                                                                <TextBlock Text="{Binding Order, Converter={StaticResource OrderToDisplayConverter}}"
-                                                                           Foreground="White"
-                                                                           FontSize="10"
-                                                                           FontWeight="Bold"
-                                                                           HorizontalAlignment="Center"
-                                                                           VerticalAlignment="Center"/>
+                                            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                                                <ItemsControl ItemsSource="{Binding FilteredAvailableProcesses}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button Command="{Binding DataContext.ActivateProcessCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
+                                                                    CommandParameter="{Binding}"
+                                                                    Style="{StaticResource ProcessCardToggleButton}"
+                                                                    Margin="4" Padding="8,6">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <StackPanel>
+                                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="11"/>
+                                                                        <TextBlock Text="{Binding Description}" FontSize="10" Opacity="0.7" TextTrimming="CharacterEllipsis"/>
+                                                                    </StackPanel>
+                                                                    <TextBlock Grid.Column="1" Text="➜" VerticalAlignment="Center" Margin="4,0,0,0" Opacity="0.5"/>
+                                                                </Grid>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </ScrollViewer>
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Center Arrows -->
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0">
+                                        <TextBlock Text="⇄" FontSize="24" Opacity="0.3" HorizontalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <!-- Right Column: Selected Processes -->
+                                    <Border Grid.Column="2" 
+                                            Style="{StaticResource Win11Card}" 
+                                            Padding="0">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+
+                                            <Border Background="{DynamicResource SurfaceElevatedBrush}" Padding="10,8" CornerRadius="8,8,0,0">
+                                                <TextBlock Text="Selezionati (Coda)" FontWeight="SemiBold" FontSize="12"/>
+                                            </Border>
+
+                                            <TextBox Grid.Row="1"
+                                                     Text="{Binding SelectedSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                                     Style="{StaticResource Win11TextBox}"
+                                                     Margin="8"
+                                                     Padding="8,4"
+                                                     FontSize="11"/>
+
+                                            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                                                <ItemsControl ItemsSource="{Binding FilteredSelectedProcesses}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Background="{DynamicResource SurfaceBrush}" 
+                                                                    BorderBrush="{DynamicResource BorderBrush}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="4"
+                                                                    Margin="4" Padding="6">
+                                                                <Grid>
+                                                                    <Grid.RowDefinitions>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                    </Grid.RowDefinitions>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                        <ColumnDefinition Width="*"/>
+                                                                        <ColumnDefinition Width="Auto"/>
+                                                                    </Grid.ColumnDefinitions>
+
+                                                                    <Button Grid.Column="0"
+                                                                            Command="{Binding DataContext.DeactivateProcessCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
+                                                                            CommandParameter="{Binding}"
+                                                                            Style="{StaticResource Win11Button}"
+                                                                            Width="24" Height="24" Padding="0" Margin="0,0,8,0">
+                                                                        <TextBlock Text="⬅" FontSize="12"/>
+                                                                    </Button>
+
+                                                                    <StackPanel Grid.Column="1">
+                                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="11"/>
+                                                                        <CheckBox IsChecked="{Binding IsRequired}" Margin="0,2,0,0">
+                                                                            <TextBlock Text="Richiesto" FontSize="10" Opacity="0.7"/>
+                                                                        </CheckBox>
+                                                                    </StackPanel>
+
+                                                                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                                                        <Button Command="{Binding DataContext.MoveProcessUpCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
+                                                                                CommandParameter="{Binding}"
+                                                                                Style="{StaticResource Win11Button}"
+                                                                                Width="22" Height="22" Margin="0,0,2,0">
+                                                                            <TextBlock Text="▲" FontSize="9"/>
+                                                                        </Button>
+                                                                        <Button Command="{Binding DataContext.MoveProcessDownCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
+                                                                                CommandParameter="{Binding}"
+                                                                                Style="{StaticResource Win11Button}"
+                                                                                Width="22" Height="22">
+                                                                            <TextBlock Text="▼" FontSize="9"/>
+                                                                        </Button>
+                                                                    </StackPanel>
+                                                                </Grid>
                                                             </Border>
-
-                                                            <!-- Process info -->
-                                                            <StackPanel Grid.Row="0" Grid.Column="2" VerticalAlignment="Center">
-                                                                <TextBlock Text="{Binding Name}"
-                                                                           Style="{StaticResource Win11TextBody}"
-                                                                           FontWeight="SemiBold"/>
-                                                                <TextBlock Text="{Binding Description}"
-                                                                           Style="{StaticResource Win11TextSecondary}"
-                                                                           TextTrimming="CharacterEllipsis"/>
-                                                            </StackPanel>
-
-                                                            <!-- Type badge -->
-                                                            <Border Grid.Row="0" Grid.Column="3"
-                                                                    Background="{DynamicResource SurfaceElevatedBrush}"
-                                                                    CornerRadius="3"
-                                                                    Padding="6,2"
-                                                                    Margin="8,0,8,0"
-                                                                    VerticalAlignment="Center">
-                                                                <TextBlock Text="{Binding KindLabel}"
-                                                                           Foreground="{DynamicResource TextSecondaryBrush}"
-                                                                           FontSize="10"/>
-                                                            </Border>
-
-                                                            <!-- Reorder buttons (when selected) -->
-                                                            <StackPanel Grid.Row="0" Grid.Column="4"
-                                                                        Orientation="Horizontal"
-                                                                        Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}">
-                                                                <Button Command="{Binding DataContext.MoveProcessUpCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
-                                                                        CommandParameter="{Binding}"
-                                                                        Style="{StaticResource Win11Button}"
-                                                                        Width="28" Height="28"
-                                                                        Padding="0"
-                                                                        Margin="0,0,4,0"
-                                                                        ToolTip="Sposta su">
-                                                                    <TextBlock Text="▲" FontSize="10"/>
-                                                                </Button>
-                                                                <Button Command="{Binding DataContext.MoveProcessDownCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
-                                                                        CommandParameter="{Binding}"
-                                                                        Style="{StaticResource Win11Button}"
-                                                                        Width="28" Height="28"
-                                                                        Padding="0"
-                                                                        ToolTip="Sposta giù">
-                                                                    <TextBlock Text="▼" FontSize="10"/>
-                                                                </Button>
-                                                            </StackPanel>
-                                                            
-                                                            <!-- Required checkbox (when selected) -->
-                                                            <CheckBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"
-                                                                      IsChecked="{Binding IsRequired}"
-                                                                      Margin="0,6,0,0"
-                                                                      Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}">
-                                                                <TextBlock Text="Richiesto (non può essere disabilitato)"
-                                                                           Style="{StaticResource Win11TextSecondary}"
-                                                                           FontSize="11"/>
-                                                            </CheckBox>
-                                                        </Grid>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </ScrollViewer>
-                                </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </ScrollViewer>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
                             </StackPanel>
                         </ScrollViewer>
 

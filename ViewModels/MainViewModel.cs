@@ -295,23 +295,51 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenCreatePreset()
     {
-        // Initialize the CreatePresetViewModel with all available processes
-        var allProcesses = _installerService.GetAllAvailableProcesses();
-        
-        CreatePresetViewModel.Initialize(allProcesses);
-        IsCreatePresetPanelOpen = true;
-        _log.Info("Opening create preset panel.");
+        try
+        {
+            // Initialize the CreatePresetViewModel with all available processes
+            var allProcesses = _installerService.GetAllAvailableProcesses();
+            
+            if (allProcesses == null)
+            {
+                _log.Error("Impossibile aprire il pannello: lista processi non disponibile.");
+                return;
+            }
+
+            CreatePresetViewModel.Initialize(allProcesses);
+            IsCreatePresetPanelOpen = true;
+            _log.Info("Apertura pannello creazione preset.");
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Errore durante l'apertura del pannello creazione preset", ex);
+        }
     }
 
     [RelayCommand]
     private void EditPreset(PresetViewModel presetVm)
     {
-        // Initialize the CreatePresetViewModel for editing
-        var allProcesses = _installerService.GetAllAvailableProcesses();
-        
-        CreatePresetViewModel.InitializeForEdit(presetVm.Preset, allProcesses);
-        IsCreatePresetPanelOpen = true;
-        _log.Info($"Opening edit preset panel for: {presetVm.Name}");
+        try
+        {
+            if (presetVm == null) return;
+
+            // Initialize the CreatePresetViewModel for editing
+            var allProcesses = _installerService.GetAllAvailableProcesses();
+            
+            if (allProcesses == null)
+            {
+                _log.Error("Impossibile modificare il preset: lista processi non disponibile.");
+                return;
+            }
+
+            CreatePresetViewModel.InitializeForEdit(presetVm.Preset, allProcesses);
+            IsCreatePresetPanelOpen = true;
+            _log.Info($"Apertura pannello modifica preset: {presetVm.Name}");
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Errore durante l'apertura della modifica per il preset {presetVm?.Name}", ex);
+        }
     }
 
     private void OnCreatePresetCloseRequested(object? sender, EventArgs e)
