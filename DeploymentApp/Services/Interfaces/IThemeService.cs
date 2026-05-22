@@ -1,6 +1,6 @@
-namespace DeploymentApp.Services.Interfaces;
+using DeploymentApp.Models;
 
-public enum AppTheme { Dark, Light }
+namespace DeploymentApp.Services.Interfaces;
 
 public interface IThemeService
 {

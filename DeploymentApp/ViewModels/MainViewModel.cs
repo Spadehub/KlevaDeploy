@@ -168,25 +168,32 @@ public sealed partial class MainViewModel : ObservableObject
         var selected = Presets.Where(p => p.IsSelected).Select(p => p.Preset).ToList();
         SelectedPresetCount = selected.Count;
         
-        // Store current user manual deselections before clearing
+        // Store current user manual overrides (only for processes NOT in the selected presets)
+        // If a process IS in a selected preset, the preset always wins.
         foreach (var step in ExecutionQueue)
         {
-            if (!step.IsEnabled && step.IsInSelectedPreset)
+            if (!step.IsInSelectedPreset)
             {
-                // User manually deselected this process even though it was in a preset
-                _userManualDeselections[step.Process.Id] = true;
+                if (step.IsEnabled)
+                    _userManualDeselections[step.Process.Id] = false; // Forced ON by user
+                else
+                    _userManualDeselections.Remove(step.Process.Id); // Default (OFF)
             }
-            else if (step.IsEnabled && !step.IsInSelectedPreset)
+            else
             {
-                // User manually selected this process even though it wasn't in a preset
-                _userManualDeselections.Remove(step.Process.Id);
+                // Process is in a selected preset.
+                // If user deselected it, we store it as a forced OFF.
+                if (!step.IsEnabled)
+                    _userManualDeselections[step.Process.Id] = true; // Forced OFF by user
+                else
+                    _userManualDeselections.Remove(step.Process.Id); // Default (ON)
             }
         }
         
         ExecutionQueue.Clear();
         
         // Combine all available processes
-        var allAvailableProcesses = _allProcesses.Concat(_userCreatedProcesses).ToList();
+        var allAvailableProcesses = _installerService.GetAllAvailableProcesses();
         
         // Determine which processes are in selected presets
         HashSet<string> processesInSelectedPresets = new();
@@ -214,14 +221,16 @@ public sealed partial class MainViewModel : ObservableObject
             bool isRequired = isInSelectedPreset && processRequiredInPreset.GetValueOrDefault(process.Id, false);
             var stepVm = new ProcessStepViewModel(process, order, _dialogService, isInSelectedPreset, isRequired);
             
-            // Apply user manual deselection if exists
-            if (_userManualDeselections.ContainsKey(process.Id))
+            // Determine enabled state
+            if (_userManualDeselections.TryGetValue(process.Id, out bool forcedOff))
             {
-                stepVm.SetIsEnabledSilently(false);
+                // If forcedOff is true, it means user manually deselected it.
+                // If forcedOff is false, it means user manually selected it (even if not in preset).
+                stepVm.SetIsEnabledSilently(!forcedOff);
             }
             else
             {
-                // Only enable if in selected preset (use silent method to avoid warning dialog)
+                // Default: ON if in preset, OFF otherwise
                 stepVm.SetIsEnabledSilently(isInSelectedPreset);
             }
             
@@ -254,7 +263,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (dialog.ShowDialog() == true && vm.CreatedProcess != null)
         {
-            _userCreatedProcesses.Add(vm.CreatedProcess);
+            _installerService.AddUserProcess(vm.CreatedProcess);
             _log.Info($"User created process: {vm.CreatedProcess.Name}");
             
             // Rebuild queue to include new process
@@ -263,12 +272,31 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void EditProcess(ProcessStepViewModel stepVm)
+    {
+        var vm = new CreateProcessViewModel();
+        vm.InitializeForEdit(stepVm.Process);
+        
+        var dialog = new CreateProcessDialog(vm)
+        {
+            Owner = System.Windows.Application.Current.MainWindow
+        };
+
+        if (dialog.ShowDialog() == true && vm.CreatedProcess != null)
+        {
+            _installerService.UpdateProcess(vm.CreatedProcess);
+            _log.Info($"Updated process: {vm.CreatedProcess.Name}");
+            
+            // Rebuild queue to reflect changes
+            RebuildExecutionQueue();
+        }
+    }
+
+    [RelayCommand]
     private void OpenCreatePreset()
     {
         // Initialize the CreatePresetViewModel with all available processes
-        var allProcesses = _installerService.GetAllAvailableProcesses()
-            .Concat(_userCreatedProcesses)
-            .ToList();
+        var allProcesses = _installerService.GetAllAvailableProcesses();
         
         CreatePresetViewModel.Initialize(allProcesses);
         IsCreatePresetPanelOpen = true;
@@ -279,9 +307,7 @@ public sealed partial class MainViewModel : ObservableObject
     private void EditPreset(PresetViewModel presetVm)
     {
         // Initialize the CreatePresetViewModel for editing
-        var allProcesses = _installerService.GetAllAvailableProcesses()
-            .Concat(_userCreatedProcesses)
-            .ToList();
+        var allProcesses = _installerService.GetAllAvailableProcesses();
         
         CreatePresetViewModel.InitializeForEdit(presetVm.Preset, allProcesses);
         IsCreatePresetPanelOpen = true;
@@ -296,17 +322,16 @@ public sealed partial class MainViewModel : ObservableObject
         {
             if (CreatePresetViewModel.IsEditMode)
             {
-                // Editing existing preset - find and update the PresetViewModel
+                // Editing existing preset
+                _installerService.UpdatePreset(CreatePresetViewModel.CreatedPreset);
+                
+                // Find and update the PresetViewModel
                 var existingVm = Presets.FirstOrDefault(p => p.Preset.Id == CreatePresetViewModel.CreatedPreset.Id);
                 if (existingVm != null)
                 {
-                    // If the preset was selected, rebuild the queue to reflect changes
                     bool wasSelected = existingVm.IsSelected;
-                    
-                    // Refresh the preset list to show updated values
                     ApplyPresetFilter();
                     
-                    // If it was selected, rebuild the execution queue to reflect changes
                     if (wasSelected)
                     {
                         RebuildExecutionQueue();
@@ -317,7 +342,7 @@ public sealed partial class MainViewModel : ObservableObject
             }
             else
             {
-                // Creating new preset - add to the service and UI collection
+                // Creating new preset
                 _installerService.AddUserPreset(CreatePresetViewModel.CreatedPreset);
                 
                 var presetVm = new PresetViewModel(CreatePresetViewModel.CreatedPreset);

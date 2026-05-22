@@ -25,6 +25,8 @@ public class DeploymentProcess
     public List<string> DependsOn { get; set; } = new();
     /// <summary>If true, run the process with administrator privileges.</summary>
     public bool RunAsAdmin { get; set; }
+    /// <summary>If true, this process requires an internet connection.</summary>
+    public bool RequiresInternet { get; set; }
     /// <summary>For PowerShell/Batch scripts: inline script content (alternative to RelativePath).</summary>
     public string ScriptContent { get; set; } = string.Empty;
     /// <summary>Icon key from Icons.xaml (e.g., "IconPackage", "IconScript").</summary>

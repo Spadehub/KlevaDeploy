@@ -9,6 +9,8 @@ namespace DeploymentApp.ViewModels;
 
 public sealed partial class CreateProcessViewModel : ObservableObject
 {
+    private string? _existingProcessId;
+
     [ObservableProperty] private string _processName = string.Empty;
     [ObservableProperty] private string _description = string.Empty;
     [ObservableProperty] private ProcessKind _selectedProcessKind = ProcessKind.Installer;
@@ -16,8 +18,11 @@ public sealed partial class CreateProcessViewModel : ObservableObject
     [ObservableProperty] private string _arguments = string.Empty;
     [ObservableProperty] private string _scriptContent = string.Empty;
     [ObservableProperty] private bool _runAsAdmin;
+    [ObservableProperty] private bool _requiresInternet;
     [ObservableProperty] private string _selectedIconKey = "IconPackage";
     [ObservableProperty] private string? _validationError;
+    [ObservableProperty] private string _title = "Nuovo Processo";
+    [ObservableProperty] private bool _isEditMode;
 
     public ObservableCollection<ProcessKind> AvailableProcessKinds { get; } = new()
     {
@@ -28,17 +33,17 @@ public sealed partial class CreateProcessViewModel : ObservableObject
 
     public ObservableCollection<IconOption> AvailableIcons { get; } = new()
     {
-        new("IconPackage", "📦 Package"),
+        new("IconPackage", "📦 Pacchetto"),
         new("IconScript", "💻 Script"),
-        new("IconSettings", "⚙️ Settings"),
+        new("IconSettings", "⚙️ Impostazioni"),
         new("IconDownload", "⬇️ Download"),
-        new("IconInstall", "▶️ Install"),
-        new("IconSuccess", "✅ Success"),
-        new("IconWarning", "⚠️ Warning"),
-        new("IconError", "❌ Error"),
-        new("IconRefresh", "🔄 Refresh"),
-        new("IconLock", "🔒 Lock"),
-        new("IconUnlock", "🔓 Unlock"),
+        new("IconInstall", "▶️ Installa"),
+        new("IconSuccess", "✅ Successo"),
+        new("IconWarning", "⚠️ Avviso"),
+        new("IconError", "❌ Errore"),
+        new("IconRefresh", "🔄 Aggiorna"),
+        new("IconLock", "🔒 Blocca"),
+        new("IconUnlock", "🔓 Sblocca"),
         new("IconLog", "📋 Log")
     };
 
@@ -47,6 +52,22 @@ public sealed partial class CreateProcessViewModel : ObservableObject
 
     public DeploymentProcess? CreatedProcess { get; private set; }
     public bool DialogResult { get; private set; }
+
+    public void InitializeForEdit(DeploymentProcess process)
+    {
+        _existingProcessId = process.Id;
+        ProcessName = process.Name;
+        Description = process.Description;
+        SelectedProcessKind = process.Kind;
+        FilePath = process.RelativePath;
+        Arguments = process.Arguments;
+        ScriptContent = process.ScriptContent;
+        RunAsAdmin = process.RunAsAdmin;
+        RequiresInternet = process.RequiresInternet;
+        SelectedIconKey = process.IconKey;
+        Title = "Modifica Processo";
+        IsEditMode = true;
+    }
 
     partial void OnSelectedProcessKindChanged(ProcessKind value)
     {
@@ -62,18 +83,18 @@ public sealed partial class CreateProcessViewModel : ObservableObject
 
         if (SelectedProcessKind == ProcessKind.Installer)
         {
-            dialog.Filter = "Installer Files (*.exe;*.msi;*.zip)|*.exe;*.msi;*.zip|All Files (*.*)|*.*";
-            dialog.Title = "Select Installer File";
+            dialog.Filter = "File Installer (*.exe;*.msi;*.zip)|*.exe;*.msi;*.zip|Tutti i file (*.*)|*.*";
+            dialog.Title = "Seleziona File Installer";
         }
         else if (SelectedProcessKind == ProcessKind.PowerShellScript)
         {
-            dialog.Filter = "PowerShell Scripts (*.ps1)|*.ps1|All Files (*.*)|*.*";
-            dialog.Title = "Select PowerShell Script";
+            dialog.Filter = "Script PowerShell (*.ps1)|*.ps1|Tutti i file (*.*)|*.*";
+            dialog.Title = "Seleziona Script PowerShell";
         }
         else if (SelectedProcessKind == ProcessKind.BatchScript)
         {
-            dialog.Filter = "Batch Scripts (*.bat;*.cmd)|*.bat;*.cmd|All Files (*.*)|*.*";
-            dialog.Title = "Select Batch Script";
+            dialog.Filter = "Script Batch (*.bat;*.cmd)|*.bat;*.cmd|Tutti i file (*.*)|*.*";
+            dialog.Title = "Seleziona Script Batch";
         }
 
         if (dialog.ShowDialog() == true)
@@ -92,13 +113,14 @@ public sealed partial class CreateProcessViewModel : ObservableObject
 
         var process = new DeploymentProcess
         {
-            Id = Guid.NewGuid().ToString("N"),
+            Id = _existingProcessId ?? Guid.NewGuid().ToString("N"),
             Name = ProcessName.Trim(),
             Description = Description.Trim(),
             Kind = SelectedProcessKind,
             Arguments = Arguments.Trim(),
             RunAsAdmin = RunAsAdmin,
-            IsRequired = false, // Required logic is now handled by presets
+            RequiresInternet = RequiresInternet,
+            IsRequired = false,
             IconKey = SelectedIconKey,
             IsUserCreated = true,
             EnabledByDefault = true
@@ -106,12 +128,10 @@ public sealed partial class CreateProcessViewModel : ObservableObject
 
         if (IsInstallerMode)
         {
-            // For installers, store relative path or full path
             process.RelativePath = FilePath;
         }
         else if (IsScriptMode)
         {
-            // For scripts, use inline content if provided, otherwise file path
             if (!string.IsNullOrWhiteSpace(ScriptContent))
             {
                 process.ScriptContent = ScriptContent.Trim();
@@ -165,7 +185,6 @@ public sealed partial class CreateProcessViewModel : ObservableObject
         }
         else if (IsScriptMode)
         {
-            // For scripts, either inline content OR file path must be provided
             var hasContent = !string.IsNullOrWhiteSpace(ScriptContent);
             var hasFile = !string.IsNullOrWhiteSpace(FilePath);
 

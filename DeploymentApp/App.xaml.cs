@@ -20,9 +20,9 @@ public partial class App : Application
         ConfigureServices(services);
         _serviceProvider = services.BuildServiceProvider();
 
-        // Apply the default theme (Dark) immediately via the service
+        // Apply the theme from preferences via the service
         var themeService = _serviceProvider.GetRequiredService<IThemeService>();
-        themeService.SetTheme(AppTheme.Dark);
+        themeService.SetTheme(themeService.CurrentTheme);
 
         var mainVm = _serviceProvider.GetRequiredService<MainViewModel>();
         var mainWindow = new MainWindow(mainVm);

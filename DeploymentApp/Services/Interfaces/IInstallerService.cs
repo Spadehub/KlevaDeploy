@@ -30,4 +30,19 @@ public interface IInstallerService
     /// Gets all presets (both demo/production and user-created).
     /// </summary>
     IReadOnlyList<DeploymentPreset> GetAllPresets();
+
+    /// <summary>
+    /// Adds a user-created process.
+    /// </summary>
+    void AddUserProcess(DeploymentProcess process);
+
+    /// <summary>
+    /// Updates an existing preset.
+    /// </summary>
+    void UpdatePreset(DeploymentPreset preset);
+
+    /// <summary>
+    /// Updates an existing process.
+    /// </summary>
+    void UpdateProcess(DeploymentProcess process);
 }

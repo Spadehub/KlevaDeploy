@@ -1,4 +1,4 @@
-﻿<Window x:Class="DeploymentApp.MainWindow"
+<Window x:Class="DeploymentApp.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -489,32 +489,68 @@
                                                         <ColumnDefinition Width="Auto"/>  <!-- Checkmark badge / step count -->
                                                     </Grid.ColumnDefinitions>
 
-                                                    <!-- Emoji icon -->
+                                                    <!-- Icon -->
                                                     <Border Grid.Column="0"
                                                             Width="40" Height="40"
                                                             CornerRadius="{StaticResource CornerRadiusMedium}"
                                                             Background="{DynamicResource SurfaceElevatedBrush}"
                                                             Margin="0,0,12,0">
-                                                        <TextBlock Text="{Binding Icon, Mode=OneWay}"
-                                                                   FontSize="18"
-                                                                   HorizontalAlignment="Center"
-                                                                   VerticalAlignment="Center"/>
+                                                        <Grid>
+                                                            <!-- Emoji Icon (if present) -->
+                                                            <TextBlock Text="{Binding Icon, Mode=OneWay}"
+                                                                       FontSize="18"
+                                                                       FontFamily="Segoe UI Emoji"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"
+                                                                       Visibility="{Binding HasEmojiIcon, Converter={StaticResource BoolToVisibility}}"/>
+                                                            <!-- Default Vector Icon (if no emoji) -->
+                                                            <Image Source="{DynamicResource IconPackage}"
+                                                                   Width="20" Height="20"
+                                                                   Visibility="{Binding HasEmojiIcon, Converter={StaticResource InverseBoolToVisibility}}"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        </Grid>
                                                     </Border>
 
                                                     <!-- Name + description + category -->
                                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                                         <TextBlock Text="{Binding Name, Mode=OneWay}"
                                                                    FontWeight="SemiBold"
-                                                                   FontSize="13"
-                                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
+                                                                   FontSize="13">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Win11TextBody}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                            <Setter Property="Foreground" Value="White"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
                                                         <TextBlock Text="{Binding Description, Mode=OneWay}"
                                                                    FontSize="11"
                                                                    TextTrimming="CharacterEllipsis"
-                                                                   Margin="0,2,0,0"
-                                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
+                                                                   Margin="0,2,0,0">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Win11TextSecondary}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                            <Setter Property="Foreground" Value="#E0E0E0"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
                                                         <TextBlock FontSize="11"
-                                                                   Margin="0,2,0,0"
-                                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}">
+                                                                   Margin="0,2,0,0">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock" BasedOn="{StaticResource Win11TextSecondary}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                            <Setter Property="Foreground" Value="#D0D0D0"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
                                                             <Run Text="{Binding Category, Mode=OneWay}"/>
                                                             <Run Text=" · "/>
                                                             <Run Text="{Binding StepCount, Mode=OneWay}"/>
@@ -552,15 +588,46 @@
                                             <!-- Edit button (pencil icon) - overlaid on bottom right -->
                                             <Button Command="{Binding DataContext.EditPresetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                     CommandParameter="{Binding}"
-                                                    Style="{StaticResource Win11Button}"
-                                                    Width="28" Height="28"
-                                                    Padding="0"
                                                     HorizontalAlignment="Right"
                                                     VerticalAlignment="Bottom"
-                                                    Margin="0,0,8,8"
+                                                    Margin="0,0,6,6"
                                                     ToolTip="Modifica Preset"
-                                                    Background="{DynamicResource SurfaceElevatedBrush}">
-                                                <TextBlock Text="✏️" FontSize="12"/>
+                                                    Cursor="Hand"
+                                                    Background="Transparent"
+                                                    BorderThickness="0">
+                                                <Button.Template>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="Transparent" Padding="4">
+                                                            <TextBlock x:Name="PencilIcon" 
+                                                                       Text="✏️" 
+                                                                       FontSize="11"
+                                                                       Opacity="0.4"
+                                                                       RenderTransformOrigin="0.5,0.5">
+                                                                <TextBlock.RenderTransform>
+                                                                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                                                </TextBlock.RenderTransform>
+                                                            </TextBlock>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
+                                                                <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                    <Setter.Value>
+                                                                        <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
+                                                                    </Setter.Value>
+                                                                </Setter>
+                                                            </Trigger>
+                                                            <Trigger Property="IsPressed" Value="True">
+                                                                <Setter TargetName="PencilIcon" Property="Opacity" Value="0.7"/>
+                                                                <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                    <Setter.Value>
+                                                                        <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                                                                    </Setter.Value>
+                                                                </Setter>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Button.Template>
                                             </Button>
                                         </Grid>
                                     </DataTemplate>
@@ -835,17 +902,55 @@
                                                            VerticalAlignment="Center"
                                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
 
-                                                <!-- Kind label badge -->
-                                                <Border Grid.Row="0" Grid.Column="3"
-                                                        Background="{DynamicResource SurfaceElevatedBrush}"
-                                                        CornerRadius="3"
-                                                        Padding="5,1"
-                                                        Margin="6,0,0,0"
-                                                        VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding KindLabel}"
-                                                               Foreground="{DynamicResource TextSecondaryBrush}"
-                                                               FontSize="10"/>
-                                                </Border>
+                                                <!-- Action icons (Internet + Edit) -->
+                                                <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <!-- Internet Badge -->
+                                                    <Border Background="#1A0078D4"
+                                                            CornerRadius="3"
+                                                            Padding="5,1"
+                                                            Margin="6,0,0,0"
+                                                            Visibility="{Binding Process.RequiresInternet, Converter={StaticResource BoolToVisibility}}">
+                                                        <TextBlock Text="🌐 WEB"
+                                                                   Foreground="{DynamicResource AccentBrush}"
+                                                                   FontWeight="SemiBold"
+                                                                   FontSize="9"/>
+                                                    </Border>
+                                                    
+                                                    <!-- Edit Button (Pencil) -->
+                                                    <Button Command="{Binding DataContext.EditProcessCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"
+                                                            Margin="8,0,0,0"
+                                                            Cursor="Hand"
+                                                            Background="Transparent"
+                                                            BorderThickness="0"
+                                                            ToolTip="Modifica Processo">
+                                                        <Button.Template>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border Background="Transparent" Padding="4">
+                                                                    <TextBlock x:Name="PencilIcon" 
+                                                                               Text="✏️" 
+                                                                               FontSize="11"
+                                                                               Opacity="0.4"/>
+                                                                </Border>
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
+
+                                                    <!-- Kind label badge -->
+                                                    <Border Background="{DynamicResource SurfaceElevatedBrush}"
+                                                            CornerRadius="3"
+                                                            Padding="5,1"
+                                                            Margin="6,0,0,0">
+                                                        <TextBlock Text="{Binding KindLabel}"
+                                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                   FontSize="10"/>
+                                                    </Border>
+                                                </StackPanel>
 
                                                 <!-- Description + required badge + status text -->
                                                 <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"

@@ -1,15 +1,27 @@
 using System.Windows;
+using DeploymentApp.Models;
 using DeploymentApp.Services.Interfaces;
 
 namespace DeploymentApp.Services;
 
 public sealed class ThemeService : IThemeService
 {
-    public AppTheme CurrentTheme { get; private set; } = AppTheme.Dark;
+    private readonly UserPreferences _prefs;
+
+    public AppTheme CurrentTheme => _prefs.Theme;
+
+    public ThemeService()
+    {
+        _prefs = UserPreferences.Load();
+        // The App will call SetTheme(CurrentTheme) on startup, 
+        // but we ensure it's applied here just in case.
+        ApplyTheme(_prefs.Theme);
+    }
 
     public void SetTheme(AppTheme theme)
     {
-        CurrentTheme = theme;
+        _prefs.Theme = theme;
+        _prefs.Save();
         ApplyTheme(theme);
     }
 
@@ -28,11 +40,11 @@ public sealed class ThemeService : IThemeService
             .ToList();
         foreach (var d in toRemove) dictionaries.Remove(d);
 
-        // Add the new theme dictionary
+        // Add the new theme dictionary at the beginning
         var themePath = theme == AppTheme.Dark
             ? "pack://application:,,,/Themes/Dark.xaml"
             : "pack://application:,,,/Themes/Light.xaml";
 
-        dictionaries.Add(new ResourceDictionary { Source = new Uri(themePath) });
+        dictionaries.Insert(0, new ResourceDictionary { Source = new Uri(themePath) });
     }
 }

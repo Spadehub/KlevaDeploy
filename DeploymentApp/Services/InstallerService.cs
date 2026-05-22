@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.IO;
 using DeploymentApp.Models;
 using DeploymentApp.Services.Interfaces;
@@ -8,21 +9,79 @@ public sealed class InstallerService : IInstallerService
 {
     private readonly ILogService _log;
     private readonly string _baseDir = AppContext.BaseDirectory;
-    private readonly List<DeploymentPreset> _userCreatedPresets = new();
+    private readonly string _storageDir;
+    private readonly string _presetsFilePath;
+    private readonly string _processesFilePath;
+    
+    private List<DeploymentPreset> _userCreatedPresets = new();
+    private List<DeploymentProcess> _userCreatedProcesses = new();
     private IReadOnlyList<DeploymentProcess> _cachedProcesses = Array.Empty<DeploymentProcess>();
     private IReadOnlyList<DeploymentPreset> _cachedPresets = Array.Empty<DeploymentPreset>();
 
-    public InstallerService(ILogService log) => _log = log;
+    public InstallerService(ILogService log)
+    {
+        _log = log;
+        _storageDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "InstallerIT");
+        _presetsFilePath = Path.Combine(_storageDir, "custom_presets.json");
+        _processesFilePath = Path.Combine(_storageDir, "custom_processes.json");
+        
+        Directory.CreateDirectory(_storageDir);
+        LoadUserStorage();
+    }
+
+    private void LoadUserStorage()
+    {
+        try
+        {
+            if (File.Exists(_processesFilePath))
+            {
+                var json = File.ReadAllText(_processesFilePath);
+                _userCreatedProcesses = JsonSerializer.Deserialize<List<DeploymentProcess>>(json) ?? new();
+                _log.Info($"Loaded {_userCreatedProcesses.Count} custom processes from storage.");
+            }
+            
+            if (File.Exists(_presetsFilePath))
+            {
+                var json = File.ReadAllText(_presetsFilePath);
+                _userCreatedPresets = JsonSerializer.Deserialize<List<DeploymentPreset>>(json) ?? new();
+                _log.Info($"Loaded {_userCreatedPresets.Count} custom presets from storage.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Failed to load user storage", ex);
+        }
+    }
+
+    private void SaveUserStorage()
+    {
+        try
+        {
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            
+            var processesJson = JsonSerializer.Serialize(_userCreatedProcesses, options);
+            File.WriteAllText(_processesFilePath, processesJson);
+            
+            var presetsJson = JsonSerializer.Serialize(_userCreatedPresets, options);
+            File.WriteAllText(_presetsFilePath, presetsJson);
+            
+            _log.Info("Custom presets and processes saved to storage.");
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Failed to save user storage", ex);
+        }
+    }
 
     public Task<IReadOnlyList<DeploymentProcess>> LoadProcessesAsync(bool isDemoMode)
     {
         _log.Info($"Loading deployment processes (Demo Mode: {isDemoMode})...");
         
-        
+        List<DeploymentProcess> baseProcesses;
         if (!isDemoMode)
         {
             // Production mode: return minimal placeholder data
-            var productionProcesses = new List<DeploymentProcess>
+            baseProcesses = new List<DeploymentProcess>
             {
                 new()
                 {
@@ -54,188 +113,189 @@ public sealed class InstallerService : IInstallerService
                     DependsOn = new() { "vcredist" },
                 },
             };
-            _cachedProcesses = productionProcesses;
-            return Task.FromResult<IReadOnlyList<DeploymentProcess>>(productionProcesses);
+        }
+        else
+        {
+            // Demo mode: return full demo data
+            baseProcesses = new List<DeploymentProcess>
+            {
+                new()
+                {
+                    Id = "vcredist",
+                    Name = "Visual C++ Redistributable 2022",
+                    Description = "Runtime Microsoft Visual C++ richiesto da molte applicazioni.",
+                    Kind = ProcessKind.Installer,
+                    RelativePath = @"Installers\vcredist_x64.exe",
+                    Arguments = "/install /quiet /norestart",
+                    DownloadUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    IsRequired = true,
+                    EnabledByDefault = true,
+                },
+                new()
+                {
+                    Id = "dotnet-runtime",
+                    Name = ".NET 8 Desktop Runtime",
+                    Description = "Runtime .NET 8 necessario per applicazioni moderne.",
+                    Kind = ProcessKind.Installer,
+                    RelativePath = @"Installers\dotnet-runtime-8-win-x64.exe",
+                    Arguments = "/install /quiet /norestart",
+                    DownloadUrl = "https://download.microsoft.com/dotnet/8.0/runtime/dotnet-runtime-8.0-win-x64.exe",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    IsRequired = true,
+                    EnabledByDefault = true,
+                    DependsOn = new() { "vcredist" },
+                },
+                new()
+                {
+                    Id = "chrome",
+                    Name = "Google Chrome",
+                    Description = "Browser web Google Chrome — versione enterprise.",
+                    Kind = ProcessKind.Installer,
+                    RelativePath = @"Installers\ChromeSetup.exe",
+                    Arguments = "/silent /install",
+                    DownloadUrl = "",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    EnabledByDefault = true,
+                },
+                new()
+                {
+                    Id = "office365",
+                    Name = "Microsoft Office 365",
+                    Description = "Suite Office 365 con Word, Excel, Outlook, Teams.",
+                    Kind = ProcessKind.Installer,
+                    RelativePath = @"Installers\Office365\setup.exe",
+                    Arguments = "/configure Installers\\Office365\\configuration.xml",
+                    DownloadUrl = "",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    EnabledByDefault = true,
+                    DependsOn = new() { "vcredist", "dotnet-runtime" },
+                },
+                new()
+                {
+                    Id = "passepartout",
+                    Name = "Passepartout Mexal",
+                    Description = "ERP gestionale Passepartout Mexal — richiede licenza.",
+                    Kind = ProcessKind.Installer,
+                    RelativePath = @"Installers\passepartout_setup.exe",
+                    Arguments = "/S /LICENSE={LICENSE_KEY}",
+                    DownloadUrl = "https://www.passepartout.net/downloads/mexal_setup.exe",
+                    RequiresAuth = true,
+                    RequiresLicense = true,
+                    LicenseExcelColumn = "LicenseKey",
+                    EnabledByDefault = true,
+                    DependsOn = new() { "vcredist", "dotnet-runtime" },
+                },
+                new()
+                {
+                    Id = "teamviewer",
+                    Name = "TeamViewer Host",
+                    Description = "Accesso remoto per assistenza tecnica.",
+                    Kind = ProcessKind.Installer,
+                    RelativePath = @"Installers\TeamViewerHost.exe",
+                    Arguments = "/S",
+                    DownloadUrl = "",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    EnabledByDefault = true,
+                },
+                new()
+                {
+                    Id = "antivirus",
+                    Name = "Bitdefender Endpoint Security",
+                    Description = "Antivirus aziendale Bitdefender.",
+                    Kind = ProcessKind.Installer,
+                    RelativePath = @"Installers\bitdefender_setup.exe",
+                    Arguments = "/quiet",
+                    DownloadUrl = "",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    EnabledByDefault = true,
+                },
+                new()
+                {
+                    Id = "disable-uac",
+                    Name = "Disabilita UAC",
+                    Description = "Imposta UAC al livello minimo tramite registro di sistema.",
+                    Kind = ProcessKind.RegistryFile,
+                    RelativePath = @"Scripts\disable_uac.reg",
+                    Arguments = "/s",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    EnabledByDefault = false,
+                    IsRequired = false,
+                },
+                new()
+                {
+                    Id = "firewall-rules",
+                    Name = "Regole Firewall Standard",
+                    Description = "Applica regole firewall standard per il laboratorio IT.",
+                    Kind = ProcessKind.PowerShellScript,
+                    RelativePath = @"Scripts\firewall_rules.ps1",
+                    Arguments = "-ExecutionPolicy Bypass -File",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    EnabledByDefault = true,
+                },
+                new()
+                {
+                    Id = "windows-update",
+                    Name = "Configura Windows Update",
+                    Description = "Imposta Windows Update per aggiornamenti automatici notturni.",
+                    Kind = ProcessKind.PowerShellScript,
+                    RelativePath = @"Scripts\configure_wu.ps1",
+                    Arguments = "-ExecutionPolicy Bypass -File",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    EnabledByDefault = true,
+                },
+                new()
+                {
+                    Id = "printer-setup",
+                    Name = "Installazione Stampanti",
+                    Description = "Aggiunge le stampanti di rete del laboratorio.",
+                    Kind = ProcessKind.PowerShellScript,
+                    RelativePath = @"Scripts\add_printers.ps1",
+                    Arguments = "-ExecutionPolicy Bypass -File",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    EnabledByDefault = false,
+                },
+                new()
+                {
+                    Id = "7zip",
+                    Name = "7-Zip",
+                    Description = "Utility di compressione file 7-Zip.",
+                    Kind = ProcessKind.Installer,
+                    RelativePath = @"Installers\7z2301-x64.exe",
+                    Arguments = "/S",
+                    DownloadUrl = "",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    EnabledByDefault = true,
+                },
+                new()
+                {
+                    Id = "notepadpp",
+                    Name = "Notepad++",
+                    Description = "Editor di testo avanzato Notepad++.",
+                    Kind = ProcessKind.Installer,
+                    RelativePath = @"Installers\npp.installer.exe",
+                    Arguments = "/S",
+                    DownloadUrl = "",
+                    RequiresAuth = false,
+                    RequiresLicense = false,
+                    EnabledByDefault = false,
+                },
+            };
         }
         
-        // Demo mode: return full demo data
-        var processes = new List<DeploymentProcess>
-        {
-            new()
-            {
-                Id = "vcredist",
-                Name = "Visual C++ Redistributable 2022",
-                Description = "Runtime Microsoft Visual C++ richiesto da molte applicazioni.",
-                Kind = ProcessKind.Installer,
-                RelativePath = @"Installers\vcredist_x64.exe",
-                Arguments = "/install /quiet /norestart",
-                DownloadUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe",
-                RequiresAuth = false,
-                RequiresLicense = false,
-                IsRequired = true,
-                EnabledByDefault = true,
-            },
-            new()
-            {
-                Id = "dotnet-runtime",
-                Name = ".NET 8 Desktop Runtime",
-                Description = "Runtime .NET 8 necessario per applicazioni moderne.",
-                Kind = ProcessKind.Installer,
-                RelativePath = @"Installers\dotnet-runtime-8-win-x64.exe",
-                Arguments = "/install /quiet /norestart",
-                DownloadUrl = "https://download.microsoft.com/dotnet/8.0/runtime/dotnet-runtime-8.0-win-x64.exe",
-                RequiresAuth = false,
-                RequiresLicense = false,
-                IsRequired = true,
-                EnabledByDefault = true,
-                DependsOn = new() { "vcredist" },
-            },
-            new()
-            {
-                Id = "chrome",
-                Name = "Google Chrome",
-                Description = "Browser web Google Chrome — versione enterprise.",
-                Kind = ProcessKind.Installer,
-                RelativePath = @"Installers\ChromeSetup.exe",
-                Arguments = "/silent /install",
-                DownloadUrl = "",
-                RequiresAuth = false,
-                RequiresLicense = false,
-                EnabledByDefault = true,
-            },
-            new()
-            {
-                Id = "office365",
-                Name = "Microsoft Office 365",
-                Description = "Suite Office 365 con Word, Excel, Outlook, Teams.",
-                Kind = ProcessKind.Installer,
-                RelativePath = @"Installers\Office365\setup.exe",
-                Arguments = "/configure Installers\\Office365\\configuration.xml",
-                DownloadUrl = "",
-                RequiresAuth = false,
-                RequiresLicense = false,
-                EnabledByDefault = true,
-                DependsOn = new() { "vcredist", "dotnet-runtime" },
-            },
-            new()
-            {
-                Id = "passepartout",
-                Name = "Passepartout Mexal",
-                Description = "ERP gestionale Passepartout Mexal — richiede licenza.",
-                Kind = ProcessKind.Installer,
-                RelativePath = @"Installers\passepartout_setup.exe",
-                Arguments = "/S /LICENSE={LICENSE_KEY}",
-                DownloadUrl = "https://www.passepartout.net/downloads/mexal_setup.exe",
-                RequiresAuth = true,
-                RequiresLicense = true,
-                LicenseExcelColumn = "LicenseKey",
-                EnabledByDefault = true,
-                DependsOn = new() { "vcredist", "dotnet-runtime" },
-            },
-            new()
-            {
-                Id = "teamviewer",
-                Name = "TeamViewer Host",
-                Description = "Accesso remoto per assistenza tecnica.",
-                Kind = ProcessKind.Installer,
-                RelativePath = @"Installers\TeamViewerHost.exe",
-                Arguments = "/S",
-                DownloadUrl = "",
-                RequiresAuth = false,
-                RequiresLicense = false,
-                EnabledByDefault = true,
-            },
-            new()
-            {
-                Id = "antivirus",
-                Name = "Bitdefender Endpoint Security",
-                Description = "Antivirus aziendale Bitdefender.",
-                Kind = ProcessKind.Installer,
-                RelativePath = @"Installers\bitdefender_setup.exe",
-                Arguments = "/quiet",
-                DownloadUrl = "",
-                RequiresAuth = false,
-                RequiresLicense = false,
-                EnabledByDefault = true,
-            },
-            new()
-            {
-                Id = "disable-uac",
-                Name = "Disabilita UAC",
-                Description = "Imposta UAC al livello minimo tramite registro di sistema.",
-                Kind = ProcessKind.RegistryFile,
-                RelativePath = @"Scripts\disable_uac.reg",
-                Arguments = "/s",
-                RequiresAuth = false,
-                RequiresLicense = false,
-                EnabledByDefault = false,
-                IsRequired = false,
-            },
-            new()
-            {
-                Id = "firewall-rules",
-                Name = "Regole Firewall Standard",
-                Description = "Applica regole firewall standard per il laboratorio IT.",
-                Kind = ProcessKind.PowerShellScript,
-                RelativePath = @"Scripts\firewall_rules.ps1",
-                Arguments = "-ExecutionPolicy Bypass -File",
-                RequiresAuth = false,
-                RequiresLicense = false,
-                EnabledByDefault = true,
-            },
-            new()
-            {
-                Id = "windows-update",
-                Name = "Configura Windows Update",
-                Description = "Imposta Windows Update per aggiornamenti automatici notturni.",
-                Kind = ProcessKind.PowerShellScript,
-                RelativePath = @"Scripts\configure_wu.ps1",
-                Arguments = "-ExecutionPolicy Bypass -File",
-                RequiresAuth = false,
-                RequiresLicense = false,
-                EnabledByDefault = true,
-            },
-            new()
-            {
-                Id = "printer-setup",
-                Name = "Installazione Stampanti",
-                Description = "Aggiunge le stampanti di rete del laboratorio.",
-                Kind = ProcessKind.PowerShellScript,
-                RelativePath = @"Scripts\add_printers.ps1",
-                Arguments = "-ExecutionPolicy Bypass -File",
-                RequiresAuth = false,
-                RequiresLicense = false,
-                EnabledByDefault = false,
-            },
-            new()
-            {
-                Id = "7zip",
-                Name = "7-Zip",
-                Description = "Utility di compressione file 7-Zip.",
-                Kind = ProcessKind.Installer,
-                RelativePath = @"Installers\7z2301-x64.exe",
-                Arguments = "/S",
-                DownloadUrl = "",
-                RequiresAuth = false,
-                RequiresLicense = false,
-                EnabledByDefault = true,
-            },
-            new()
-            {
-                Id = "notepadpp",
-                Name = "Notepad++",
-                Description = "Editor di testo avanzato Notepad++.",
-                Kind = ProcessKind.Installer,
-                RelativePath = @"Installers\npp.installer.exe",
-                Arguments = "/S",
-                DownloadUrl = "",
-                RequiresAuth = false,
-                RequiresLicense = false,
-                EnabledByDefault = false,
-            },
-        };
-        _cachedProcesses = processes;
-        return Task.FromResult<IReadOnlyList<DeploymentProcess>>(processes);
+        _cachedProcesses = baseProcesses.Concat(_userCreatedProcesses).ToList();
+        return Task.FromResult(_cachedProcesses);
     }
 
     public Task<IReadOnlyList<DeploymentPreset>> LoadPresetsAsync(bool isDemoMode)
@@ -411,6 +471,50 @@ public sealed class InstallerService : IInstallerService
     {
         _userCreatedPresets.Add(preset);
         _log.Info($"User created preset: {preset.Name} with {preset.Steps.Count} steps.");
+        SaveUserStorage();
+    }
+
+    public void AddUserProcess(DeploymentProcess process)
+    {
+        _userCreatedProcesses.Add(process);
+        _log.Info($"User created process: {process.Name}");
+        SaveUserStorage();
+    }
+
+    public void UpdatePreset(DeploymentPreset preset)
+    {
+        var index = _userCreatedPresets.FindIndex(p => p.Id == preset.Id);
+        if (index != -1)
+        {
+            _userCreatedPresets[index] = preset;
+            _log.Info($"Updated custom preset: {preset.Name}");
+            SaveUserStorage();
+        }
+        else
+        {
+            // If it's a built-in preset being "edited", we treat it as a new custom preset with the same ID
+            // or we could throw. For now, let's just add it if not found.
+            _userCreatedPresets.Add(preset);
+            SaveUserStorage();
+        }
+    }
+
+    public void UpdateProcess(DeploymentProcess process)
+    {
+        var index = _userCreatedProcesses.FindIndex(p => p.Id == process.Id);
+        if (index != -1)
+        {
+            _userCreatedProcesses[index] = process;
+            _log.Info($"Updated custom process: {process.Name}");
+            SaveUserStorage();
+        }
+        else
+        {
+            // If it's a built-in process being "edited", we treat it as a new custom process
+            _userCreatedProcesses.Add(process);
+            _log.Info($"Promoted built-in process to custom: {process.Name}");
+            SaveUserStorage();
+        }
     }
 
     public IReadOnlyList<DeploymentProcess> GetAllAvailableProcesses()

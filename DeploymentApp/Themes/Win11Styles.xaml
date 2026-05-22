@@ -331,7 +331,6 @@
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
                             <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
-                            <Setter Property="Foreground" Value="#FFFFFFFF"/>
                         </Trigger>
                         <MultiTrigger>
                             <MultiTrigger.Conditions>

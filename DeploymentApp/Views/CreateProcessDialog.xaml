@@ -5,9 +5,9 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:models="clr-namespace:DeploymentApp.Models"
         mc:Ignorable="d"
-        Title="Nuovo Processo"
-        Width="600" Height="650"
-        MinWidth="500" MinHeight="550"
+        Title="{Binding Title}"
+        Width="600" Height="700"
+        MinWidth="500" MinHeight="600"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
         AllowsTransparency="False"
@@ -44,7 +44,7 @@
                                VerticalAlignment="Center"
                                Margin="0,0,10,0"
                                RenderOptions.BitmapScalingMode="HighQuality"/>
-                        <TextBlock Text="Nuovo Processo"
+                        <TextBlock Text="{Binding Title}"
                                    Style="{StaticResource Win11TextSubtitle}"
                                    VerticalAlignment="Center"/>
                     </StackPanel>
@@ -204,12 +204,42 @@
                               Margin="0,0,0,16"/>
 
                     <!-- Checkboxes -->
-                    <CheckBox IsChecked="{Binding RunAsAdmin}"
-                              Style="{StaticResource Win11CheckBox}"
-                              Margin="0,0,0,16">
-                        <TextBlock Text="Esegui come Amministratore"
-                                   Style="{StaticResource Win11TextBody}"/>
-                    </CheckBox>
+                    <StackPanel Margin="0,0,0,16">
+                        <CheckBox IsChecked="{Binding RunAsAdmin}"
+                                  Style="{StaticResource Win11CheckBox}"
+                                  Margin="0,0,0,8">
+                            <TextBlock Text="Esegui come Amministratore"
+                                       Style="{StaticResource Win11TextBody}"/>
+                        </CheckBox>
+
+                        <CheckBox IsChecked="{Binding RequiresInternet}"
+                                  Style="{StaticResource Win11CheckBox}">
+                            <TextBlock Text="Richiede Connessione Internet"
+                                       Style="{StaticResource Win11TextBody}"/>
+                        </CheckBox>
+                    </StackPanel>
+
+                    <!-- Warning for Edit Mode -->
+                    <Border Background="#1A0078D4"
+                            BorderBrush="{DynamicResource AccentBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="12,8"
+                            Margin="0,0,0,16"
+                            Visibility="{Binding IsEditMode, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Orientation="Horizontal">
+                            <Image Source="{DynamicResource IconWarning}"
+                                   Width="16" Height="16"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"
+                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <TextBlock Text="Attenzione: la modifica di questo processo influirà su tutti i preset che lo utilizzano."
+                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
 
                     <!-- Validation Error -->
                     <Border Background="#1AFF3333"

@@ -1,13 +1,44 @@
+using System.IO;
+using System.Text.Json;
+
 namespace DeploymentApp.Models;
 
-/// <summary>
-/// Static class to store user preferences in-memory.
-/// Can be extended later to persist to file/registry.
-/// </summary>
-public static class UserPreferences
+public enum AppTheme { Dark, Light }
+
+public class UserPreferences
 {
-    /// <summary>
-    /// Gets or sets whether the user has chosen to suppress the "disable required process" warning dialog.
-    /// </summary>
-    public static bool SuppressRequiredProcessWarning { get; set; } = false;
+    public AppTheme Theme { get; set; } = AppTheme.Dark;
+    public bool SuppressRequiredProcessWarning { get; set; } = false;
+
+    private static readonly string StoragePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "InstallerIT",
+        "user_preferences.json");
+
+    public static UserPreferences Load()
+    {
+        try
+        {
+            if (File.Exists(StoragePath))
+            {
+                var json = File.ReadAllText(StoragePath);
+                return JsonSerializer.Deserialize<UserPreferences>(json) ?? new UserPreferences();
+            }
+        }
+        catch { /* Fallback to defaults */ }
+        return new UserPreferences();
+    }
+
+    public void Save()
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(StoragePath);
+            if (dir != null) Directory.CreateDirectory(dir);
+            
+            var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(StoragePath, json);
+        }
+        catch { /* Ignore save errors */ }
+    }
 }

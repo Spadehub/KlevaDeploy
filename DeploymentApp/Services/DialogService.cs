@@ -10,10 +10,17 @@ namespace DeploymentApp.Services;
 /// </summary>
 public sealed class DialogService : IDialogService
 {
+    private readonly UserPreferences _prefs;
+
+    public DialogService()
+    {
+        _prefs = UserPreferences.Load();
+    }
+
     public bool ShowDisableRequiredWarning(string processName)
     {
         // Check if user has chosen to suppress this warning
-        if (UserPreferences.SuppressRequiredProcessWarning)
+        if (_prefs.SuppressRequiredProcessWarning)
             return true; // Allow disable without showing dialog
 
         var dialog = new DisableFeatureWarningDialog(processName)
@@ -26,13 +33,17 @@ public sealed class DialogService : IDialogService
         
         // Only save "Don't show again" preference if user confirmed (not cancelled)
         if (result == true && dialog.DontShowAgain)
-            UserPreferences.SuppressRequiredProcessWarning = true;
+        {
+            _prefs.SuppressRequiredProcessWarning = true;
+            _prefs.Save();
+        }
         
         return result == true;
     }
 
     public void ResetDisableRequiredWarningPreference()
     {
-        UserPreferences.SuppressRequiredProcessWarning = false;
+        _prefs.SuppressRequiredProcessWarning = false;
+        _prefs.Save();
     }
 }

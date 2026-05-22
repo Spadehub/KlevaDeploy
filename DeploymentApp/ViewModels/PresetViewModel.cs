@@ -13,6 +13,7 @@ public sealed partial class PresetViewModel : ObservableObject
     public string Description => Preset.Description;
     public string Category => Preset.Category;
     public string Icon => Preset.Icon;
+    public bool HasEmojiIcon => !string.IsNullOrWhiteSpace(Icon);
     public int StepCount => Preset.Steps.Count;
 
     public PresetViewModel(DeploymentPreset preset) => Preset = preset;
