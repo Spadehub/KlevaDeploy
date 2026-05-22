@@ -1,0 +1,18 @@
+{
+    "MsBuild": {
+        "LoadProjectsOnDemand": false,
+        "UseLegacySdkResolver": false,
+        "EnablePackageAutoRestoration": true
+    },
+    "FormattingOptions": {
+        "EnableEditorConfigSupport": true,
+        "OrganizeImports": true
+    },
+    "RoslynExtensionsOptions": {
+        "EnableAnalyzersSupport": true,
+        "LocationPaths": []
+    },
+    "Sdk": {
+        "IncludePrereleases": true
+    }
+}
