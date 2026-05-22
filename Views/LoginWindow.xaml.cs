@@ -1,7 +1,7 @@
 using System.Windows;
-using DeploymentApp.ViewModels;
+using KlevaDeploy.ViewModels;
 
-namespace DeploymentApp.Views;
+namespace KlevaDeploy.Views;
 
 public partial class LoginWindow : Window
 {

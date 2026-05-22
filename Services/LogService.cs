@@ -1,6 +1,6 @@
-using DeploymentApp.Services.Interfaces;
+using KlevaDeploy.Services.Interfaces;
 
-namespace DeploymentApp.Services;
+namespace KlevaDeploy.Services;
 
 public sealed class LogService : ILogService
 {

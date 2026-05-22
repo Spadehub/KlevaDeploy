@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Windows.Data;
 
-namespace DeploymentApp.Converters;
+namespace KlevaDeploy.Converters;
 
 [ValueConversion(typeof(bool), typeof(bool))]
 public sealed class InverseBoolConverter : IValueConverter

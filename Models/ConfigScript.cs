@@ -1,4 +1,4 @@
-namespace DeploymentApp.Models;
+namespace KlevaDeploy.Models;
 
 public enum ScriptType { PowerShell, Batch, Registry }
 

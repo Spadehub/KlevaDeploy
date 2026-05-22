@@ -1,8 +1,8 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using DeploymentApp.Models;
-using DeploymentApp.Services.Interfaces;
+using KlevaDeploy.Models;
+using KlevaDeploy.Services.Interfaces;
 
-namespace DeploymentApp.ViewModels;
+namespace KlevaDeploy.ViewModels;
 
 public sealed partial class ProcessStepViewModel : ObservableObject
 {

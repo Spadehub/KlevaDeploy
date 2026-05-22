@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using DeploymentApp.Models;
+using KlevaDeploy.Models;
 
-namespace DeploymentApp.ViewModels;
+namespace KlevaDeploy.ViewModels;
 
 public sealed partial class PresetViewModel : ObservableObject
 {

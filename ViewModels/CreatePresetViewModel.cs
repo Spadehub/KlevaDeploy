@@ -3,9 +3,9 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DeploymentApp.Models;
+using KlevaDeploy.Models;
 
-namespace DeploymentApp.ViewModels;
+namespace KlevaDeploy.ViewModels;
 
 /// <summary>
 /// ViewModel for creating or editing a deployment preset with a sliding panel UI.
@@ -75,7 +75,7 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             OnPropertyChanged(nameof(IsEditMode));
             ValidationError = null;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             ValidationError = "Errore durante l'inizializzazione del pannello.";
             // Nota: qui potremmo iniettare ILogService se volessimo loggare anche qui
@@ -137,7 +137,7 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             OnPropertyChanged(nameof(IsEditMode));
             ValidationError = null;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             ValidationError = "Errore durante il caricamento del preset per la modifica.";
         }

@@ -1,6 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace DeploymentApp.Models;
+namespace KlevaDeploy.Models;
 
 /// <summary>
 /// Helper class for process selection in preset creation.

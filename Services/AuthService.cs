@@ -1,8 +1,8 @@
 using System.Net;
 using System.Net.Http;
-using DeploymentApp.Services.Interfaces;
+using KlevaDeploy.Services.Interfaces;
 
-namespace DeploymentApp.Services;
+namespace KlevaDeploy.Services;
 
 public sealed class AuthService : IAuthService
 {

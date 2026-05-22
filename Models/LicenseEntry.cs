@@ -1,4 +1,4 @@
-namespace DeploymentApp.Models;
+namespace KlevaDeploy.Models;
 
 public class LicenseEntry
 {

@@ -1,4 +1,4 @@
-<Window x:Class="DeploymentApp.Views.DisableFeatureWarningDialog"
+<Window x:Class="KlevaDeploy.Views.DisableFeatureWarningDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Attenzione — Funzionalità richiesta"

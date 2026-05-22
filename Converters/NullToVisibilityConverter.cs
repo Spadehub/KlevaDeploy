@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace DeploymentApp.Converters;
+namespace KlevaDeploy.Converters;
 
 /// <summary>
 /// Returns Visible when value is NOT null; Collapsed when null.

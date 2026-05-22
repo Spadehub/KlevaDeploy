@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using System.Windows.Data;
 
-namespace DeploymentApp.Converters;
+namespace KlevaDeploy.Converters;
 
 /// <summary>
 /// Converts an order number (10, 20, 30...) to a display number (1, 2, 3...).

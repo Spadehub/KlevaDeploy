@@ -1,7 +1,7 @@
 using System.IO;
 using System.Text.Json;
 
-namespace DeploymentApp.Models;
+namespace KlevaDeploy.Models;
 
 public enum AppTheme { Dark, Light }
 
@@ -12,7 +12,7 @@ public class UserPreferences
 
     private static readonly string StoragePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "InstallerIT",
+        "KlevaDeploy",
         "user_preferences.json");
 
     public static UserPreferences Load()

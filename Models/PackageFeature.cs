@@ -1,4 +1,4 @@
-namespace DeploymentApp.Models;
+namespace KlevaDeploy.Models;
 
 /// <summary>
 /// Represents a single process/feature that belongs to a <see cref="SoftwarePackage"/> preset.

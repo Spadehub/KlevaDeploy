@@ -1,12 +1,12 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http;
 using System.Windows;
-using DeploymentApp.Services;
-using DeploymentApp.Services.Interfaces;
-using DeploymentApp.ViewModels;
+using KlevaDeploy.Services;
+using KlevaDeploy.Services.Interfaces;
+using KlevaDeploy.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace DeploymentApp;
+namespace KlevaDeploy;
 
 public partial class App : Application
 {

@@ -1,6 +1,6 @@
-using DeploymentApp.Models;
+using KlevaDeploy.Models;
 
-namespace DeploymentApp.Services.Interfaces;
+namespace KlevaDeploy.Services.Interfaces;
 
 public interface IInstallerService
 {

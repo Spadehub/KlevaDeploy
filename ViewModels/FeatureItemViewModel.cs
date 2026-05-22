@@ -1,7 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
-using DeploymentApp.Models;
+using KlevaDeploy.Models;
 
-namespace DeploymentApp.ViewModels;
+namespace KlevaDeploy.ViewModels;
 
 /// <summary>
 /// Wraps a <see cref="PackageFeature"/> for display in the right-hand features panel.

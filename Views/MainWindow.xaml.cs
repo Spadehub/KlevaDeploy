@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace DeploymentApp.Views
+namespace KlevaDeploy.Views
 {
     // This file is a stub to satisfy the project structure.
     // The actual implementation is at the project root.

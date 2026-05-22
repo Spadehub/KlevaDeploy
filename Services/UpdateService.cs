@@ -1,9 +1,9 @@
 using System.IO;
 using System.Net.Http;
-using DeploymentApp.Models;
-using DeploymentApp.Services.Interfaces;
+using KlevaDeploy.Models;
+using KlevaDeploy.Services.Interfaces;
 
-namespace DeploymentApp.Services;
+namespace KlevaDeploy.Services;
 
 public sealed class UpdateService : IUpdateService
 {

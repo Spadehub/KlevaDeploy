@@ -1,4 +1,4 @@
-namespace DeploymentApp.Services.Interfaces;
+namespace KlevaDeploy.Services.Interfaces;
 
 public interface IAuthService
 {

@@ -1,4 +1,4 @@
-namespace DeploymentApp.Services.Interfaces;
+namespace KlevaDeploy.Services.Interfaces;
 
 public record ProcessResult(int ExitCode, string StdOut, string StdErr);
 

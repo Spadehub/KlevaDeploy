@@ -1,8 +1,8 @@
-using DeploymentApp.Models;
-using DeploymentApp.Services.Interfaces;
-using DeploymentApp.Views;
+using KlevaDeploy.Models;
+using KlevaDeploy.Services.Interfaces;
+using KlevaDeploy.Views;
 
-namespace DeploymentApp.Services;
+namespace KlevaDeploy.Services;
 
 /// <summary>
 /// Concrete dialog service — must be called on the UI thread.

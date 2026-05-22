@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace DeploymentApp.Converters;
+namespace KlevaDeploy.Converters;
 
 /// <summary>
 /// Returns <see cref="Visibility.Collapsed"/> when the bound bool is <c>true</c>,

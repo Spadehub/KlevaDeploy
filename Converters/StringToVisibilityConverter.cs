@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 
-namespace DeploymentApp.Converters;
+namespace KlevaDeploy.Converters;
 
 [ValueConversion(typeof(string), typeof(Visibility))]
 public sealed class StringToVisibilityConverter : IValueConverter

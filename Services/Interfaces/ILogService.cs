@@ -1,4 +1,4 @@
-namespace DeploymentApp.Services.Interfaces;
+namespace KlevaDeploy.Services.Interfaces;
 
 public record LogEntry(DateTime Timestamp, string Level, string Message);
 

@@ -1,4 +1,4 @@
-namespace DeploymentApp.Services.Interfaces;
+namespace KlevaDeploy.Services.Interfaces;
 
 /// <summary>Shows modal dialogs from ViewModels without coupling to the View layer.</summary>
 public interface IDialogService

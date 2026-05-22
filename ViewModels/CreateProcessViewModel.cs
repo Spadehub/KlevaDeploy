@@ -2,10 +2,10 @@ using System.Collections.ObjectModel;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DeploymentApp.Models;
+using KlevaDeploy.Models;
 using Microsoft.Win32;
 
-namespace DeploymentApp.ViewModels;
+namespace KlevaDeploy.ViewModels;
 
 public sealed partial class CreateProcessViewModel : ObservableObject
 {

@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace DeploymentApp.Views;
+namespace KlevaDeploy.Views;
 
 public partial class DisableFeatureWarningDialog : Window
 {

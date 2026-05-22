@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
-using DeploymentApp.Services.Interfaces;
+using KlevaDeploy.Services.Interfaces;
 
-namespace DeploymentApp.Services;
+namespace KlevaDeploy.Services;
 
 public sealed class ProcessExecutionService : IProcessExecutionService
 {
@@ -75,7 +75,7 @@ public sealed class ProcessExecutionService : IProcessExecutionService
             throw new FileNotFoundException($"ZIP file not found: {zipPath}");
         }
 
-        var tempDir = Path.Combine(Path.GetTempPath(), $"DeploymentApp_{Guid.NewGuid():N}");
+        var tempDir = Path.Combine(Path.GetTempPath(), $"KlevaDeploy_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
 
         await Task.Run(() => ZipFile.ExtractToDirectory(zipPath, tempDir), ct);
@@ -115,7 +115,7 @@ public sealed class ProcessExecutionService : IProcessExecutionService
         if (isInlineScript)
         {
             // For inline batch scripts, write to a temp file first
-            var tempBatchFile = Path.Combine(Path.GetTempPath(), $"DeploymentApp_{Guid.NewGuid():N}.bat");
+            var tempBatchFile = Path.Combine(Path.GetTempPath(), $"KlevaDeploy_{Guid.NewGuid():N}.bat");
             await File.WriteAllTextAsync(tempBatchFile, scriptPathOrContent, ct);
             _log.Info($"Inline batch script written to: {tempBatchFile}");
 

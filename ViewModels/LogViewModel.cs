@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
-using DeploymentApp.Services.Interfaces;
+using KlevaDeploy.Services.Interfaces;
 
-namespace DeploymentApp.ViewModels;
+namespace KlevaDeploy.ViewModels;
 
 public sealed partial class LogViewModel : ObservableObject
 {

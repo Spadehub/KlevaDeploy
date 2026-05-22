@@ -1,9 +1,9 @@
 using System.Text.Json;
 using System.IO;
-using DeploymentApp.Models;
-using DeploymentApp.Services.Interfaces;
+using KlevaDeploy.Models;
+using KlevaDeploy.Services.Interfaces;
 
-namespace DeploymentApp.Services;
+namespace KlevaDeploy.Services;
 
 public sealed class InstallerService : IInstallerService
 {
@@ -21,7 +21,7 @@ public sealed class InstallerService : IInstallerService
     public InstallerService(ILogService log)
     {
         _log = log;
-        _storageDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "InstallerIT");
+        _storageDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KlevaDeploy");
         _presetsFilePath = Path.Combine(_storageDir, "custom_presets.json");
         _processesFilePath = Path.Combine(_storageDir, "custom_processes.json");
         

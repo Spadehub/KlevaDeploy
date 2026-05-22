@@ -1,7 +1,7 @@
-﻿using System.Windows;
-using DeploymentApp.ViewModels;
+using System.Windows;
+using KlevaDeploy.ViewModels;
 
-namespace DeploymentApp;
+namespace KlevaDeploy;
 
 public partial class MainWindow : Window
 {
