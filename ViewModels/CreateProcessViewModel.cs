@@ -1,3 +1,4 @@
+using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -7,22 +8,99 @@ using Microsoft.Win32;
 
 namespace KlevaDeploy.ViewModels;
 
-public sealed partial class CreateProcessViewModel : ObservableObject
+public sealed class CreateProcessViewModel : ObservableObject
 {
     private string? _existingProcessId;
 
-    [ObservableProperty] private string _processName = string.Empty;
-    [ObservableProperty] private string _description = string.Empty;
-    [ObservableProperty] private ProcessKind _selectedProcessKind = ProcessKind.Installer;
-    [ObservableProperty] private string _filePath = string.Empty;
-    [ObservableProperty] private string _arguments = string.Empty;
-    [ObservableProperty] private string _scriptContent = string.Empty;
-    [ObservableProperty] private bool _runAsAdmin;
-    [ObservableProperty] private bool _requiresInternet;
-    [ObservableProperty] private string _selectedIconKey = "IconPackage";
-    [ObservableProperty] private string? _validationError;
-    [ObservableProperty] private string _title = "Nuovo Processo";
-    [ObservableProperty] private bool _isEditMode;
+    private string _processName = string.Empty;
+    public string ProcessName
+    {
+        get => _processName;
+        set => SetProperty(ref _processName, value);
+    }
+
+    private string _description = string.Empty;
+    public string Description
+    {
+        get => _description;
+        set => SetProperty(ref _description, value);
+    }
+
+    private ProcessKind _selectedProcessKind = ProcessKind.Installer;
+    public ProcessKind SelectedProcessKind
+    {
+        get => _selectedProcessKind;
+        set
+        {
+            if (!SetProperty(ref _selectedProcessKind, value)) return;
+            OnPropertyChanged(nameof(IsInstallerMode));
+            OnPropertyChanged(nameof(IsScriptMode));
+            ValidationError = null;
+        }
+    }
+
+    private string _filePath = string.Empty;
+    public string FilePath
+    {
+        get => _filePath;
+        set => SetProperty(ref _filePath, value);
+    }
+
+    private string _arguments = string.Empty;
+    public string Arguments
+    {
+        get => _arguments;
+        set => SetProperty(ref _arguments, value);
+    }
+
+    private string _scriptContent = string.Empty;
+    public string ScriptContent
+    {
+        get => _scriptContent;
+        set => SetProperty(ref _scriptContent, value);
+    }
+
+    private bool _runAsAdmin;
+    public bool RunAsAdmin
+    {
+        get => _runAsAdmin;
+        set => SetProperty(ref _runAsAdmin, value);
+    }
+
+    private bool _requiresInternet;
+    public bool RequiresInternet
+    {
+        get => _requiresInternet;
+        set => SetProperty(ref _requiresInternet, value);
+    }
+
+    private string _selectedIconKey = "IconPackage";
+    public string SelectedIconKey
+    {
+        get => _selectedIconKey;
+        set => SetProperty(ref _selectedIconKey, value);
+    }
+
+    private string? _validationError;
+    public string? ValidationError
+    {
+        get => _validationError;
+        set => SetProperty(ref _validationError, value);
+    }
+
+    private string _title = "Nuovo Processo";
+    public string Title
+    {
+        get => _title;
+        set => SetProperty(ref _title, value);
+    }
+
+    private bool _isEditMode;
+    public bool IsEditMode
+    {
+        get => _isEditMode;
+        set => SetProperty(ref _isEditMode, value);
+    }
 
     public ObservableCollection<ProcessKind> AvailableProcessKinds { get; } = new()
     {
@@ -53,6 +131,17 @@ public sealed partial class CreateProcessViewModel : ObservableObject
     public DeploymentProcess? CreatedProcess { get; private set; }
     public bool DialogResult { get; private set; }
 
+    public IRelayCommand BrowseFileCommand { get; }
+    public IRelayCommand SaveCommand { get; }
+    public IRelayCommand CancelCommand { get; }
+
+    public CreateProcessViewModel()
+    {
+        BrowseFileCommand = new RelayCommand(BrowseFile);
+        SaveCommand = new RelayCommand(Save);
+        CancelCommand = new RelayCommand(Cancel);
+    }
+
     public void InitializeForEdit(DeploymentProcess process)
     {
         _existingProcessId = process.Id;
@@ -69,14 +158,6 @@ public sealed partial class CreateProcessViewModel : ObservableObject
         IsEditMode = true;
     }
 
-    partial void OnSelectedProcessKindChanged(ProcessKind value)
-    {
-        OnPropertyChanged(nameof(IsInstallerMode));
-        OnPropertyChanged(nameof(IsScriptMode));
-        ValidationError = null;
-    }
-
-    [RelayCommand]
     private void BrowseFile()
     {
         var dialog = new OpenFileDialog();
@@ -103,7 +184,6 @@ public sealed partial class CreateProcessViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
     private void Save()
     {
         if (!ValidateInput())
@@ -148,7 +228,6 @@ public sealed partial class CreateProcessViewModel : ObservableObject
         DialogResult = true;
     }
 
-    [RelayCommand]
     private void Cancel()
     {
         DialogResult = false;

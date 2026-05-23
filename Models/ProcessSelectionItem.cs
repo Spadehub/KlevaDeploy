@@ -6,13 +6,37 @@ namespace KlevaDeploy.Models;
 /// Helper class for process selection in preset creation.
 /// Wraps a DeploymentProcess with selection state, ordering, and required flag.
 /// </summary>
-public sealed partial class ProcessSelectionItem : ObservableObject
+public sealed class ProcessSelectionItem : ObservableObject
 {
     public DeploymentProcess Process { get; }
 
-    [ObservableProperty] private bool _isSelected;
-    [ObservableProperty] private bool _isRequired;
-    [ObservableProperty] private int _order;
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetProperty(ref _isSelected, value);
+    }
+
+    private bool _isRequired;
+    public bool IsRequired
+    {
+        get => _isRequired;
+        set => SetProperty(ref _isRequired, value);
+    }
+
+    private int _order;
+    public int Order
+    {
+        get => _order;
+        set => SetProperty(ref _order, value);
+    }
+
+    private bool _isDragging;
+    public bool IsDragging
+    {
+        get => _isDragging;
+        set => SetProperty(ref _isDragging, value);
+    }
 
     public ProcessSelectionItem(DeploymentProcess process)
     {

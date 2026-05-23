@@ -7,14 +7,19 @@ namespace KlevaDeploy.ViewModels;
 /// Wraps a <see cref="PackageFeature"/> for display in the right-hand features panel.
 /// Handles the "disable required feature" warning with a persistent "don't show again" flag.
 /// </summary>
-public sealed partial class FeatureItemViewModel : ObservableObject
+public sealed class FeatureItemViewModel : ObservableObject
 {
     // Shared across all instances — persists for the lifetime of the app session
     private static bool _suppressRequiredWarning;
 
     public PackageFeature Feature { get; }
 
-    [ObservableProperty] private bool _isEnabled = true;
+    private bool _isEnabled = true;
+    public bool IsEnabled
+    {
+        get => _isEnabled;
+        set => SetProperty(ref _isEnabled, value);
+    }
 
     /// <summary>
     /// Raised when the user attempts to disable a required feature and needs a confirmation dialog.
