@@ -41,23 +41,28 @@ public sealed class PresetViewToggleTests
         var installer = new FakeInstallerService();
         var update = new FakeUpdateService();
         var auth = new FakeAuthService();
+        var processExecution = new FakeProcessExecutionService();
+        var licenseScraper = new FakeLicenseScraperService();
         var log = new FakeLogService();
+        var clipboard = new FakeClipboardService();
         var theme = new FakeThemeService();
         var dialog = new FakeDialogService();
         var presetIcon = new FakePresetIconService();
-        var logVm = new LogViewModel(log);
+        var logVm = new LogViewModel(log, clipboard);
 
         return new MainViewModel(
             installer,
             update,
             auth,
+            processExecution,
+            licenseScraper,
             log,
             theme,
             dialog,
             presetIcon,
             prefsService,
             loginVmFactory: () => new LoginViewModel(auth),
-            logVm);
+            logViewModel: logVm);
     }
 
     private sealed class FakePreferencesService(UserPreferences prefs) : IPreferencesService
@@ -86,6 +91,8 @@ public sealed class PresetViewToggleTests
         public void AddUserProcess(DeploymentProcess process) { }
         public void UpdatePreset(DeploymentPreset preset) { }
         public void UpdateProcess(DeploymentProcess process) { }
+        public bool DeletePreset(string presetId) => false;
+        public bool DeleteProcess(string processId) => false;
     }
 
     private sealed class FakeUpdateService : IUpdateService
@@ -111,6 +118,11 @@ public sealed class PresetViewToggleTests
         public void AppendRaw(string level, string message) { }
     }
 
+    private sealed class FakeClipboardService : IClipboardService
+    {
+        public void SetText(string text) { }
+    }
+
     private sealed class FakeThemeService : IThemeService
     {
         public AppTheme CurrentTheme => AppTheme.Dark;
@@ -118,9 +130,36 @@ public sealed class PresetViewToggleTests
         public void ToggleTheme() { }
     }
 
+    private sealed class FakeProcessExecutionService : IProcessExecutionService
+    {
+        public Task<ProcessResult> RunAsync(string executablePath, string arguments, bool runAsAdmin = false, CancellationToken ct = default) =>
+            Task.FromResult(new ProcessResult(0, string.Empty, string.Empty));
+
+        public Task<string> ExtractZipToTempAsync(string zipPath, CancellationToken ct = default) =>
+            Task.FromResult(string.Empty);
+
+        public Task<ProcessResult> RunPowerShellAsync(string scriptPathOrContent, bool isInlineScript, bool runAsAdmin = false, CancellationToken ct = default) =>
+            Task.FromResult(new ProcessResult(0, string.Empty, string.Empty));
+
+        public Task<ProcessResult> RunBatchAsync(string scriptPathOrContent, bool isInlineScript, bool runAsAdmin = false, CancellationToken ct = default) =>
+            Task.FromResult(new ProcessResult(0, string.Empty, string.Empty));
+
+        public Task<ProcessResult> RunBashAsync(string scriptPathOrContent, bool isInlineScript, CancellationToken ct = default) =>
+            Task.FromResult(new ProcessResult(0, string.Empty, string.Empty));
+    }
+
+    private sealed class FakeLicenseScraperService : ILicenseScraperService
+    {
+        public Task<IReadOnlyList<LicenseEntry>> FetchLicensesAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<LicenseEntry>>(Array.Empty<LicenseEntry>());
+
+        public string? ExtractLicenseKey(IReadOnlyList<LicenseEntry> licenses, string productName, string customerName) => null;
+    }
+
     private sealed class FakeDialogService : IDialogService
     {
         public bool ShowDisableRequiredWarning(string processName) => true;
+        public bool Confirm(string title, string message) => true;
         public void ResetDisableRequiredWarningPreference() { }
     }
 
