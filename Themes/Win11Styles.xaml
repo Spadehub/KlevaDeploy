@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib"
+                    xmlns:behaviors="clr-namespace:KlevaDeploy.Behaviors">
 
     <!-- ═══════════════════════════════════════════════════════════
          WINDOWS 11 SHARED STYLES
@@ -18,6 +19,15 @@
     <CornerRadius x:Key="CornerRadiusMedium">8</CornerRadius>
     <CornerRadius x:Key="CornerRadiusLarge">12</CornerRadius>
     <CornerRadius x:Key="CornerRadiusCard">8</CornerRadius>
+
+    <sys:Double x:Key="ScrollFadeSize">16</sys:Double>
+    <sys:Double x:Key="ScrollFadeOpacity">0.75</sys:Double>
+    <sys:Double x:Key="ScrollBarThickness">3</sys:Double>
+    <CornerRadius x:Key="ScrollBarThumbCornerRadius">1.5</CornerRadius>
+
+    <Style TargetType="ScrollViewer">
+        <Setter Property="behaviors:ScrollFadeBehavior.IsEnabled" Value="False"/>
+    </Style>
 
     <!-- ── ButtonBase Style ── -->
     <!-- NOTE: This is intentionally ButtonBase (not Button) so it can be re-used by ToggleButton, RepeatButton, etc. -->
@@ -75,12 +85,12 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource IconButtonHoverBrush}"/>
                             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Root" Property="Background" Value="#33FF3333"/>
-                            <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource IconButtonPressedBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.4"/>
@@ -249,29 +259,94 @@
 
     <!-- ── ScrollBar Style (thin, Win11-like) ── -->
     <Style x:Key="Win11ScrollBar" TargetType="ScrollBar">
-        <Setter Property="Width" Value="6"/>
+        <Style.Triggers>
+            <Trigger Property="Orientation" Value="Vertical">
+                <Setter Property="Width" Value="{StaticResource ScrollBarThickness}"/>
+            </Trigger>
+            <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Height" Value="{StaticResource ScrollBarThickness}"/>
+            </Trigger>
+        </Style.Triggers>
         <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="MinWidth" Value="0"/>
+        <Setter Property="MinHeight" Value="0"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ScrollBar">
-                    <Grid>
-                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                    <Grid Background="Transparent">
+                        <Track x:Name="PART_Track" IsDirectionReversed="True" Focusable="False">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton x:Name="DecreaseButton"
+                                              Command="ScrollBar.PageUpCommand"
+                                              CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
+                                              Background="Transparent"
+                                              BorderThickness="0"
+                                              Focusable="False"
+                                              IsTabStop="False">
+                                    <RepeatButton.Template>
+                                        <ControlTemplate TargetType="RepeatButton">
+                                            <Border Background="{TemplateBinding Background}"/>
+                                        </ControlTemplate>
+                                    </RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.DecreaseRepeatButton>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton x:Name="IncreaseButton"
+                                              Command="ScrollBar.PageDownCommand"
+                                              CommandTarget="{Binding RelativeSource={RelativeSource TemplatedParent}}"
+                                              Background="Transparent"
+                                              BorderThickness="0"
+                                              Focusable="False"
+                                              IsTabStop="False">
+                                    <RepeatButton.Template>
+                                        <ControlTemplate TargetType="RepeatButton">
+                                            <Border Background="{TemplateBinding Background}"/>
+                                        </ControlTemplate>
+                                    </RepeatButton.Template>
+                                </RepeatButton>
+                            </Track.IncreaseRepeatButton>
                             <Track.Thumb>
-                                <Thumb>
+                                <Thumb x:Name="Thumb">
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
-                                            <Border Background="{DynamicResource TextDisabledBrush}"
-                                                    CornerRadius="3" Margin="1"/>
+                                            <Border x:Name="ThumbBorder"
+                                                    Background="{DynamicResource TextDisabledBrush}"
+                                                    CornerRadius="{StaticResource ScrollBarThumbCornerRadius}"
+                                                    Margin="0.5"
+                                                    Opacity="0.45"/>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="ThumbBorder" Property="Background" Value="{DynamicResource TextSecondaryBrush}"/>
+                                                    <Setter TargetName="ThumbBorder" Property="Opacity" Value="0.85"/>
+                                                </Trigger>
+                                                <Trigger Property="IsDragging" Value="True">
+                                                    <Setter TargetName="ThumbBorder" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                    <Setter TargetName="ThumbBorder" Property="Opacity" Value="0.9"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
                                         </ControlTemplate>
                                     </Thumb.Template>
                                 </Thumb>
                             </Track.Thumb>
                         </Track>
                     </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Orientation" Value="Vertical">
+                            <Setter TargetName="Thumb" Property="MinHeight" Value="24"/>
+                        </Trigger>
+                        <Trigger Property="Orientation" Value="Horizontal">
+                            <Setter TargetName="Thumb" Property="MinWidth" Value="24"/>
+                            <Setter TargetName="DecreaseButton" Property="Command" Value="ScrollBar.PageLeftCommand"/>
+                            <Setter TargetName="IncreaseButton" Property="Command" Value="ScrollBar.PageRightCommand"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
     </Style>
+
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource Win11ScrollBar}"/>
 
     <!-- ── Card Border Style ── -->
     <Style x:Key="Win11Card" TargetType="Border">

@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.Windows;
 using KlevaDeploy.ViewModels;
 
@@ -10,37 +11,41 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = vm;
 
-        // ── Title bar chrome wiring (window decoration only — not business logic) ──
-
-        // Single handler: drag on single-click, maximize/restore on double-click
-        TitleBar.MouseLeftButtonDown += (_, e) =>
+        if (vm.LogViewModel.TerminalLines is INotifyCollectionChanged terminalLines)
         {
-            if (e.ClickCount == 2)
-                ToggleMaximize();
-            else
-                DragMove();
-        };
+            terminalLines.CollectionChanged += (_, __) =>
+            {
+                Dispatcher.BeginInvoke(() => TerminalOutputText.ScrollToEnd());
+            };
+        }
 
-        // Minimize button
-        BtnMinimize.Click += (_, _) => WindowState = WindowState.Minimized;
-
-        // Maximize / Restore button
-        BtnMaximize.Click += (_, _) => ToggleMaximize();
-
-        // Close button
-        BtnClose.Click += (_, _) => Close();
-
-        // Keep the maximize icon glyph in sync when state changes externally
-        StateChanged += (_, _) =>
+        if (vm.LogViewModel.LogEntries is INotifyCollectionChanged logEntries)
         {
-            MaximizeIcon.Text = WindowState == WindowState.Maximized
-                ? "\u2752"   // ❒ restore glyph
-                : "\u25A1";  // □ maximize glyph
-        };
+            logEntries.CollectionChanged += (_, __) =>
+            {
+                Dispatcher.BeginInvoke(() => LogOutputText.ScrollToEnd());
+            };
+        }
+
+        DragRegion.MouseRightButtonUp += (_, e) =>
+            SystemCommands.ShowSystemMenu(this, PointToScreen(e.GetPosition(this)));
+
+        BtnMinimize.Click += (_, _) => SystemCommands.MinimizeWindow(this);
+        BtnMaximize.Click += (_, _) => ToggleMaximizeRestore();
+        BtnClose.Click += (_, _) => SystemCommands.CloseWindow(this);
+
+        StateChanged += (_, _) => UpdateMaximizeGlyph();
+        UpdateMaximizeGlyph();
     }
 
-    private void ToggleMaximize() =>
-        WindowState = WindowState == WindowState.Maximized
-            ? WindowState.Normal
-            : WindowState.Maximized;
+    private void ToggleMaximizeRestore()
+    {
+        if (WindowState == WindowState.Maximized)
+            SystemCommands.RestoreWindow(this);
+        else
+            SystemCommands.MaximizeWindow(this);
+    }
+
+    private void UpdateMaximizeGlyph() =>
+        MaximizeIcon.Text = WindowState == WindowState.Maximized ? "\u2752" : "\u25A1";
 }

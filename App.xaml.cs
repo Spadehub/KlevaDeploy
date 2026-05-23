@@ -61,6 +61,7 @@ public partial class App : Application
 
         // Services
         services.AddSingleton<ILogService, LogService>();
+        services.AddSingleton<IClipboardService, ClipboardService>();
         services.AddSingleton<IAuthService, AuthService>();
         services.AddSingleton<IPreferencesService, PreferencesService>();
         services.AddSingleton<IInstallerService, InstallerService>();
@@ -79,6 +80,8 @@ public partial class App : Application
             sp.GetRequiredService<IInstallerService>(),
             sp.GetRequiredService<IUpdateService>(),
             sp.GetRequiredService<IAuthService>(),
+            sp.GetRequiredService<IProcessExecutionService>(),
+            sp.GetRequiredService<ILicenseScraperService>(),
             sp.GetRequiredService<ILogService>(),
             sp.GetRequiredService<IThemeService>(),
             sp.GetRequiredService<IDialogService>(),

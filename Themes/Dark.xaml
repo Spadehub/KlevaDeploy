@@ -25,6 +25,8 @@
     <Color x:Key="ErrorColor">#FFCF6679</Color>
     <Color x:Key="SelectionColor">#FF0078D4</Color>
     <Color x:Key="HoverColor">#FF3A3A3A</Color>
+    <Color x:Key="IconButtonHoverColor">#FF4A4A4A</Color>
+    <Color x:Key="IconButtonPressedColor">#FF2F2F2F</Color>
     <Color x:Key="ToolbarColor">#FF272727</Color>
 
     <!-- Brushes -->
@@ -41,12 +43,16 @@
     <SolidColorBrush x:Key="SidebarBrush" Color="{StaticResource SidebarColor}"/>
     <SolidColorBrush x:Key="LogBackgroundBrush" Color="{StaticResource LogBackgroundColor}"/>
     <SolidColorBrush x:Key="LogTextBrush" Color="{StaticResource LogTextColor}"/>
+    <SolidColorBrush x:Key="ScrollFadeOverlayBrush" Color="{StaticResource AppBackgroundColor}"/>
     <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}"/>
     <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}"/>
     <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource ErrorColor}"/>
     <SolidColorBrush x:Key="SelectionBrush" Color="{StaticResource SelectionColor}"/>
     <SolidColorBrush x:Key="HoverBrush" Color="{StaticResource HoverColor}"/>
+    <SolidColorBrush x:Key="IconButtonHoverBrush" Color="{StaticResource IconButtonHoverColor}"/>
+    <SolidColorBrush x:Key="IconButtonPressedBrush" Color="{StaticResource IconButtonPressedColor}"/>
     <SolidColorBrush x:Key="ToolbarBrush" Color="{StaticResource ToolbarColor}"/>
+    <SolidColorBrush x:Key="OutputLineHoverBrush" Color="#22000000"/>
 
     <!-- Theme toggle icon -->
     <sys:String x:Key="ThemeToggleIcon">☀</sys:String>

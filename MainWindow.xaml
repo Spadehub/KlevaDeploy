@@ -5,9 +5,10 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:behaviors="clr-namespace:KlevaDeploy.Behaviors"
+        xmlns:conv="clr-namespace:KlevaDeploy.Converters"
         xmlns:models="clr-namespace:KlevaDeploy.Models"
         mc:Ignorable="d"
-        Title="IT Deployment Configurator"
+        Title="KlevaDeploy"
         Width="1200" Height="760"
         MinWidth="900" MinHeight="580"
         WindowStartupLocation="CenterScreen"
@@ -21,14 +22,16 @@
 
     <!-- ── WindowChrome: integrates with DWM compositor, eliminates 1px white border artifact ── -->
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="32"
+        <WindowChrome CaptionHeight="48"
                       ResizeBorderThickness="6"
                       GlassFrameThickness="0,0,0,1"
-                      UseAeroCaptionButtons="False"
+                      UseAeroCaptionButtons="True"
                       CornerRadius="8"/>
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
+        <conv:BoolToDoubleConverter x:Key="OutputTabsIndicatorLeftConverter" FalseValue="0" TrueValue="79"/>
+
         <!-- ── Preset card item style ── -->
         <Style x:Key="PresetCardItem" TargetType="ListBoxItem">
             <Setter Property="Background" Value="Transparent"/>
@@ -66,7 +69,7 @@
             <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Width" Value="46"/>
-            <Setter Property="Height" Value="32"/>
+            <Setter Property="Height" Value="48"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Cursor" Value="Arrow"/>
             <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True"/>
@@ -210,8 +213,8 @@
     <Border BorderThickness="0">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="32"/>   <!-- Custom title bar (caption area) -->
-                <RowDefinition Height="48"/>   <!-- Toolbar -->
+                <RowDefinition Height="48"/>
+                <RowDefinition Height="0"/>
                 <RowDefinition Height="*"/>    <!-- Main content -->
                 <RowDefinition Height="190"/>  <!-- Log panel -->
             </Grid.RowDefinitions>
@@ -224,69 +227,8 @@
                     Grid.Row="0"
                     Background="{DynamicResource ToolbarBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
-                    BorderThickness="0,0,0,1"
-                    WindowChrome.IsHitTestVisibleInChrome="True">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>  <!-- App icon + title -->
-                        <ColumnDefinition Width="*"/>     <!-- Drag area -->
-                        <ColumnDefinition Width="Auto"/>  <!-- Chrome buttons -->
-                    </Grid.ColumnDefinitions>
-
-                    <!-- App icon + title (non-interactive — part of drag area) -->
-                    <StackPanel Grid.Column="0" Orientation="Horizontal"
-                                VerticalAlignment="Center" Margin="10,0,0,0"
-                                IsHitTestVisible="False">
-                        <Image Source="{DynamicResource IconPackage}"
-                               Width="14" Height="14"
-                               VerticalAlignment="Center"
-                               Margin="0,0,6,0"
-                               RenderOptions.BitmapScalingMode="HighQuality"/>
-                        <TextBlock Text="IT Deployment Configurator"
-                                   FontSize="12"
-                                   Foreground="{DynamicResource TextPrimaryBrush}"
-                                   VerticalAlignment="Center"/>
-                    </StackPanel>
-
-                    <!-- Window chrome buttons: Minimize / Maximize / Close -->
-                    <StackPanel Grid.Column="2" Orientation="Horizontal"
-                                VerticalAlignment="Stretch">
-                        <!-- Minimize -->
-                        <Button x:Name="BtnMinimize"
-                                Style="{StaticResource ChromeButton}"
-                                ToolTip="Minimizza">
-                            <TextBlock Text="&#x2014;" FontSize="10"
-                                       VerticalAlignment="Center"
-                                       HorizontalAlignment="Center"/>
-                        </Button>
-                        <!-- Maximize / Restore -->
-                        <Button x:Name="BtnMaximize"
-                                Style="{StaticResource ChromeButton}"
-                                ToolTip="Ingrandisci">
-                            <TextBlock x:Name="MaximizeIcon" Text="&#x25A1;" FontSize="11"
-                                       VerticalAlignment="Center"
-                                       HorizontalAlignment="Center"/>
-                        </Button>
-                        <!-- Close -->
-                        <Button x:Name="BtnClose"
-                                Style="{StaticResource ChromeCloseButton}"
-                                ToolTip="Chiudi">
-                            <TextBlock Text="&#x2715;" FontSize="11"
-                                       VerticalAlignment="Center"
-                                       HorizontalAlignment="Center"/>
-                        </Button>
-                    </StackPanel>
-                </Grid>
-            </Border>
-
-            <!-- ══════════════════════════════════════════════════════
-                 ROW 1 — TOOLBAR
-            ══════════════════════════════════════════════════════ -->
-            <Border Grid.Row="1"
-                    Background="{DynamicResource ToolbarBrush}"
-                    BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="0,0,0,1">
-                <Grid Margin="12,0">
+                <Grid Margin="12,0,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
@@ -294,10 +236,11 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- App title -->
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                                IsHitTestVisible="False">
                         <Image Source="{DynamicResource IconPackage}"
                                Width="18" Height="18"
                                VerticalAlignment="Center"
@@ -308,12 +251,12 @@
                                    VerticalAlignment="Center"/>
                     </StackPanel>
 
-                    <!-- Demo Mode Toggle -->
                     <Border Grid.Column="1"
                             CornerRadius="{StaticResource CornerRadiusSmall}"
                             Padding="10,6"
                             Margin="16,0,0,0"
-                            VerticalAlignment="Center">
+                            VerticalAlignment="Center"
+                            WindowChrome.IsHitTestVisibleInChrome="True">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
@@ -345,7 +288,6 @@
                                     </TextBlock.Style>
                                 </TextBlock>
                             </CheckBox>
-                            <!-- Demo mode indicator badge -->
                             <Border Background="{DynamicResource WarningBrush}"
                                     CornerRadius="3"
                                     Padding="5,2"
@@ -359,11 +301,15 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Auth status badge -->
+                    <Border x:Name="DragRegion"
+                            Grid.Column="2"
+                            Background="Transparent"/>
+
                     <Border Grid.Column="3"
                             CornerRadius="{StaticResource CornerRadiusSmall}"
                             Padding="10,4" Margin="0,0,8,0"
-                            VerticalAlignment="Center">
+                            VerticalAlignment="Center"
+                            WindowChrome.IsHitTestVisibleInChrome="True">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
@@ -404,15 +350,14 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Toolbar action buttons -->
-                    <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                    <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0"
+                                WindowChrome.IsHitTestVisibleInChrome="True">
                         <ProgressBar Width="80" Height="3"
                                      IsIndeterminate="True"
                                      Style="{StaticResource Win11ProgressBar}"
                                      Margin="0,0,12,0"
                                      Visibility="{Binding IsInitializing, Converter={StaticResource BoolToVisibility}}"/>
 
-                        <!-- Login button -->
                         <Button Command="{Binding OpenLoginCommand}"
                                 Style="{StaticResource Win11Button}"
                                 Margin="0,0,6,0"
@@ -427,7 +372,6 @@
                             </StackPanel>
                         </Button>
 
-                        <!-- Logout button -->
                         <Button Command="{Binding LogoutCommand}"
                                 Style="{StaticResource Win11Button}"
                                 Padding="10,6">
@@ -442,17 +386,42 @@
                         </Button>
                     </StackPanel>
 
-                    <!-- Theme toggle -->
                     <Button Grid.Column="5"
                             Command="{Binding ToggleThemeCommand}"
                             ToolTip="{Binding ThemeToggleTooltip}"
                             Style="{StaticResource Win11Button}"
                             Width="36" Height="36" Padding="0"
-                            VerticalAlignment="Center">
+                            Margin="0,0,8,0"
+                            VerticalAlignment="Center"
+                            WindowChrome.IsHitTestVisibleInChrome="True">
                         <Image Source="{DynamicResource ThemeToggleDrawingImage}"
                                Width="16" Height="16"
                                RenderOptions.BitmapScalingMode="HighQuality"/>
                     </Button>
+
+                    <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Stretch">
+                        <Button x:Name="BtnMinimize"
+                                Style="{StaticResource ChromeButton}"
+                                ToolTip="Minimizza">
+                            <TextBlock Text="&#x2014;" FontSize="10"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="BtnMaximize"
+                                Style="{StaticResource ChromeButton}"
+                                ToolTip="Ingrandisci">
+                            <TextBlock x:Name="MaximizeIcon" Text="&#x25A1;" FontSize="11"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="BtnClose"
+                                Style="{StaticResource ChromeCloseButton}"
+                                ToolTip="Chiudi">
+                            <TextBlock Text="&#x2715;" FontSize="11"
+                                       VerticalAlignment="Center"
+                                       HorizontalAlignment="Center"/>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
 
@@ -1386,6 +1355,18 @@
                                                             Background="Transparent"
                                                             BorderThickness="0"
                                                             ToolTip="Modifica Processo">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button">
+                                                                <Setter Property="Opacity" Value="0"/>
+                                                                <Setter Property="IsHitTestVisible" Value="False"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsMouseOver}" Value="True">
+                                                                        <Setter Property="Opacity" Value="1"/>
+                                                                        <Setter Property="IsHitTestVisible" Value="True"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
                                                         <Button.Template>
                                                             <ControlTemplate TargetType="Button">
                                                                 <Border Background="Transparent" Padding="4">
@@ -1525,41 +1506,224 @@
                             Background="{DynamicResource SurfaceElevatedBrush}"
                             CornerRadius="8,8,0,0"
                             Padding="16,10">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Source="{DynamicResource IconLog}"
-                                   Width="14" Height="14"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,8,0"
-                                   RenderOptions.BitmapScalingMode="HighQuality"/>
-                            <TextBlock Text="Log"
-                                       Style="{StaticResource Win11TextSubtitle}"
-                                       VerticalAlignment="Center"/>
-                        </StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                <Image Source="{DynamicResource IconLog}"
+                                       Width="14" Height="14"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"
+                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                <TextBlock Text="Output"
+                                           Style="{StaticResource Win11TextSubtitle}"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <Border Grid.Column="1"
+                                    Background="{DynamicResource SurfaceBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="10"
+                                    Padding="3"
+                                    Height="34"
+                                    Width="164"
+                                    VerticalAlignment="Center">
+                                <Grid Width="158"
+                                      Height="28"
+                                      ClipToBounds="True">
+                                    <Canvas IsHitTestVisible="False">
+                                        <Border Canvas.Left="{Binding IsTerminalTabSelected, Converter={StaticResource OutputTabsIndicatorLeftConverter}}"
+                                                Width="79"
+                                                Height="28"
+                                                CornerRadius="8"
+                                                Background="{DynamicResource AccentBrush}"
+                                                BorderBrush="{DynamicResource AccentBrush}"
+                                                BorderThickness="1"
+                                                Opacity="0.16"
+                                                IsHitTestVisible="False"/>
+                                    </Canvas>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <RadioButton Grid.Column="0"
+                                                     GroupName="OutputTabs"
+                                                     IsChecked="{Binding IsTerminalTabSelected, Converter={StaticResource InverseBoolConverter}, Mode=TwoWay}"
+                                                     Background="Transparent"
+                                                     BorderThickness="0"
+                                                     Padding="0"
+                                                     Cursor="Hand"
+                                                     ToolTip="Log"
+                                                     HorizontalContentAlignment="Center"
+                                                     VerticalContentAlignment="Center">
+                                            <RadioButton.Template>
+                                                <ControlTemplate TargetType="RadioButton">
+                                                    <Border x:Name="HoverRoot"
+                                                            CornerRadius="8,0,0,8"
+                                                            Background="Transparent">
+                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                          VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="HoverRoot" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                                            <Setter TargetName="HoverRoot" Property="Opacity" Value="0.7"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsPressed" Value="True">
+                                                            <Setter TargetName="HoverRoot" Property="Opacity" Value="1"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                                            <Setter Property="Opacity" Value="0.4"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </RadioButton.Template>
+                                            <TextBlock Text="Log"
+                                                       FontSize="12"
+                                                       Margin="0,1,0,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsTerminalTabSelected}" Value="False">
+                                                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </RadioButton>
+
+                                        <RadioButton Grid.Column="1"
+                                                     GroupName="OutputTabs"
+                                                     IsChecked="{Binding IsTerminalTabSelected, Mode=TwoWay}"
+                                                     Background="Transparent"
+                                                     BorderThickness="0"
+                                                     Padding="0"
+                                                     Cursor="Hand"
+                                                     ToolTip="Terminal"
+                                                     HorizontalContentAlignment="Center"
+                                                     VerticalContentAlignment="Center">
+                                            <RadioButton.Template>
+                                                <ControlTemplate TargetType="RadioButton">
+                                                    <Border x:Name="HoverRoot"
+                                                            CornerRadius="0,8,8,0"
+                                                            Background="Transparent">
+                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                          VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="HoverRoot" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                                            <Setter TargetName="HoverRoot" Property="Opacity" Value="0.7"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsPressed" Value="True">
+                                                            <Setter TargetName="HoverRoot" Property="Opacity" Value="1"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                                            <Setter Property="Opacity" Value="0.4"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </RadioButton.Template>
+                                            <TextBlock Text="Terminal"
+                                                       FontSize="12"
+                                                       Margin="0,1,0,0">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsTerminalTabSelected}" Value="True">
+                                                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </RadioButton>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </Grid>
                     </Border>
 
-                    <Border Grid.Row="1"
-                            Background="{DynamicResource LogBackgroundBrush}"
-                            CornerRadius="0,0,8,8">
-                        <ListView ItemsSource="{Binding LogViewModel.LogEntries}"
-                                  FontFamily="Cascadia Code, Consolas, monospace"
-                                  FontSize="11"
-                                  Background="Transparent"
-                                  BorderThickness="0"
-                                  Foreground="{DynamicResource LogTextBrush}"
-                                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                                  Padding="4">
-                            <ListView.View>
-                                <GridView>
-                                    <GridViewColumn Header="Ora" Width="72"
-                                                    DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss}"/>
-                                    <GridViewColumn Header="Livello" Width="64"
-                                                    DisplayMemberBinding="{Binding Level}"/>
-                                    <GridViewColumn Header="Messaggio" Width="900"
-                                                    DisplayMemberBinding="{Binding Message}"/>
-                                </GridView>
-                            </ListView.View>
-                        </ListView>
-                    </Border>
+                    <Grid Grid.Row="1">
+                        <Border Background="{DynamicResource LogBackgroundBrush}"
+                                CornerRadius="0,0,8,8"
+                                Visibility="{Binding IsTerminalTabSelected, Converter={StaticResource InverseBoolToVisibility}}">
+                            <TextBox x:Name="LogOutputText"
+                                     Text="{Binding LogViewModel.LogText}"
+                                     FontFamily="Cascadia Code, Consolas, monospace"
+                                     FontSize="11"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Foreground="{DynamicResource LogTextBrush}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                     Padding="6"
+                                     IsReadOnly="True"
+                                     IsReadOnlyCaretVisible="True"
+                                     TextWrapping="NoWrap"
+                                     AcceptsReturn="True"
+                                     behaviors:TextBoxLineHoverBehavior.IsEnabled="True"
+                                     behaviors:TextBoxLineHoverBehavior.HoverBrush="{DynamicResource OutputLineHoverBrush}"
+                                     Style="{x:Null}">
+                                <TextBox.ContextMenu>
+                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                        <MenuItem Header="Copy selection"
+                                                  Command="ApplicationCommands.Copy"
+                                                  CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                        <MenuItem Header="Copy line"
+                                                  Command="{Binding LogViewModel.CopyLogLineCommand}"
+                                                  CommandParameter="{Binding PlacementTarget.SelectionStart, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                        <MenuItem Header="Copy all"
+                                                  Command="{Binding LogViewModel.CopyLogAllCommand}"/>
+                                    </ContextMenu>
+                                </TextBox.ContextMenu>
+                            </TextBox>
+                        </Border>
+
+                        <Border Background="{DynamicResource LogBackgroundBrush}"
+                                CornerRadius="0,0,8,8"
+                                Visibility="{Binding IsTerminalTabSelected, Converter={StaticResource BoolToVisibility}}">
+                            <TextBox x:Name="TerminalOutputText"
+                                     Text="{Binding LogViewModel.TerminalText}"
+                                     FontFamily="Cascadia Code, Consolas, monospace"
+                                     FontSize="11"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Foreground="{DynamicResource LogTextBrush}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                     Padding="6"
+                                     IsReadOnly="True"
+                                     IsReadOnlyCaretVisible="True"
+                                     TextWrapping="NoWrap"
+                                     AcceptsReturn="True"
+                                     behaviors:TextBoxLineHoverBehavior.IsEnabled="True"
+                                     behaviors:TextBoxLineHoverBehavior.HoverBrush="{DynamicResource OutputLineHoverBrush}"
+                                     Style="{x:Null}">
+                                <TextBox.ContextMenu>
+                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                        <MenuItem Header="Copy selection"
+                                                  Command="ApplicationCommands.Copy"
+                                                  CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                        <MenuItem Header="Copy line"
+                                                  Command="{Binding LogViewModel.CopyTerminalLineCommand}"
+                                                  CommandParameter="{Binding PlacementTarget.SelectionStart, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                        <MenuItem Header="Copy all"
+                                                  Command="{Binding LogViewModel.CopyTerminalAllCommand}"/>
+                                    </ContextMenu>
+                                </TextBox.ContextMenu>
+                            </TextBox>
+                        </Border>
+                    </Grid>
                 </Grid>
             </Border>
 
@@ -1659,13 +1823,14 @@
                                 Background="{DynamicResource SurfaceElevatedBrush}"
                                 BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="0,0,0,1"
-                                Padding="20,16">
+                                Padding="20,16"
+                                WindowChrome.IsHitTestVisibleInChrome="False">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                
+
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Margin="0,0,0,4">
                                         <TextBlock.Style>
@@ -1693,14 +1858,19 @@
                                     </TextBlock>
                                 </StackPanel>
 
-                                <!-- Close button -->
                                 <Button Grid.Column="1"
                                         Command="{Binding CancelCommand}"
                                         Style="{StaticResource Win11CloseButton}"
                                         Width="36" Height="36"
                                         Padding="0"
+                                        Margin="12,0,0,0"
+                                        WindowChrome.IsHitTestVisibleInChrome="True"
                                         ToolTip="Chiudi">
-                                    <TextBlock Text="✕" FontSize="16"/>
+                                    <Path Width="18"
+                                          Height="18"
+                                          Stretch="Uniform"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          Data="M14,7 L9,12 L14,17 L14,14 L20,14 L20,10 L14,10 Z"/>
                                 </Button>
                             </Grid>
                         </Border>
@@ -1732,7 +1902,8 @@
 
                             <ScrollViewer Grid.Row="1"
                                           VerticalScrollBarVisibility="Auto"
-                                          Padding="20,16">
+                                          Padding="20,16"
+                                          behaviors:ScrollResetBehavior.IsEnabled="True">
                             <StackPanel>
 
                                 <TextBlock Text="Nome *" Style="{StaticResource Win11TextBody}" FontWeight="SemiBold" Margin="0,0,0,6"/>
@@ -1842,6 +2013,9 @@
                                             </Grid>
 
                                             <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                                                <ScrollViewer.Resources>
+                                                    <SolidColorBrush x:Key="ScrollFadeOverlayBrush" Color="{DynamicResource SurfaceColor}"/>
+                                                </ScrollViewer.Resources>
                                                 <ItemsControl ItemsSource="{Binding FilteredAvailableProcesses}">
                                                     <ItemsControl.ItemContainerStyle>
                                                         <Style TargetType="ContentPresenter">
@@ -1931,6 +2105,9 @@
                                                      HorizontalContentAlignment="Stretch"
                                                      behaviors:DragDropReorder.IsEnabled="{Binding IsSelectedReorderEnabled}"
                                                      behaviors:DragDropReorder.ReorderCommand="{Binding ReorderSelectedProcessCommand}">
+                                                <ListBox.Resources>
+                                                    <SolidColorBrush x:Key="ScrollFadeOverlayBrush" Color="{DynamicResource SurfaceColor}"/>
+                                                </ListBox.Resources>
                                                 <ListBox.ItemContainerStyle>
                                                     <Style TargetType="ListBoxItem">
                                                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -2334,12 +2511,26 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
-                                <Button Grid.Column="0"
-                                        Content="Annulla"
-                                        Command="{Binding CancelCommand}"
-                                        Style="{StaticResource Win11Button}"
-                                        Height="40"
-                                        Margin="0,0,8,0"/>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0,0,8,0">
+                                    <Button Content="Elimina"
+                                            Command="{Binding DeleteCommand}"
+                                            Height="40"
+                                            MinWidth="120"
+                                            Margin="0,0,8,0"
+                                            Visibility="{Binding IsEditMode, Converter={StaticResource BoolToVisibility}}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource Win11Button}">
+                                                <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+
+                                    <Button Content="Annulla"
+                                            Command="{Binding CancelCommand}"
+                                            Style="{StaticResource Win11Button}"
+                                            Height="40"
+                                            MinWidth="120"/>
+                                </StackPanel>
 
                                 <Button Grid.Column="1"
                                         Command="{Binding SaveCommand}"
@@ -2450,14 +2641,30 @@
                                 Background="{DynamicResource SurfaceElevatedBrush}"
                                 BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="0,0,0,1"
-                                Padding="20,16">
+                                Padding="20,16"
+                                WindowChrome.IsHitTestVisibleInChrome="False">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
-                                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                <Button Grid.Column="0"
+                                        Command="{Binding CancelCommand}"
+                                        Style="{StaticResource Win11CloseButton}"
+                                        Width="36" Height="36"
+                                        Padding="0"
+                                        Margin="0,0,12,0"
+                                        WindowChrome.IsHitTestVisibleInChrome="True"
+                                        ToolTip="Chiudi">
+                                    <Path Width="18"
+                                          Height="18"
+                                          Stretch="Uniform"
+                                          Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                          Data="M10,7 L15,12 L10,17 L10,14 L4,14 L4,10 L10,10 Z"/>
+                                </Button>
+
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
                                     <Image Source="{DynamicResource IconSettings}"
                                            Width="18" Height="18"
                                            VerticalAlignment="Center"
@@ -2467,13 +2674,6 @@
                                                Style="{StaticResource Win11TextTitle}"
                                                VerticalAlignment="Center"/>
                                 </StackPanel>
-
-                                <Button Grid.Column="1"
-                                        Command="{Binding CancelCommand}"
-                                        Style="{StaticResource Win11CloseButton}"
-                                        Width="36" Height="36"
-                                        Padding="0"
-                                        ToolTip="Chiudi"/>
                             </Grid>
                         </Border>
 
@@ -2507,7 +2707,8 @@
 
                             <ScrollViewer Grid.Row="1"
                                           VerticalScrollBarVisibility="Auto"
-                                          Padding="20,16">
+                                          Padding="20,16"
+                                          behaviors:ScrollResetBehavior.IsEnabled="True">
                                 <StackPanel>
                                     <TextBlock Text="Nome Processo *"
                                                Style="{StaticResource Win11TextBody}"
@@ -2688,12 +2889,26 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
-                                <Button Grid.Column="0"
-                                        Content="Annulla"
-                                        Command="{Binding CancelCommand}"
-                                        Style="{StaticResource Win11Button}"
-                                        Height="40"
-                                        Margin="0,0,8,0"/>
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="0,0,8,0">
+                                    <Button Content="Elimina"
+                                            Command="{Binding DeleteCommand}"
+                                            Height="40"
+                                            MinWidth="120"
+                                            Margin="0,0,8,0"
+                                            Visibility="{Binding IsEditMode, Converter={StaticResource BoolToVisibility}}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource Win11Button}">
+                                                <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+
+                                    <Button Content="Annulla"
+                                            Command="{Binding CancelCommand}"
+                                            Style="{StaticResource Win11Button}"
+                                            Height="40"
+                                            MinWidth="120"/>
+                                </StackPanel>
 
                                 <Button Grid.Column="1"
                                         Command="{Binding SaveCommand}"
