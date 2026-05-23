@@ -1,6 +1,6 @@
 namespace KlevaDeploy.Models;
 
-public enum ProcessKind { Installer, PowerShellScript, BatchScript, RegistryFile, ConfigAction }
+public enum ProcessKind { Installer, PowerShellScript, BatchScript, BashScript, RegistryFile, ConfigAction }
 
 public class DeploymentProcess
 {

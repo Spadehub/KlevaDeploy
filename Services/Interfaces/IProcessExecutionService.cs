@@ -24,4 +24,10 @@ public interface IProcessExecutionService
     /// Runs a batch/CMD script (either from file or inline content).
     /// </summary>
     Task<ProcessResult> RunBatchAsync(string scriptPathOrContent, bool isInlineScript, bool runAsAdmin = false, CancellationToken ct = default);
+
+    /// <summary>
+    /// Runs a bash script (either from file or inline content).
+    /// Requires a bash runtime on the machine (e.g., Git Bash or WSL bash).
+    /// </summary>
+    Task<ProcessResult> RunBashAsync(string scriptPathOrContent, bool isInlineScript, CancellationToken ct = default);
 }

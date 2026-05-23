@@ -73,6 +73,7 @@ public sealed class ProcessStepViewModel : ObservableObject
         ProcessKind.Installer      => "Installer",
         ProcessKind.PowerShellScript => "PowerShell",
         ProcessKind.BatchScript    => "Batch",
+        ProcessKind.BashScript     => "Bash",
         ProcessKind.RegistryFile   => "Registry",
         ProcessKind.ConfigAction   => "Config",
         _                          => "Unknown"
