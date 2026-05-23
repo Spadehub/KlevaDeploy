@@ -22,6 +22,9 @@
             <conv:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
             <conv:BusyToTextConverter x:Key="BusyToTextConverter"/>
             <conv:OrderToDisplayConverter x:Key="OrderToDisplayConverter"/>
+            <conv:IconVariantToImageSourceConverter x:Key="IconVariantToImageSourceConverter"/>
+            <conv:WidthToPresetGridColumnsConverter x:Key="WidthToPresetGridColumnsConverter"/>
+            <conv:BoolToDoubleConverter x:Key="PresetViewIndicatorLeftConverter" FalseValue="0" TrueValue="59"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

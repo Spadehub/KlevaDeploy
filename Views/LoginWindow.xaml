@@ -58,6 +58,8 @@
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>  <!-- Title -->
+                        <RowDefinition Height="12"/>    <!-- Spacer -->
+                        <RowDefinition Height="Auto"/>  <!-- Error -->
                         <RowDefinition Height="16"/>    <!-- Spacer -->
                         <RowDefinition Height="Auto"/>  <!-- Username label -->
                         <RowDefinition Height="Auto"/>  <!-- Username input -->
@@ -65,7 +67,7 @@
                         <RowDefinition Height="Auto"/>  <!-- Password label -->
                         <RowDefinition Height="Auto"/>  <!-- Password input -->
                         <RowDefinition Height="16"/>    <!-- Spacer -->
-                        <RowDefinition Height="Auto"/>  <!-- Error + button -->
+                        <RowDefinition Height="Auto"/>  <!-- Button -->
                     </Grid.RowDefinitions>
 
                     <!-- Title -->
@@ -80,68 +82,58 @@
                                    VerticalAlignment="Center"/>
                     </StackPanel>
 
+                    <Border Grid.Row="2"
+                            Background="#1ACF6679"
+                            CornerRadius="{StaticResource CornerRadiusSmall}"
+                            Padding="10,6"
+                            Panel.ZIndex="100"
+                            Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisibilityConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <Image Source="{DynamicResource IconError}"
+                                   Width="14" Height="14"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,6,0"
+                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                            <TextBlock Text="{Binding ErrorMessage}"
+                                       Foreground="{DynamicResource ErrorBrush}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Username label -->
-                    <TextBlock Grid.Row="2"
+                    <TextBlock Grid.Row="4"
                                Text="Utente"
                                Style="{StaticResource Win11TextSecondary}"
                                Margin="0,0,0,4"/>
 
                     <!-- Username input -->
-                    <TextBox Grid.Row="3"
+                    <TextBox Grid.Row="5"
                              Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
                              Style="{StaticResource Win11TextBox}"
                              Height="36"/>
 
                     <!-- Password label -->
-                    <TextBlock Grid.Row="5"
+                    <TextBlock Grid.Row="7"
                                Text="Password"
                                Style="{StaticResource Win11TextSecondary}"
                                Margin="0,0,0,4"/>
 
                     <!-- Password input -->
-                    <PasswordBox Grid.Row="6"
+                    <PasswordBox Grid.Row="8"
                                  x:Name="PasswordBox"
                                  Style="{StaticResource Win11PasswordBox}"
                                  Height="36"/>
 
-                    <!-- Error message + Login button -->
-                    <Grid Grid.Row="8">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="12"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-
-                        <!-- Error message -->
-                        <Border Grid.Row="0"
-                                Background="#1ACF6679"
-                                CornerRadius="{StaticResource CornerRadiusSmall}"
-                                Padding="10,6"
-                                Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisibilityConverter}}">
-                            <StackPanel Orientation="Horizontal">
-                                <Image Source="{DynamicResource IconError}"
-                                       Width="14" Height="14"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0"
-                                       RenderOptions.BitmapScalingMode="HighQuality"/>
-                                <TextBlock Text="{Binding ErrorMessage}"
-                                           Foreground="{DynamicResource ErrorBrush}"
-                                           TextWrapping="Wrap"
-                                           FontSize="12"
-                                           VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Login button -->
-                        <Button Grid.Row="2"
-                                Content="{Binding IsBusy, Converter={StaticResource BusyToTextConverter}, ConverterParameter='Accedi|Accesso in corso…'}"
-                                Command="{Binding LoginCommand}"
-                                IsDefault="True"
-                                HorizontalAlignment="Stretch"
-                                Height="36"
-                                Style="{StaticResource Win11AccentButton}"
-                                IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
-                    </Grid>
+                    <Button Grid.Row="10"
+                            Content="{Binding IsBusy, Converter={StaticResource BusyToTextConverter}, ConverterParameter='Accedi|Accesso in corso…'}"
+                            Command="{Binding LoginCommand}"
+                            IsDefault="True"
+                            HorizontalAlignment="Stretch"
+                            Height="36"
+                            Style="{StaticResource Win11AccentButton}"
+                            IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
                 </Grid>
             </Border>
         </Grid>

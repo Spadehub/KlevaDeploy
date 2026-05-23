@@ -6,13 +6,16 @@
         xmlns:models="clr-namespace:KlevaDeploy.Models"
         mc:Ignorable="d"
         Title="{Binding Title}"
-        Width="600" Height="700"
-        MinWidth="500" MinHeight="600"
+        Width="600" Height="704"
+        MinWidth="500" MinHeight="604"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
         AllowsTransparency="False"
         ResizeMode="NoResize"
         Background="{DynamicResource AppBackgroundBrush}"
+        Opacity="0"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         FontFamily="Segoe UI Variable, Segoe UI, sans-serif">
 
     <Window.Resources>
@@ -22,7 +25,8 @@
 
     <Border BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="1"
-            CornerRadius="8">
+            CornerRadius="8"
+            SnapsToDevicePixels="True">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>  <!-- Title bar -->
@@ -52,18 +56,46 @@
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center"
                             Width="32" Height="32"
-                            Style="{StaticResource Win11Button}"
+                            Style="{StaticResource Win11CloseButton}"
                             Click="CloseButton_Click"
                             FontSize="16"
                             Padding="0"/>
                 </Grid>
             </Border>
 
-            <!-- Content -->
-            <ScrollViewer Grid.Row="1"
-                          VerticalScrollBarVisibility="Auto"
-                          Padding="20,16">
-                <StackPanel>
+            <Grid Grid.Row="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        Background="#1AFF3333"
+                        BorderBrush="{DynamicResource ErrorBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="12,8"
+                        Margin="20,16,20,0"
+                        Panel.ZIndex="100"
+                        Visibility="{Binding ValidationError, Converter={StaticResource StringToVisibilityConverter}}">
+                    <StackPanel Orientation="Horizontal">
+                        <Image Source="{DynamicResource IconError}"
+                               Width="16" Height="16"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="{Binding ValidationError}"
+                                   Foreground="{DynamicResource ErrorBrush}"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <ScrollViewer x:Name="ContentScrollViewer"
+                              Grid.Row="1"
+                              VerticalScrollBarVisibility="Auto"
+                              Padding="20,16">
+                    <StackPanel x:Name="ContentStackPanel">
                     <!-- Process Name -->
                     <TextBlock Text="Nome Processo *"
                                Style="{StaticResource Win11TextBody}"
@@ -241,27 +273,9 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Validation Error -->
-                    <Border Background="#1AFF3333"
-                            BorderBrush="{DynamicResource ErrorBrush}"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Padding="12,8"
-                            Visibility="{Binding ValidationError, Converter={StaticResource StringToVisibilityConverter}}">
-                        <StackPanel Orientation="Horizontal">
-                            <Image Source="{DynamicResource IconError}"
-                                   Width="16" Height="16"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,8,0"
-                                   RenderOptions.BitmapScalingMode="HighQuality"/>
-                            <TextBlock Text="{Binding ValidationError}"
-                                       Foreground="{DynamicResource ErrorBrush}"
-                                       TextWrapping="Wrap"
-                                       VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-            </ScrollViewer>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
 
             <!-- Action Buttons -->
             <Border Grid.Row="2"

@@ -18,8 +18,26 @@ public sealed class PresetViewModel : ObservableObject
     public string Description => Preset.Description;
     public string Category => Preset.Category;
     public string Icon => Preset.Icon;
-    public bool HasEmojiIcon => !string.IsNullOrWhiteSpace(Icon);
+    public string? CustomIconLightPath => Preset.CustomIconLightPath;
+    public string? CustomIconDarkPath => Preset.CustomIconDarkPath;
+    public bool HasCustomIcon => !string.IsNullOrWhiteSpace(CustomIconLightPath) || !string.IsNullOrWhiteSpace(CustomIconDarkPath);
+    public bool HasEmojiIcon => !HasCustomIcon && !string.IsNullOrWhiteSpace(Icon);
+    public bool ShowDefaultIcon => !HasCustomIcon && string.IsNullOrWhiteSpace(Icon);
     public int StepCount => Preset.Steps.Count;
 
     public PresetViewModel(DeploymentPreset preset) => Preset = preset;
+
+    public void Refresh()
+    {
+        OnPropertyChanged(nameof(Name));
+        OnPropertyChanged(nameof(Description));
+        OnPropertyChanged(nameof(Category));
+        OnPropertyChanged(nameof(Icon));
+        OnPropertyChanged(nameof(CustomIconLightPath));
+        OnPropertyChanged(nameof(CustomIconDarkPath));
+        OnPropertyChanged(nameof(HasCustomIcon));
+        OnPropertyChanged(nameof(HasEmojiIcon));
+        OnPropertyChanged(nameof(ShowDefaultIcon));
+        OnPropertyChanged(nameof(StepCount));
+    }
 }

@@ -129,7 +129,12 @@ public sealed class CreateProcessViewModel : ObservableObject
     public bool IsScriptMode => SelectedProcessKind == ProcessKind.PowerShellScript || SelectedProcessKind == ProcessKind.BatchScript;
 
     public DeploymentProcess? CreatedProcess { get; private set; }
-    public bool DialogResult { get; private set; }
+    private bool? _dialogResult;
+    public bool? DialogResult
+    {
+        get => _dialogResult;
+        private set => SetProperty(ref _dialogResult, value);
+    }
 
     public IRelayCommand BrowseFileCommand { get; }
     public IRelayCommand SaveCommand { get; }
@@ -140,6 +145,25 @@ public sealed class CreateProcessViewModel : ObservableObject
         BrowseFileCommand = new RelayCommand(BrowseFile);
         SaveCommand = new RelayCommand(Save);
         CancelCommand = new RelayCommand(Cancel);
+    }
+
+    public void InitializeNew()
+    {
+        _existingProcessId = null;
+        ProcessName = string.Empty;
+        Description = string.Empty;
+        SelectedProcessKind = ProcessKind.Installer;
+        FilePath = string.Empty;
+        Arguments = string.Empty;
+        ScriptContent = string.Empty;
+        RunAsAdmin = false;
+        RequiresInternet = false;
+        SelectedIconKey = "IconPackage";
+        Title = "Nuovo Processo";
+        IsEditMode = false;
+        CreatedProcess = null;
+        ValidationError = null;
+        DialogResult = null;
     }
 
     public void InitializeForEdit(DeploymentProcess process)
@@ -156,6 +180,9 @@ public sealed class CreateProcessViewModel : ObservableObject
         SelectedIconKey = process.IconKey;
         Title = "Modifica Processo";
         IsEditMode = true;
+        CreatedProcess = null;
+        ValidationError = null;
+        DialogResult = null;
     }
 
     private void BrowseFile()
@@ -230,6 +257,8 @@ public sealed class CreateProcessViewModel : ObservableObject
 
     private void Cancel()
     {
+        ValidationError = null;
+        CreatedProcess = null;
         DialogResult = false;
     }
 

@@ -4,16 +4,23 @@ using System.Text.Json;
 namespace KlevaDeploy.Models;
 
 public enum AppTheme { Dark, Light }
+public enum PresetsViewMode { List, Grid }
 
 public class UserPreferences
 {
     public AppTheme Theme { get; set; } = AppTheme.Dark;
     public bool SuppressRequiredProcessWarning { get; set; } = false;
+    public PresetsViewMode PresetsViewMode { get; set; } = PresetsViewMode.List;
 
-    private static readonly string StoragePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "KlevaDeploy",
-        "user_preferences.json");
+    private static readonly string StoragePath = Path.Combine(GetStorageDir(), "user_preferences.json");
+
+    private static string GetStorageDir()
+    {
+        var overrideDir = Environment.GetEnvironmentVariable("KLEVADEPLOY_STORAGE_DIR");
+        return string.IsNullOrWhiteSpace(overrideDir)
+            ? Path.Combine(AppContext.BaseDirectory, "Data")
+            : overrideDir;
+    }
 
     public static UserPreferences Load()
     {

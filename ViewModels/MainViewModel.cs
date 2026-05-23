@@ -19,6 +19,8 @@ public sealed class MainViewModel : ObservableObject
     private readonly ILogService _log;
     private readonly IThemeService _themeService;
     private readonly IDialogService _dialogService;
+    private readonly IPresetIconService _presetIconService;
+    private readonly IPreferencesService _prefsService;
     private readonly Func<LoginViewModel> _loginVmFactory;
 
     private IReadOnlyList<DeploymentProcess> _allProcesses = Array.Empty<DeploymentProcess>();
@@ -81,6 +83,13 @@ public sealed class MainViewModel : ObservableObject
         set => SetProperty(ref _themeToggleTooltip, value);
     }
 
+    private bool _isDarkTheme = true;
+    public bool IsDarkTheme
+    {
+        get => _isDarkTheme;
+        set => SetProperty(ref _isDarkTheme, value);
+    }
+
     private bool _isDemoMode = true;
     public bool IsDemoMode
     {
@@ -122,8 +131,28 @@ public sealed class MainViewModel : ObservableObject
         set => SetProperty(ref _isCreatePresetPanelOpen, value);
     }
 
+    private bool _isCreateProcessPanelOpen;
+    public bool IsCreateProcessPanelOpen
+    {
+        get => _isCreateProcessPanelOpen;
+        set => SetProperty(ref _isCreateProcessPanelOpen, value);
+    }
+
+    private bool _isPresetGridView;
+    public bool IsPresetGridView
+    {
+        get => _isPresetGridView;
+        set
+        {
+            if (!SetProperty(ref _isPresetGridView, value)) return;
+            _prefsService.Preferences.PresetsViewMode = value ? PresetsViewMode.Grid : PresetsViewMode.List;
+            _prefsService.Save();
+        }
+    }
+
     public LogViewModel LogViewModel { get; }
     public CreatePresetViewModel CreatePresetViewModel { get; }
+    public CreateProcessViewModel CreateProcessViewModel { get; }
 
     public IAsyncRelayCommand InitializeCommand { get; }
     public IRelayCommand CreateProcessCommand { get; }
@@ -136,6 +165,8 @@ public sealed class MainViewModel : ObservableObject
     public IRelayCommand OpenLoginCommand { get; }
     public IRelayCommand LogoutCommand { get; }
     public IRelayCommand ToggleThemeCommand { get; }
+    public IRelayCommand SetPresetListViewCommand { get; }
+    public IRelayCommand SetPresetGridViewCommand { get; }
 
     public MainViewModel(
         IInstallerService installerService,
@@ -144,6 +175,8 @@ public sealed class MainViewModel : ObservableObject
         ILogService log,
         IThemeService themeService,
         IDialogService dialogService,
+        IPresetIconService presetIconService,
+        IPreferencesService prefsService,
         Func<LoginViewModel> loginVmFactory,
         LogViewModel logViewModel)
     {
@@ -153,13 +186,25 @@ public sealed class MainViewModel : ObservableObject
         _log = log;
         _themeService = themeService;
         _dialogService = dialogService;
+        _presetIconService = presetIconService;
+        _prefsService = prefsService;
         _loginVmFactory = loginVmFactory;
         LogViewModel = logViewModel;
 
-        CreatePresetViewModel = new CreatePresetViewModel();
+        CreatePresetViewModel = new CreatePresetViewModel(_presetIconService);
         CreatePresetViewModel.CloseRequested += OnCreatePresetCloseRequested;
 
+        CreateProcessViewModel = new CreateProcessViewModel();
+        CreateProcessViewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(CreateProcessViewModel.DialogResult)) return;
+            if (CreateProcessViewModel.DialogResult is null) return;
+            OnCreateProcessCloseRequested();
+        };
+
         SyncThemeProperties();
+
+        IsPresetGridView = _prefsService.Preferences.PresetsViewMode == PresetsViewMode.Grid;
 
         InitializeCommand = new AsyncRelayCommand(InitializeAsync);
         CreateProcessCommand = new RelayCommand(CreateProcess);
@@ -172,6 +217,8 @@ public sealed class MainViewModel : ObservableObject
         OpenLoginCommand = new RelayCommand(OpenLogin);
         LogoutCommand = new RelayCommand(Logout);
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
+        SetPresetListViewCommand = new RelayCommand(() => IsPresetGridView = false);
+        SetPresetGridViewCommand = new RelayCommand(() => IsPresetGridView = true);
 
         ExecutionQueue.CollectionChanged += (_, _) => RunQueueCommand.NotifyCanExecuteChanged();
     }
@@ -346,40 +393,62 @@ public sealed class MainViewModel : ObservableObject
 
     private void CreateProcess()
     {
-        var vm = new CreateProcessViewModel();
-        var dialog = new CreateProcessDialog(vm)
+        try
         {
-            Owner = System.Windows.Application.Current.MainWindow
-        };
-
-        if (dialog.ShowDialog() == true && vm.CreatedProcess != null)
+            IsCreatePresetPanelOpen = false;
+            CreateProcessViewModel.InitializeNew();
+            IsCreateProcessPanelOpen = true;
+        }
+        catch (Exception ex)
         {
-            _installerService.AddUserProcess(vm.CreatedProcess);
-            _log.Info($"User created process: {vm.CreatedProcess.Name}");
-            
-            // Rebuild queue to include new process
-            RebuildExecutionQueue();
+            _log.Error("Errore durante l'apertura del pannello creazione processo", ex);
         }
     }
 
     private void EditProcess(ProcessStepViewModel? stepVm)
     {
         if (stepVm is null) return;
-        var vm = new CreateProcessViewModel();
-        vm.InitializeForEdit(stepVm.Process);
-        
-        var dialog = new CreateProcessDialog(vm)
+        try
         {
-            Owner = System.Windows.Application.Current.MainWindow
-        };
+            IsCreatePresetPanelOpen = false;
+            CreateProcessViewModel.InitializeForEdit(stepVm.Process);
+            IsCreateProcessPanelOpen = true;
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Errore durante l'apertura del pannello modifica processo", ex);
+        }
+    }
 
-        if (dialog.ShowDialog() == true && vm.CreatedProcess != null)
+    private void OnCreateProcessCloseRequested()
+    {
+        try
         {
-            _installerService.UpdateProcess(vm.CreatedProcess);
-            _log.Info($"Updated process: {vm.CreatedProcess.Name}");
-            
-            // Rebuild queue to reflect changes
-            RebuildExecutionQueue();
+            var vm = CreateProcessViewModel;
+            var isOk = vm.DialogResult == true && vm.CreatedProcess is not null;
+            if (isOk)
+            {
+                if (vm.IsEditMode)
+                {
+                    _installerService.UpdateProcess(vm.CreatedProcess!);
+                    _log.Info($"Updated process: {vm.CreatedProcess!.Name}");
+                }
+                else
+                {
+                    _installerService.AddUserProcess(vm.CreatedProcess!);
+                    _log.Info($"User created process: {vm.CreatedProcess!.Name}");
+                }
+
+                RebuildExecutionQueue();
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Errore durante la chiusura del pannello processo", ex);
+        }
+        finally
+        {
+            IsCreateProcessPanelOpen = false;
         }
     }
 
@@ -447,6 +516,7 @@ public sealed class MainViewModel : ObservableObject
                 if (existingVm != null)
                 {
                     bool wasSelected = existingVm.IsSelected;
+                    existingVm.Refresh();
                     ApplyPresetFilter();
                     
                     if (wasSelected)
@@ -555,6 +625,7 @@ public sealed class MainViewModel : ObservableObject
 
     private void SyncThemeProperties()
     {
+        IsDarkTheme = _themeService.CurrentTheme == AppTheme.Dark;
         ThemeToggleTooltip = _themeService.CurrentTheme == AppTheme.Dark
             ? "Passa al tema chiaro"
             : "Passa al tema scuro";

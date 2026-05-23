@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:behaviors="clr-namespace:KlevaDeploy.Behaviors"
+        xmlns:models="clr-namespace:KlevaDeploy.Models"
         mc:Ignorable="d"
         Title="IT Deployment Configurator"
         Width="1200" Height="760"
@@ -14,6 +15,8 @@
         AllowsTransparency="False"
         ResizeMode="CanResizeWithGrip"
         Background="{DynamicResource AppBackgroundBrush}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         FontFamily="Segoe UI Variable, Segoe UI, sans-serif">
 
     <!-- ── WindowChrome: integrates with DWM compositor, eliminates 1px white border artifact ── -->
@@ -121,6 +124,83 @@
             <Setter Property="CornerRadius" Value="{StaticResource CornerRadiusSmall}"/>
             <Setter Property="Margin" Value="0,0,0,4"/>
             <Setter Property="Padding" Value="10,8"/>
+        </Style>
+
+        <Style x:Key="PresetGridCardToggleButton" TargetType="ToggleButton">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid SnapsToDevicePixels="True">
+                            <Border x:Name="CardBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="{StaticResource CornerRadiusCard}"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                            </Border>
+                            <Border x:Name="SelectionBorder"
+                                    BorderBrush="{DynamicResource AccentBrush}"
+                                    BorderThickness="2"
+                                    CornerRadius="{StaticResource CornerRadiusCard}"
+                                    Opacity="0"
+                                    IsHitTestVisible="False"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CardBorder" Property="Background" Value="#1A0078D4"/>
+                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="SelectionBorder"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="1"
+                                                             Duration="0:0:0.14"
+                                                             EasingFunction="{StaticResource EaseOut}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="SelectionBorder"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0"
+                                                             Duration="0:0:0.12"
+                                                             EasingFunction="{StaticResource EaseOut}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsChecked" Value="True"/>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="CardBorder" Property="Background" Value="#1A0078D4"/>
+                                <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -420,10 +500,143 @@
                                                Style="{StaticResource Win11TextSubtitle}"
                                                VerticalAlignment="Center"/>
                                 </StackPanel>
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding SelectedPresetCount, StringFormat='{}{0} selezionati'}"
-                                           Style="{StaticResource Win11TextSecondary}"
-                                           VerticalAlignment="Center"/>
+                                <StackPanel Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding SelectedPresetCount, StringFormat='{}{0} selezionati'}"
+                                               Style="{StaticResource Win11TextSecondary}"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,10,0"/>
+                                    <Border Background="{DynamicResource BorderBrush}" Width="1" Height="18" Opacity="0.6" Margin="0,0,10,0"/>
+                                    <Border Background="{DynamicResource SurfaceBrush}"
+                                            BorderBrush="{DynamicResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="3"
+                                            Height="40"
+                                            Width="124">
+                                        <Grid Width="118"
+                                              Height="34"
+                                              ClipToBounds="True">
+                                            <Canvas IsHitTestVisible="False">
+                                                <Border x:Name="PresetViewIndicator"
+                                                        Canvas.Left="{Binding IsPresetGridView, Converter={StaticResource PresetViewIndicatorLeftConverter}}"
+                                                        Width="59"
+                                                        Height="34"
+                                                        CornerRadius="8"
+                                                        Background="{DynamicResource AccentBrush}"
+                                                        BorderBrush="{DynamicResource AccentBrush}"
+                                                        BorderThickness="1"
+                                                        Opacity="0.18"
+                                                        IsHitTestVisible="False"/>
+                                            </Canvas>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <RadioButton Grid.Column="0"
+                                                             GroupName="PresetViewMode"
+                                                             IsChecked="{Binding IsPresetGridView, Converter={StaticResource InverseBoolConverter}, Mode=TwoWay}"
+                                                             Background="Transparent"
+                                                             BorderThickness="0"
+                                                             Padding="0"
+                                                             Cursor="Hand"
+                                                             ToolTip="Vista elenco"
+                                                             AutomationProperties.Name="Vista elenco"
+                                                             HorizontalContentAlignment="Center"
+                                                             VerticalContentAlignment="Center">
+                                                    <RadioButton.Template>
+                                                        <ControlTemplate TargetType="RadioButton">
+                                                            <Border x:Name="HoverRoot"
+                                                                    CornerRadius="8,0,0,8"
+                                                                    Background="Transparent">
+                                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                                  VerticalAlignment="Center"/>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="HoverRoot" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                                                    <Setter TargetName="HoverRoot" Property="Opacity" Value="0.7"/>
+                                                                </Trigger>
+                                                                <Trigger Property="IsPressed" Value="True">
+                                                                    <Setter TargetName="HoverRoot" Property="Opacity" Value="1"/>
+                                                                </Trigger>
+                                                                <Trigger Property="IsEnabled" Value="False">
+                                                                    <Setter Property="Opacity" Value="0.4"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </RadioButton.Template>
+                                                    <Viewbox Width="16" Height="16" Margin="0,1,0,0">
+                                                        <Path Data="M4 6H20V8H4V6ZM4 11H20V13H4V11ZM4 16H20V18H4V16Z">
+                                                            <Path.Style>
+                                                                <Style TargetType="Path">
+                                                                    <Setter Property="Fill" Value="{DynamicResource TextSecondaryBrush}"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsPresetGridView}" Value="False">
+                                                                            <Setter Property="Fill" Value="{DynamicResource AccentBrush}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Path.Style>
+                                                        </Path>
+                                                    </Viewbox>
+                                                </RadioButton>
+
+                                                <RadioButton Grid.Column="1"
+                                                             GroupName="PresetViewMode"
+                                                             IsChecked="{Binding IsPresetGridView, Mode=TwoWay}"
+                                                             Background="Transparent"
+                                                             BorderThickness="0"
+                                                             Padding="0"
+                                                             Cursor="Hand"
+                                                             ToolTip="Vista griglia"
+                                                             AutomationProperties.Name="Vista griglia"
+                                                             HorizontalContentAlignment="Center"
+                                                             VerticalContentAlignment="Center">
+                                                    <RadioButton.Template>
+                                                        <ControlTemplate TargetType="RadioButton">
+                                                            <Border x:Name="HoverRoot"
+                                                                    CornerRadius="0,8,8,0"
+                                                                    Background="Transparent">
+                                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                                  VerticalAlignment="Center"/>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="HoverRoot" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                                                    <Setter TargetName="HoverRoot" Property="Opacity" Value="0.7"/>
+                                                                </Trigger>
+                                                                <Trigger Property="IsPressed" Value="True">
+                                                                    <Setter TargetName="HoverRoot" Property="Opacity" Value="1"/>
+                                                                </Trigger>
+                                                                <Trigger Property="IsEnabled" Value="False">
+                                                                    <Setter Property="Opacity" Value="0.4"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </RadioButton.Template>
+                                                    <Viewbox Width="16" Height="16" Margin="0,1,0,0">
+                                                        <Path Data="M4 4H10V10H4V4ZM14 4H20V10H14V4ZM4 14H10V20H4V14ZM14 14H20V20H14V14Z">
+                                                            <Path.Style>
+                                                                <Style TargetType="Path">
+                                                                    <Setter Property="Fill" Value="{DynamicResource TextSecondaryBrush}"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsPresetGridView}" Value="True">
+                                                                            <Setter Property="Fill" Value="{DynamicResource AccentBrush}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Path.Style>
+                                                        </Path>
+                                                    </Viewbox>
+                                                </RadioButton>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
                             </Grid>
                         </Border>
 
@@ -451,12 +664,12 @@
                                 </TextBox>
                                 <!-- Search icon -->
                                 <Image Grid.Column="0"
-                                       Source="{DynamicResource IconSettings}"
+                                       Source="{DynamicResource IconSearch}"
                                        Width="14" Height="14"
                                        HorizontalAlignment="Left"
                                        VerticalAlignment="Center"
                                        Margin="10,0,0,0"
-                                       Opacity="0.5"
+                                       Opacity="0.55"
                                        IsHitTestVisible="False"
                                        RenderOptions.BitmapScalingMode="HighQuality"/>
                                 <!-- Clear button -->
@@ -472,23 +685,24 @@
                             </Grid>
                         </Border>
 
-                        <!-- Preset list — clickable card ToggleButtons -->
-                        <ScrollViewer Grid.Row="2"
-                                      VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      Padding="8,8,8,0">
-                            <ItemsControl ItemsSource="{Binding FilteredPresets}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid>
-                                            <ToggleButton Style="{StaticResource PresetCardToggleButton}"
-                                                          IsChecked="{Binding IsSelected, Mode=TwoWay}">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto"/>  <!-- Icon -->
-                                                        <ColumnDefinition Width="*"/>     <!-- Name + desc -->
-                                                        <ColumnDefinition Width="Auto"/>  <!-- Checkmark badge / step count -->
-                                                    </Grid.ColumnDefinitions>
+                        <Grid Grid.Row="2" x:Name="PresetsViewHost">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          Padding="10"
+                                          Visibility="{Binding IsPresetGridView, Converter={StaticResource InverseBoolToVisibility}}">
+
+                                <ItemsControl ItemsSource="{Binding FilteredPresets}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <ToggleButton Style="{StaticResource PresetCardToggleButton}"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>  <!-- Icon -->
+                                                            <ColumnDefinition Width="*"/>     <!-- Name + desc -->
+                                                            <ColumnDefinition Width="Auto"/>  <!-- Checkmark badge / step count -->
+                                                        </Grid.ColumnDefinitions>
 
                                                     <!-- Icon -->
                                                     <Border Grid.Column="0"
@@ -497,17 +711,31 @@
                                                             Background="{DynamicResource SurfaceElevatedBrush}"
                                                             Margin="0,0,12,0">
                                                         <Grid>
-                                                            <!-- Emoji Icon (if present) -->
+                                                            <Image Width="22"
+                                                                   Height="22"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                                                   Visibility="{Binding HasCustomIcon, Converter={StaticResource BoolToVisibility}}">
+                                                                <Image.Source>
+                                                                    <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                        <Binding Path="CustomIconLightPath"/>
+                                                                        <Binding Path="CustomIconDarkPath"/>
+                                                                        <Binding Path="DataContext.IsDarkTheme"
+                                                                                 RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                    </MultiBinding>
+                                                                </Image.Source>
+                                                            </Image>
+
                                                             <TextBlock Text="{Binding Icon, Mode=OneWay}"
                                                                        FontSize="18"
                                                                        FontFamily="Segoe UI Emoji"
                                                                        HorizontalAlignment="Center"
                                                                        VerticalAlignment="Center"
                                                                        Visibility="{Binding HasEmojiIcon, Converter={StaticResource BoolToVisibility}}"/>
-                                                            <!-- Default Vector Icon (if no emoji) -->
+
                                                             <Image Source="{DynamicResource IconPackage}"
-                                                                   Width="20" Height="20"
-                                                                   Visibility="{Binding HasEmojiIcon, Converter={StaticResource InverseBoolToVisibility}}"
+                                                                   Width="20"
+                                                                   Height="20"
+                                                                   Visibility="{Binding ShowDefaultIcon, Converter={StaticResource BoolToVisibility}}"
                                                                    RenderOptions.BitmapScalingMode="HighQuality"/>
                                                         </Grid>
                                                     </Border>
@@ -559,9 +787,11 @@
                                                         </TextBlock>
                                                     </StackPanel>
 
-                                                    <!-- Right column: checkmark badge (selected) or step count badge (unselected) -->
-                                                    <Grid Grid.Column="2" VerticalAlignment="Top" Margin="8,0,0,0">
-                                                        <!-- Step count badge — visible when NOT selected -->
+                                                    <StackPanel Grid.Column="2"
+                                                                Orientation="Horizontal"
+                                                                HorizontalAlignment="Right"
+                                                                VerticalAlignment="Top"
+                                                                Margin="8,0,0,0">
                                                         <Border Background="{DynamicResource SurfaceElevatedBrush}"
                                                                 CornerRadius="{StaticResource CornerRadiusSmall}"
                                                                 Padding="8,3"
@@ -570,7 +800,6 @@
                                                                        Foreground="{DynamicResource TextSecondaryBrush}"
                                                                        FontSize="11"/>
                                                         </Border>
-                                                        <!-- Checkmark badge — visible when selected -->
                                                         <Border Width="22" Height="22"
                                                                 Background="White"
                                                                 CornerRadius="11"
@@ -582,59 +811,291 @@
                                                                        HorizontalAlignment="Center"
                                                                        VerticalAlignment="Center"/>
                                                         </Border>
+
+                                                        <Button Command="{Binding DataContext.EditPresetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}"
+                                                                Margin="8,0,0,0"
+                                                                ToolTip="Modifica Preset"
+                                                                Cursor="Hand"
+                                                                Background="Transparent"
+                                                                BorderThickness="0">
+                                                            <Button.Template>
+                                                                <ControlTemplate TargetType="Button">
+                                                                    <Border Background="Transparent" Padding="4">
+                                                                        <Viewbox x:Name="PencilIcon"
+                                                                                 Width="14"
+                                                                                 Height="14"
+                                                                                 Opacity="0.7"
+                                                                                 RenderTransformOrigin="0.5,0.5">
+                                                                            <Viewbox.RenderTransform>
+                                                                                <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                                                            </Viewbox.RenderTransform>
+                                                                            <Path x:Name="PencilPath"
+                                                                                  Fill="{DynamicResource TextSecondaryBrush}"
+                                                                                  Data="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                                                                        </Viewbox>
+                                                                    </Border>
+                                                                    <ControlTemplate.Triggers>
+                                                                        <MultiDataTrigger>
+                                                                            <MultiDataTrigger.Conditions>
+                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsMouseOver}" Value="True"/>
+                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="True"/>
+                                                                            </MultiDataTrigger.Conditions>
+                                                                            <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
+                                                                            <Setter TargetName="PencilPath" Property="Fill" Value="White"/>
+                                                                            <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                                <Setter.Value>
+                                                                                    <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
+                                                                                </Setter.Value>
+                                                                            </Setter>
+                                                                        </MultiDataTrigger>
+                                                                        <MultiDataTrigger>
+                                                                            <MultiDataTrigger.Conditions>
+                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsMouseOver}" Value="True"/>
+                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="False"/>
+                                                                            </MultiDataTrigger.Conditions>
+                                                                            <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
+                                                                            <Setter TargetName="PencilPath" Property="Fill" Value="{DynamicResource TextPrimaryBrush}"/>
+                                                                            <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                                <Setter.Value>
+                                                                                    <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
+                                                                                </Setter.Value>
+                                                                            </Setter>
+                                                                        </MultiDataTrigger>
+                                                                        <MultiDataTrigger>
+                                                                            <MultiDataTrigger.Conditions>
+                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsPressed}" Value="True"/>
+                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="True"/>
+                                                                            </MultiDataTrigger.Conditions>
+                                                                            <Setter TargetName="PencilIcon" Property="Opacity" Value="0.85"/>
+                                                                            <Setter TargetName="PencilPath" Property="Fill" Value="White"/>
+                                                                            <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                                <Setter.Value>
+                                                                                    <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                                                                                </Setter.Value>
+                                                                            </Setter>
+                                                                        </MultiDataTrigger>
+                                                                        <MultiDataTrigger>
+                                                                            <MultiDataTrigger.Conditions>
+                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsPressed}" Value="True"/>
+                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="False"/>
+                                                                            </MultiDataTrigger.Conditions>
+                                                                            <Setter TargetName="PencilIcon" Property="Opacity" Value="0.85"/>
+                                                                            <Setter TargetName="PencilPath" Property="Fill" Value="{DynamicResource TextPrimaryBrush}"/>
+                                                                            <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                                <Setter.Value>
+                                                                                    <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                                                                                </Setter.Value>
+                                                                            </Setter>
+                                                                        </MultiDataTrigger>
+                                                                    </ControlTemplate.Triggers>
+                                                                </ControlTemplate>
+                                                            </Button.Template>
+                                                        </Button>
+                                                    </StackPanel>
                                                     </Grid>
-                                                </Grid>
-                                            </ToggleButton>
-                                            
-                                            <!-- Edit button (pencil icon) - overlaid on bottom right -->
-                                            <Button Command="{Binding DataContext.EditPresetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                    CommandParameter="{Binding}"
-                                                    HorizontalAlignment="Right"
-                                                    VerticalAlignment="Bottom"
-                                                    Margin="0,0,6,6"
-                                                    ToolTip="Modifica Preset"
-                                                    Cursor="Hand"
-                                                    Background="Transparent"
-                                                    BorderThickness="0">
-                                                <Button.Template>
-                                                    <ControlTemplate TargetType="Button">
-                                                        <Border Background="Transparent" Padding="4">
-                                                            <TextBlock x:Name="PencilIcon" 
-                                                                       Text="✏️" 
-                                                                       FontSize="11"
-                                                                       Opacity="0.4"
-                                                                       RenderTransformOrigin="0.5,0.5">
-                                                                <TextBlock.RenderTransform>
-                                                                    <ScaleTransform ScaleX="1" ScaleY="1"/>
-                                                                </TextBlock.RenderTransform>
-                                                            </TextBlock>
+                                                </ToggleButton>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled"
+                                          Padding="12,12,44,44"
+                                          Visibility="{Binding IsPresetGridView, Converter={StaticResource BoolToVisibility}}">
+
+                                <ItemsControl ItemsSource="{Binding FilteredPresets}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal"
+                                                       HorizontalAlignment="Center"
+                                                       ItemWidth="160"
+                                                       ItemHeight="160"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Width="160" Height="160">
+                                                <ToggleButton Style="{StaticResource PresetGridCardToggleButton}"
+                                                              Width="150"
+                                                              Height="150"
+                                                              HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"
+                                                              IsChecked="{Binding IsSelected, Mode=TwoWay}">
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="*"/>
+                                                        </Grid.RowDefinitions>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <Border Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                                                                Width="22" Height="22"
+                                                                Background="White"
+                                                                CornerRadius="11"
+                                                                HorizontalAlignment="Left"
+                                                                VerticalAlignment="Top"
+                                                                Margin="-2,-2,0,0"
+                                                                Panel.ZIndex="2"
+                                                                Visibility="{Binding IsSelected, Converter={StaticResource BoolToVisibility}}"
+                                                                IsHitTestVisible="False">
+                                                            <TextBlock Text="✓"
+                                                                       FontSize="12"
+                                                                       FontWeight="Bold"
+                                                                       Foreground="{DynamicResource AccentBrush}"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"/>
                                                         </Border>
-                                                        <ControlTemplate.Triggers>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
-                                                                <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                    <Setter.Value>
-                                                                        <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
-                                                                    </Setter.Value>
-                                                                </Setter>
-                                                            </Trigger>
-                                                            <Trigger Property="IsPressed" Value="True">
-                                                                <Setter TargetName="PencilIcon" Property="Opacity" Value="0.7"/>
-                                                                <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                    <Setter.Value>
-                                                                        <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
-                                                                    </Setter.Value>
-                                                                </Setter>
-                                                            </Trigger>
-                                                        </ControlTemplate.Triggers>
-                                                    </ControlTemplate>
-                                                </Button.Template>
-                                            </Button>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
+
+                                                        <Border Grid.Row="0" Grid.Column="0"
+                                                                Width="56" Height="56"
+                                                                CornerRadius="{StaticResource CornerRadiusMedium}"
+                                                                Background="{DynamicResource SurfaceElevatedBrush}">
+                                                            <Grid>
+                                                                <Image Width="32"
+                                                                       Height="32"
+                                                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                                                       Visibility="{Binding HasCustomIcon, Converter={StaticResource BoolToVisibility}}">
+                                                                    <Image.Source>
+                                                                        <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                            <Binding Path="CustomIconLightPath"/>
+                                                                            <Binding Path="CustomIconDarkPath"/>
+                                                                            <Binding Path="DataContext.IsDarkTheme"
+                                                                                     RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                        </MultiBinding>
+                                                                    </Image.Source>
+                                                                </Image>
+
+                                                                <TextBlock Text="{Binding Icon, Mode=OneWay}"
+                                                                           FontSize="26"
+                                                                           FontFamily="Segoe UI Emoji"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"
+                                                                           Visibility="{Binding HasEmojiIcon, Converter={StaticResource BoolToVisibility}}"/>
+
+                                                                <Image Source="{DynamicResource IconPackage}"
+                                                                       Width="30"
+                                                                       Height="30"
+                                                                       Visibility="{Binding ShowDefaultIcon, Converter={StaticResource BoolToVisibility}}"
+                                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                            </Grid>
+                                                        </Border>
+
+                                                        <StackPanel Grid.Row="0" Grid.Column="1"
+                                                                    Orientation="Horizontal"
+                                                                    HorizontalAlignment="Right"
+                                                                    VerticalAlignment="Top">
+                                                            <Button Command="{Binding DataContext.EditPresetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                    CommandParameter="{Binding}"
+                                                                    ToolTip="Modifica Preset"
+                                                                    Cursor="Hand"
+                                                                    Background="Transparent"
+                                                                    BorderThickness="0">
+                                                                <Button.Template>
+                                                                    <ControlTemplate TargetType="Button">
+                                                                        <Border Background="Transparent" Padding="4">
+                                                                            <Viewbox x:Name="PencilIcon"
+                                                                                     Width="14"
+                                                                                     Height="14"
+                                                                                     Opacity="0.7"
+                                                                                     RenderTransformOrigin="0.5,0.5">
+                                                                                <Viewbox.RenderTransform>
+                                                                                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                                                                </Viewbox.RenderTransform>
+                                                                                <Path x:Name="PencilPath"
+                                                                                      Fill="{DynamicResource TextSecondaryBrush}"
+                                                                                      Data="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                                                                            </Viewbox>
+                                                                        </Border>
+                                                                        <ControlTemplate.Triggers>
+                                                                            <MultiDataTrigger>
+                                                                                <MultiDataTrigger.Conditions>
+                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsMouseOver}" Value="True"/>
+                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="True"/>
+                                                                                </MultiDataTrigger.Conditions>
+                                                                                <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
+                                                                                <Setter TargetName="PencilPath" Property="Fill" Value="White"/>
+                                                                                <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                                    <Setter.Value>
+                                                                                        <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
+                                                                                    </Setter.Value>
+                                                                                </Setter>
+                                                                            </MultiDataTrigger>
+                                                                            <MultiDataTrigger>
+                                                                                <MultiDataTrigger.Conditions>
+                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsMouseOver}" Value="True"/>
+                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="False"/>
+                                                                                </MultiDataTrigger.Conditions>
+                                                                                <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
+                                                                                <Setter TargetName="PencilPath" Property="Fill" Value="{DynamicResource TextPrimaryBrush}"/>
+                                                                                <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                                    <Setter.Value>
+                                                                                        <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
+                                                                                    </Setter.Value>
+                                                                                </Setter>
+                                                                            </MultiDataTrigger>
+                                                                            <MultiDataTrigger>
+                                                                                <MultiDataTrigger.Conditions>
+                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsPressed}" Value="True"/>
+                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="True"/>
+                                                                                </MultiDataTrigger.Conditions>
+                                                                                <Setter TargetName="PencilIcon" Property="Opacity" Value="0.85"/>
+                                                                                <Setter TargetName="PencilPath" Property="Fill" Value="White"/>
+                                                                                <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                                    <Setter.Value>
+                                                                                        <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                                                                                    </Setter.Value>
+                                                                                </Setter>
+                                                                            </MultiDataTrigger>
+                                                                            <MultiDataTrigger>
+                                                                                <MultiDataTrigger.Conditions>
+                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsPressed}" Value="True"/>
+                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="False"/>
+                                                                                </MultiDataTrigger.Conditions>
+                                                                                <Setter TargetName="PencilIcon" Property="Opacity" Value="0.85"/>
+                                                                                <Setter TargetName="PencilPath" Property="Fill" Value="{DynamicResource TextPrimaryBrush}"/>
+                                                                                <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                                    <Setter.Value>
+                                                                                        <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                                                                                    </Setter.Value>
+                                                                                </Setter>
+                                                                            </MultiDataTrigger>
+                                                                        </ControlTemplate.Triggers>
+                                                                    </ControlTemplate>
+                                                                </Button.Template>
+                                                            </Button>
+                                                        </StackPanel>
+
+                                                        <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                                                   Text="{Binding Name, Mode=OneWay}"
+                                                                   Style="{StaticResource Win11TextBody}"
+                                                                   FontWeight="SemiBold"
+                                                                   FontSize="13"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   Margin="0,3,0,0"/>
+
+                                                        <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+                                                                   Text="{Binding Description, Mode=OneWay}"
+                                                                   Style="{StaticResource Win11TextSecondary}"
+                                                                   FontSize="11"
+                                                                   TextWrapping="Wrap"
+                                                                   TextTrimming="WordEllipsis"
+                                                                   VerticalAlignment="Top"
+                                                                   Margin="0,1,0,0"/>
+                                                    </Grid>
+                                                </ToggleButton>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
 
                         <!-- Action bar with Create Preset button -->
                         <Border Grid.Row="3"
@@ -753,12 +1214,12 @@
                                     </TextBox>
                                     <!-- Search icon -->
                                     <Image Grid.Column="0"
-                                           Source="{DynamicResource IconSettings}"
+                                           Source="{DynamicResource IconSearch}"
                                            Width="14" Height="14"
                                            HorizontalAlignment="Left"
                                            VerticalAlignment="Center"
                                            Margin="10,0,0,0"
-                                           Opacity="0.5"
+                                           Opacity="0.55"
                                            IsHitTestVisible="False"
                                            RenderOptions.BitmapScalingMode="HighQuality"/>
                                     <!-- Clear button -->
@@ -903,7 +1364,7 @@
                                                            VerticalAlignment="Center"
                                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
 
-                                                <!-- Action icons (Internet + Edit) -->
+                                                <!-- Action icons (Internet + Edit + Kind) -->
                                                 <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                                                     <!-- Internet Badge -->
                                                     <Border Background="#1A0078D4"
@@ -916,11 +1377,11 @@
                                                                    FontWeight="SemiBold"
                                                                    FontSize="9"/>
                                                     </Border>
-                                                    
+
                                                     <!-- Edit Button (Pencil) -->
                                                     <Button Command="{Binding DataContext.EditProcessCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                             CommandParameter="{Binding}"
-                                                            Margin="8,0,0,0"
+                                                            Margin="6,0,0,0"
                                                             Cursor="Hand"
                                                             Background="Transparent"
                                                             BorderThickness="0"
@@ -928,15 +1389,72 @@
                                                         <Button.Template>
                                                             <ControlTemplate TargetType="Button">
                                                                 <Border Background="Transparent" Padding="4">
-                                                                    <TextBlock x:Name="PencilIcon" 
-                                                                               Text="✏️" 
-                                                                               FontSize="11"
-                                                                               Opacity="0.4"/>
+                                                                    <Viewbox x:Name="PencilIcon"
+                                                                             Width="14"
+                                                                             Height="14"
+                                                                             Opacity="0.85"
+                                                                             RenderTransformOrigin="0.5,0.5">
+                                                                        <Viewbox.RenderTransform>
+                                                                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                                                        </Viewbox.RenderTransform>
+                                                                        <Path x:Name="PencilPath"
+                                                                              Fill="{DynamicResource TextSecondaryBrush}"
+                                                                              Data="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                                                                    </Viewbox>
                                                                 </Border>
                                                                 <ControlTemplate.Triggers>
-                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                    <MultiDataTrigger>
+                                                                        <MultiDataTrigger.Conditions>
+                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsMouseOver}" Value="True"/>
+                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="True"/>
+                                                                        </MultiDataTrigger.Conditions>
                                                                         <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
-                                                                    </Trigger>
+                                                                        <Setter TargetName="PencilPath" Property="Fill" Value="White"/>
+                                                                        <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                            <Setter.Value>
+                                                                                <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
+                                                                            </Setter.Value>
+                                                                        </Setter>
+                                                                    </MultiDataTrigger>
+                                                                    <MultiDataTrigger>
+                                                                        <MultiDataTrigger.Conditions>
+                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsMouseOver}" Value="True"/>
+                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="False"/>
+                                                                        </MultiDataTrigger.Conditions>
+                                                                        <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
+                                                                        <Setter TargetName="PencilPath" Property="Fill" Value="{DynamicResource TextPrimaryBrush}"/>
+                                                                        <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                            <Setter.Value>
+                                                                                <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
+                                                                            </Setter.Value>
+                                                                        </Setter>
+                                                                    </MultiDataTrigger>
+                                                                    <MultiDataTrigger>
+                                                                        <MultiDataTrigger.Conditions>
+                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsPressed}" Value="True"/>
+                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="True"/>
+                                                                        </MultiDataTrigger.Conditions>
+                                                                        <Setter TargetName="PencilIcon" Property="Opacity" Value="0.85"/>
+                                                                        <Setter TargetName="PencilPath" Property="Fill" Value="White"/>
+                                                                        <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                            <Setter.Value>
+                                                                                <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                                                                            </Setter.Value>
+                                                                        </Setter>
+                                                                    </MultiDataTrigger>
+                                                                    <MultiDataTrigger>
+                                                                        <MultiDataTrigger.Conditions>
+                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsPressed}" Value="True"/>
+                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="False"/>
+                                                                        </MultiDataTrigger.Conditions>
+                                                                        <Setter TargetName="PencilIcon" Property="Opacity" Value="0.85"/>
+                                                                        <Setter TargetName="PencilPath" Property="Fill" Value="{DynamicResource TextPrimaryBrush}"/>
+                                                                        <Setter TargetName="PencilIcon" Property="RenderTransform">
+                                                                            <Setter.Value>
+                                                                                <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
+                                                                            </Setter.Value>
+                                                                        </Setter>
+                                                                    </MultiDataTrigger>
                                                                 </ControlTemplate.Triggers>
                                                             </ControlTemplate>
                                                         </Button.Template>
@@ -1178,7 +1696,7 @@
                                 <!-- Close button -->
                                 <Button Grid.Column="1"
                                         Command="{Binding CancelCommand}"
-                                        Style="{StaticResource Win11Button}"
+                                        Style="{StaticResource Win11CloseButton}"
                                         Width="36" Height="36"
                                         Padding="0"
                                         ToolTip="Chiudi">
@@ -1188,47 +1706,78 @@
                         </Border>
 
                         <!-- Content -->
-                        <ScrollViewer Grid.Row="1"
-                                      VerticalScrollBarVisibility="Auto"
-                                      Padding="20,16">
+                        <Grid Grid.Row="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Border Grid.Row="0"
+                                    Background="#1AFF3333"
+                                    BorderBrush="{DynamicResource ErrorBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource CornerRadiusSmall}"
+                                    Padding="12,8"
+                                    Margin="20,16,20,0"
+                                    Panel.ZIndex="100"
+                                    Visibility="{Binding ValidationError, Converter={StaticResource StringToVisibilityConverter}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="⚠️" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <TextBlock Text="{Binding ValidationError}"
+                                               Foreground="{DynamicResource ErrorBrush}"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
+                            <ScrollViewer Grid.Row="1"
+                                          VerticalScrollBarVisibility="Auto"
+                                          Padding="20,16">
                             <StackPanel>
-                                <!-- Validation error -->
-                                <Border Background="#1AFF3333"
-                                        BorderBrush="{DynamicResource ErrorBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="{StaticResource CornerRadiusSmall}"
-                                        Padding="12,8"
-                                        Margin="0,0,0,16"
-                                        Visibility="{Binding ValidationError, Converter={StaticResource StringToVisibilityConverter}}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="⚠️" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <TextBlock Text="{Binding ValidationError}"
-                                                   Foreground="{DynamicResource ErrorBrush}"
-                                                   TextWrapping="Wrap"
-                                                   VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </Border>
 
-                                <!-- Nome -->
                                 <TextBlock Text="Nome *" Style="{StaticResource Win11TextBody}" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
-                                         Style="{StaticResource Win11TextBox}"
-                                         Margin="0,0,0,16"/>
+                                <Grid Margin="0,0,0,16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
 
-                                <!-- Icona -->
-                                <TextBlock Text="Icona" Style="{StaticResource Win11TextBody}" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                                <ComboBox ItemsSource="{Binding AvailableIcons}"
-                                          SelectedItem="{Binding Icon}"
-                                          Style="{StaticResource Win11ComboBox}"
-                                          Margin="0,0,0,16">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding}" FontSize="20"/>
-                                        </DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
+                                    <Button Grid.Column="0"
+                                            Command="{Binding OpenIconPickerCommand}"
+                                            Style="{StaticResource Win11Button}"
+                                            Width="44" Height="44"
+                                            Padding="0"
+                                            Margin="0,0,10,0"
+                                            ToolTip="Seleziona icona">
+                                        <Grid>
+                                            <Image Width="22"
+                                                   Height="22"
+                                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                                   Visibility="{Binding HasCustomIcon, Converter={StaticResource BoolToVisibility}}">
+                                                <Image.Source>
+                                                    <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                        <Binding Path="CustomIconLightPath"/>
+                                                        <Binding Path="CustomIconDarkPath"/>
+                                                        <Binding Path="DataContext.IsDarkTheme"
+                                                                 RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                    </MultiBinding>
+                                                </Image.Source>
+                                            </Image>
 
-                                <!-- Descrizione -->
+                                            <TextBlock Text="{Binding Icon}"
+                                                       FontSize="18"
+                                                       FontFamily="Segoe UI Emoji"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       Visibility="{Binding HasCustomIcon, Converter={StaticResource InverseBoolToVisibility}}"/>
+                                        </Grid>
+                                    </Button>
+
+                                    <TextBox Grid.Column="1"
+                                             Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource Win11TextBox}"/>
+                                </Grid>
+
                                 <TextBlock Text="Descrizione" Style="{StaticResource Win11TextBody}" FontWeight="SemiBold" Margin="0,0,0,6"/>
                                 <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
                                          Style="{StaticResource Win11TextBox}"
@@ -1276,12 +1825,21 @@
                                                            Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
 
-                                            <TextBox Grid.Row="1"
-                                                     Text="{Binding AvailableSearchText, UpdateSourceTrigger=PropertyChanged}"
-                                                     Style="{StaticResource Win11TextBox}"
-                                                     Margin="8"
-                                                     Padding="8,4"
-                                                     FontSize="14"/>
+                                            <Grid Grid.Row="1" Margin="8">
+                                                <TextBox Grid.Column="0"
+                                                         Text="{Binding AvailableSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                                         Style="{StaticResource Win11TextBox}"
+                                                         Padding="28,4,8,4"
+                                                         FontSize="14"/>
+                                                <Image Source="{DynamicResource IconSearch}"
+                                                       Width="14" Height="14"
+                                                       HorizontalAlignment="Left"
+                                                       VerticalAlignment="Center"
+                                                       Margin="10,0,0,0"
+                                                       Opacity="0.55"
+                                                       IsHitTestVisible="False"
+                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                            </Grid>
 
                                             <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                                                 <ItemsControl ItemsSource="{Binding FilteredAvailableProcesses}">
@@ -1349,15 +1907,24 @@
                                                            Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
 
-                                            <TextBox Grid.Row="1"
-                                                     Text="{Binding SelectedSearchText, UpdateSourceTrigger=PropertyChanged}"
-                                                     Style="{StaticResource Win11TextBox}"
-                                                     Margin="8"
-                                                     Padding="8,4"
-                                                     FontSize="14"/>
+                                            <Grid Grid.Row="1" Margin="8">
+                                                <TextBox Grid.Column="0"
+                                                         Text="{Binding SelectedSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                                         Style="{StaticResource Win11TextBox}"
+                                                         Padding="28,4,8,4"
+                                                         FontSize="14"/>
+                                                <Image Source="{DynamicResource IconSearch}"
+                                                       Width="14" Height="14"
+                                                       HorizontalAlignment="Left"
+                                                       VerticalAlignment="Center"
+                                                       Margin="10,0,0,0"
+                                                       Opacity="0.55"
+                                                       IsHitTestVisible="False"
+                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                            </Grid>
 
                                             <ListBox Grid.Row="2"
-                                                     ItemsSource="{Binding SelectedProcessesView}"
+                                                     ItemsSource="{Binding FilteredSelectedProcesses}"
                                                      Background="Transparent"
                                                      BorderThickness="0"
                                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -1459,7 +2026,301 @@
                                     </Border>
                                 </Grid>
                             </StackPanel>
-                        </ScrollViewer>
+                            </ScrollViewer>
+
+                            <Grid Background="#80000000"
+                                  Visibility="{Binding IsIconPickerOpen, Converter={StaticResource BoolToVisibility}}">
+                                <Border Style="{StaticResource Win11Card}"
+                                        Padding="16"
+                                        Width="620"
+                                        MaxHeight="680"
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Center">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Grid Grid.Row="0" Margin="0,0,0,12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock Text="Seleziona icona"
+                                                       Style="{StaticResource Win11TextSubtitle}"
+                                                       FontWeight="SemiBold"/>
+
+                                            <Button Grid.Column="1"
+                                                    Command="{Binding CloseIconPickerCommand}"
+                                                    Style="{StaticResource Win11CloseButton}"
+                                                    Width="32"
+                                                    Height="32"
+                                                    Padding="0">
+                                                <TextBlock Text="✕" FontSize="14"/>
+                                            </Button>
+                                        </Grid>
+
+                                        <ScrollViewer Grid.Row="1"
+                                                      VerticalScrollBarVisibility="Auto">
+                                            <StackPanel>
+                                                <TextBlock Text="Emoji"
+                                                           Style="{StaticResource Win11TextBody}"
+                                                           FontWeight="SemiBold"
+                                                           Margin="0,0,0,8"/>
+
+                                                <ItemsControl ItemsSource="{Binding AvailableIcons}"
+                                                              Margin="0,0,0,16">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <WrapPanel/>
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button Command="{Binding DataContext.SelectEmojiIconCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                    CommandParameter="{Binding}"
+                                                                    Style="{StaticResource Win11Button}"
+                                                                    Width="44"
+                                                                    Height="44"
+                                                                    Padding="0"
+                                                                    Margin="0,0,8,8">
+                                                                <TextBlock Text="{Binding}"
+                                                                           FontSize="20"
+                                                                           FontFamily="Segoe UI Emoji"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"/>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
+                                                <TextBlock Text="Icone caricate"
+                                                           Style="{StaticResource Win11TextBody}"
+                                                           FontWeight="SemiBold"
+                                                           Margin="0,0,0,8"/>
+
+                                                <Border Background="{DynamicResource SurfaceElevatedBrush}"
+                                                        BorderBrush="{DynamicResource BorderBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="{StaticResource CornerRadiusSmall}"
+                                                        Padding="12"
+                                                        Margin="0,0,0,12">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <Border Width="40"
+                                                                Height="40"
+                                                                CornerRadius="{StaticResource CornerRadiusSmall}"
+                                                                Background="{DynamicResource SurfaceBrush}"
+                                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                                BorderThickness="1"
+                                                                VerticalAlignment="Center"
+                                                                Margin="0,0,12,0">
+                                                            <Grid>
+                                                                <Image Width="22"
+                                                                       Height="22"
+                                                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                                                       Visibility="{Binding HasCustomIcon, Converter={StaticResource BoolToVisibility}}">
+                                                                    <Image.Source>
+                                                                        <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                            <Binding Path="CustomIconLightPath"/>
+                                                                            <Binding Path="CustomIconDarkPath"/>
+                                                                            <Binding Path="DataContext.IsDarkTheme"
+                                                                                     RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                        </MultiBinding>
+                                                                    </Image.Source>
+                                                                </Image>
+
+                                                                <TextBlock Text="{Binding Icon}"
+                                                                           FontSize="18"
+                                                                           FontFamily="Segoe UI Emoji"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"
+                                                                           Visibility="{Binding HasCustomIcon, Converter={StaticResource InverseBoolToVisibility}}"/>
+                                                            </Grid>
+                                                        </Border>
+
+                                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                            <CheckBox Content="Scegli icona diversa per tema"
+                                                                      IsChecked="{Binding UseSeparateThemeIcons}"
+                                                                      Style="{StaticResource Win11ToggleSwitch}"/>
+                                                            <TextBlock Text="Se attivo, puoi scegliere un’icona per tema chiaro e una per tema scuro."
+                                                                       Style="{StaticResource Win11TextSecondary}"
+                                                                       FontSize="11"
+                                                                       Margin="0,4,0,0"/>
+                                                        </StackPanel>
+
+                                                        <Button Grid.Column="2"
+                                                                Content="Importa"
+                                                                Command="{Binding ImportLibraryIconCommand}"
+                                                                Style="{StaticResource Win11Button}"
+                                                                Height="36"
+                                                                MinWidth="120"
+                                                                VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </Border>
+
+                                                <StackPanel Orientation="Horizontal"
+                                                            Margin="0,0,0,12"
+                                                            Visibility="{Binding UseSeparateThemeIcons, Converter={StaticResource BoolToVisibility}}">
+                                                    <Button Content="Chiaro"
+                                                            Command="{Binding SetIconPickerTargetLightCommand}"
+                                                            Height="32"
+                                                            MinWidth="120">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource Win11Button}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsIconPickerTargetDark}" Value="False">
+                                                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                                        <Setter Property="Foreground" Value="White"/>
+                                                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
+                                                    <Button Content="Scuro"
+                                                            Command="{Binding SetIconPickerTargetDarkCommand}"
+                                                            Height="32"
+                                                            MinWidth="120"
+                                                            Margin="8,0,0,0">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource Win11Button}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsIconPickerTargetDark}" Value="True">
+                                                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                                        <Setter Property="Foreground" Value="White"/>
+                                                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
+                                                </StackPanel>
+
+                                                <ItemsControl ItemsSource="{Binding LibraryIcons}"
+                                                              Margin="0,0,0,16">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <WrapPanel/>
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button Command="{Binding DataContext.SelectLibraryIconCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                    CommandParameter="{Binding}"
+                                                                    Style="{StaticResource Win11Button}"
+                                                                    Width="56"
+                                                                    Height="56"
+                                                                    Padding="0"
+                                                                    Margin="0,0,8,8">
+                                                                <Image Stretch="Uniform"
+                                                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                                                       Width="28"
+                                                                       Height="28">
+                                                                    <Image.Source>
+                                                                        <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                            <Binding Path="LightPath"/>
+                                                                            <Binding Path="DarkPath"/>
+                                                                            <Binding Path="DataContext.IsDarkTheme"
+                                                                                     RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                        </MultiBinding>
+                                                                    </Image.Source>
+                                                                </Image>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="12"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="Chiaro"
+                                                                   Style="{StaticResource Win11TextSecondary}"
+                                                                   Margin="0,0,0,6"/>
+                                                        <Border Background="{DynamicResource SurfaceElevatedBrush}"
+                                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="{StaticResource CornerRadiusSmall}"
+                                                                Width="96"
+                                                                Height="96"
+                                                                HorizontalAlignment="Left">
+                                                            <Image Stretch="Uniform"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality">
+                                                                <Image.Source>
+                                                                    <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                        <Binding Path="CustomIconLightPath"/>
+                                                                        <Binding Path="CustomIconDarkPath"/>
+                                                                        <Binding Source="False"/>
+                                                                    </MultiBinding>
+                                                                </Image.Source>
+                                                            </Image>
+                                                        </Border>
+                                                    </StackPanel>
+
+                                                    <StackPanel Grid.Column="2">
+                                                        <TextBlock Text="Scuro"
+                                                                   Style="{StaticResource Win11TextSecondary}"
+                                                                   Margin="0,0,0,6"/>
+                                                        <Border Background="{DynamicResource SurfaceElevatedBrush}"
+                                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="{StaticResource CornerRadiusSmall}"
+                                                                Width="96"
+                                                                Height="96"
+                                                                HorizontalAlignment="Left">
+                                                            <Image Stretch="Uniform"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality">
+                                                                <Image.Source>
+                                                                    <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                        <Binding Path="CustomIconLightPath"/>
+                                                                        <Binding Path="CustomIconDarkPath"/>
+                                                                        <Binding Source="True"/>
+                                                                    </MultiBinding>
+                                                                </Image.Source>
+                                                            </Image>
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </StackPanel>
+                                        </ScrollViewer>
+
+                                        <Grid Grid.Row="2" Margin="0,12,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Button Content="Rimuovi"
+                                                    Command="{Binding RemoveCustomIconCommand}"
+                                                    Style="{StaticResource Win11Button}"
+                                                    Height="36"
+                                                    Visibility="{Binding HasCustomIcon, Converter={StaticResource BoolToVisibility}}"
+                                                    HorizontalAlignment="Left"/>
+
+                                            <Button Grid.Column="1"
+                                                    Content="Chiudi"
+                                                    Command="{Binding CloseIconPickerCommand}"
+                                                    Style="{StaticResource Win11AccentButton}"
+                                                    Height="36"
+                                                    MinWidth="120"/>
+                                        </Grid>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </Grid>
 
                         <!-- Action buttons -->
                         <Border Grid.Row="2"
@@ -1487,6 +2348,360 @@
                                     <Button.Style>
                                         <Style TargetType="Button" BasedOn="{StaticResource Win11AccentButton}">
                                             <Setter Property="Content" Value="Salva Preset"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsEditMode}" Value="True">
+                                                    <Setter Property="Content" Value="Salva Modifiche"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Grid Grid.Row="0" Grid.RowSpan="4"
+                  Visibility="{Binding IsCreateProcessPanelOpen, Converter={StaticResource BoolToVisibility}}"
+                  x:Name="CreateProcessOverlay">
+
+                <Border Background="#80000000">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Opacity" Value="0"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsCreateProcessPanelOpen}" Value="True">
+                                    <DataTrigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                               To="1" Duration="0:0:0.2"
+                                                               EasingFunction="{StaticResource EaseOut}"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.EnterActions>
+                                    <DataTrigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                               To="0" Duration="0:0:0.15"
+                                                               EasingFunction="{StaticResource EaseIn}"/>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.ExitActions>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
+
+                <Border Width="700"
+                        HorizontalAlignment="Right"
+                        Background="{DynamicResource AppBackgroundBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1,0,0,0"
+                        Effect="{StaticResource CardShadow}"
+                        RenderTransformOrigin="1,0">
+                    <Border.RenderTransform>
+                        <TranslateTransform X="700"/>
+                    </Border.RenderTransform>
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsCreateProcessPanelOpen}" Value="True">
+                                    <DataTrigger.EnterActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="RenderTransform.(TranslateTransform.X)"
+                                                               To="0" Duration="0:0:0.3">
+                                                    <DoubleAnimation.EasingFunction>
+                                                        <CubicEase EasingMode="EaseOut"/>
+                                                    </DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.EnterActions>
+                                    <DataTrigger.ExitActions>
+                                        <BeginStoryboard>
+                                            <Storyboard>
+                                                <DoubleAnimation Storyboard.TargetProperty="RenderTransform.(TranslateTransform.X)"
+                                                               To="700" Duration="0:0:0.25">
+                                                    <DoubleAnimation.EasingFunction>
+                                                        <CubicEase EasingMode="EaseIn"/>
+                                                    </DoubleAnimation.EasingFunction>
+                                                </DoubleAnimation>
+                                            </Storyboard>
+                                        </BeginStoryboard>
+                                    </DataTrigger.ExitActions>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+
+                    <Grid DataContext="{Binding CreateProcessViewModel}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0"
+                                Background="{DynamicResource SurfaceElevatedBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="0,0,0,1"
+                                Padding="20,16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                    <Image Source="{DynamicResource IconSettings}"
+                                           Width="18" Height="18"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,10,0"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                    <TextBlock Text="{Binding Title}"
+                                               Style="{StaticResource Win11TextTitle}"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <Button Grid.Column="1"
+                                        Command="{Binding CancelCommand}"
+                                        Style="{StaticResource Win11CloseButton}"
+                                        Width="36" Height="36"
+                                        Padding="0"
+                                        ToolTip="Chiudi"/>
+                            </Grid>
+                        </Border>
+
+                        <Grid Grid.Row="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Border Grid.Row="0"
+                                    Background="#1AFF3333"
+                                    BorderBrush="{DynamicResource ErrorBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="{StaticResource CornerRadiusSmall}"
+                                    Padding="12,8"
+                                    Margin="20,16,20,0"
+                                    Panel.ZIndex="100"
+                                    Visibility="{Binding ValidationError, Converter={StaticResource StringToVisibilityConverter}}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Source="{DynamicResource IconError}"
+                                           Width="16" Height="16"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                    <TextBlock Text="{Binding ValidationError}"
+                                               Foreground="{DynamicResource ErrorBrush}"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+
+                            <ScrollViewer Grid.Row="1"
+                                          VerticalScrollBarVisibility="Auto"
+                                          Padding="20,16">
+                                <StackPanel>
+                                    <TextBlock Text="Nome Processo *"
+                                               Style="{StaticResource Win11TextBody}"
+                                               FontWeight="SemiBold"
+                                               Margin="0,0,0,6"/>
+                                    <TextBox Text="{Binding ProcessName, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource Win11TextBox}"
+                                             Margin="0,0,0,16"/>
+
+                                    <TextBlock Text="Descrizione"
+                                               Style="{StaticResource Win11TextBody}"
+                                               FontWeight="SemiBold"
+                                               Margin="0,0,0,6"/>
+                                    <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource Win11TextBox}"
+                                             Margin="0,0,0,16"/>
+
+                                    <TextBlock Text="Tipo di Processo *"
+                                               Style="{StaticResource Win11TextBody}"
+                                               FontWeight="SemiBold"
+                                               Margin="0,0,0,6"/>
+                                    <ComboBox ItemsSource="{Binding AvailableProcessKinds}"
+                                              SelectedItem="{Binding SelectedProcessKind}"
+                                              Style="{StaticResource Win11ComboBox}"
+                                              Margin="0,0,0,16">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock>
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="{Binding}"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding}" Value="{x:Static models:ProcessKind.Installer}">
+                                                                    <Setter Property="Text" Value="Installer (.exe, .msi, .zip)"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding}" Value="{x:Static models:ProcessKind.PowerShellScript}">
+                                                                    <Setter Property="Text" Value="PowerShell Script"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding}" Value="{x:Static models:ProcessKind.BatchScript}">
+                                                                    <Setter Property="Text" Value="Batch/CMD Script"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+
+                                    <StackPanel Visibility="{Binding IsInstallerMode, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="Percorso File Installer *"
+                                                   Style="{StaticResource Win11TextBody}"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,6"/>
+                                        <Grid Margin="0,0,0,16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Grid.Column="0"
+                                                     Text="{Binding FilePath, UpdateSourceTrigger=PropertyChanged}"
+                                                     Style="{StaticResource Win11TextBox}"
+                                                     Margin="0,0,8,0"/>
+                                            <Button Grid.Column="1"
+                                                    Content="Sfoglia..."
+                                                    Command="{Binding BrowseFileCommand}"
+                                                    Style="{StaticResource Win11Button}"
+                                                    Padding="12,6"/>
+                                        </Grid>
+
+                                        <TextBlock Text="Argomenti Riga di Comando"
+                                                   Style="{StaticResource Win11TextBody}"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,6"/>
+                                        <TextBox Text="{Binding Arguments, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource Win11TextBox}"
+                                                 Margin="0,0,0,16"/>
+                                    </StackPanel>
+
+                                    <StackPanel Visibility="{Binding IsScriptMode, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="Contenuto Script (inline)"
+                                                   Style="{StaticResource Win11TextBody}"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,6"/>
+                                        <TextBox Text="{Binding ScriptContent, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource Win11TextBox}"
+                                                 AcceptsReturn="True"
+                                                 TextWrapping="Wrap"
+                                                 Height="120"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 FontFamily="Cascadia Code, Consolas, monospace"
+                                                 FontSize="11"
+                                                 Margin="0,0,0,8"/>
+                                        <TextBlock Text="— OPPURE —"
+                                                   Style="{StaticResource Win11TextSecondary}"
+                                                   HorizontalAlignment="Center"
+                                                   Margin="0,0,0,8"/>
+
+                                        <TextBlock Text="Percorso File Script"
+                                                   Style="{StaticResource Win11TextBody}"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,6"/>
+                                        <Grid Margin="0,0,0,16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox Grid.Column="0"
+                                                     Text="{Binding FilePath, UpdateSourceTrigger=PropertyChanged}"
+                                                     Style="{StaticResource Win11TextBox}"
+                                                     Margin="0,0,8,0"/>
+                                            <Button Grid.Column="1"
+                                                    Content="Sfoglia..."
+                                                    Command="{Binding BrowseFileCommand}"
+                                                    Style="{StaticResource Win11Button}"
+                                                    Padding="12,6"/>
+                                        </Grid>
+                                    </StackPanel>
+
+                                    <TextBlock Text="Icona"
+                                               Style="{StaticResource Win11TextBody}"
+                                               FontWeight="SemiBold"
+                                               Margin="0,0,0,6"/>
+                                    <ComboBox ItemsSource="{Binding AvailableIcons}"
+                                              SelectedValue="{Binding SelectedIconKey}"
+                                              SelectedValuePath="Key"
+                                              DisplayMemberPath="DisplayName"
+                                              Style="{StaticResource Win11ComboBox}"
+                                              Margin="0,0,0,16"/>
+
+                                    <StackPanel Margin="0,0,0,16">
+                                        <CheckBox IsChecked="{Binding RunAsAdmin}"
+                                                  Style="{StaticResource Win11CheckBox}"
+                                                  Margin="0,0,0,8">
+                                            <TextBlock Text="Esegui come Amministratore"
+                                                       Style="{StaticResource Win11TextBody}"/>
+                                        </CheckBox>
+
+                                        <CheckBox IsChecked="{Binding RequiresInternet}"
+                                                  Style="{StaticResource Win11CheckBox}">
+                                            <TextBlock Text="Richiede Connessione Internet"
+                                                       Style="{StaticResource Win11TextBody}"/>
+                                        </CheckBox>
+                                    </StackPanel>
+
+                                    <Border Background="#1A0078D4"
+                                            BorderBrush="{DynamicResource AccentBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="{StaticResource CornerRadiusSmall}"
+                                            Padding="12,8"
+                                            Margin="0,0,0,16"
+                                            Visibility="{Binding IsEditMode, Converter={StaticResource BoolToVisibility}}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image Source="{DynamicResource IconWarning}"
+                                                   Width="16" Height="16"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,8,0"
+                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                            <TextBlock Text="Attenzione: la modifica di questo processo influirà su tutti i preset che lo utilizzano."
+                                                       Foreground="{DynamicResource TextPrimaryBrush}"
+                                                       FontSize="11"
+                                                       TextWrapping="Wrap"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
+
+                        <Border Grid.Row="2"
+                                Background="{DynamicResource SurfaceElevatedBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="0,1,0,0"
+                                Padding="20,16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Button Grid.Column="0"
+                                        Content="Annulla"
+                                        Command="{Binding CancelCommand}"
+                                        Style="{StaticResource Win11Button}"
+                                        Height="40"
+                                        Margin="0,0,8,0"/>
+
+                                <Button Grid.Column="1"
+                                        Command="{Binding SaveCommand}"
+                                        Height="40"
+                                        MinWidth="160">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource Win11AccentButton}">
+                                            <Setter Property="Content" Value="Crea Processo"/>
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsEditMode}" Value="True">
                                                     <Setter Property="Content" Value="Salva Modifiche"/>

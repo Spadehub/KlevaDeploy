@@ -8,5 +8,7 @@ public class DeploymentPreset
     public string Category { get; set; } = string.Empty;
     /// <summary>Emoji or short icon hint for the UI.</summary>
     public string Icon { get; set; } = "📦";
+    public string? CustomIconLightPath { get; set; }
+    public string? CustomIconDarkPath { get; set; }
     public List<PresetProcessStep> Steps { get; set; } = new();
 }

@@ -19,8 +19,9 @@
     <CornerRadius x:Key="CornerRadiusLarge">12</CornerRadius>
     <CornerRadius x:Key="CornerRadiusCard">8</CornerRadius>
 
-    <!-- ── Button Style ── -->
-    <Style x:Key="Win11Button" TargetType="Button">
+    <!-- ── ButtonBase Style ── -->
+    <!-- NOTE: This is intentionally ButtonBase (not Button) so it can be re-used by ToggleButton, RepeatButton, etc. -->
+    <Style x:Key="Win11Button" TargetType="ButtonBase">
         <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
@@ -31,7 +32,7 @@
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="Button">
+                <ControlTemplate TargetType="ButtonBase">
                     <Border x:Name="Root"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
@@ -47,6 +48,39 @@
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Root" Property="Background" Value="{DynamicResource AccentPressedBrush}"/>
                             <Setter TargetName="Root" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="Win11CloseButton" TargetType="Button" BasedOn="{StaticResource Win11Button}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Root"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource CornerRadiusSmall}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="#33FF3333"/>
+                            <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.4"/>

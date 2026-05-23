@@ -21,12 +21,20 @@ public sealed class InstallerService : IInstallerService
     public InstallerService(ILogService log)
     {
         _log = log;
-        _storageDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KlevaDeploy");
+        _storageDir = GetStorageDir();
         _presetsFilePath = Path.Combine(_storageDir, "custom_presets.json");
         _processesFilePath = Path.Combine(_storageDir, "custom_processes.json");
         
         Directory.CreateDirectory(_storageDir);
         LoadUserStorage();
+    }
+
+    private static string GetStorageDir()
+    {
+        var overrideDir = Environment.GetEnvironmentVariable("KLEVADEPLOY_STORAGE_DIR");
+        return string.IsNullOrWhiteSpace(overrideDir)
+            ? Path.Combine(AppContext.BaseDirectory, "Data")
+            : overrideDir;
     }
 
     private void LoadUserStorage()
