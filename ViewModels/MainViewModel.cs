@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -16,6 +17,8 @@ public sealed class MainViewModel : ObservableObject
     private readonly IInstallerService _installerService;
     private readonly IUpdateService _updateService;
     private readonly IAuthService _authService;
+    private readonly IProcessExecutionService _processExecutionService;
+    private readonly ILicenseScraperService _licenseScraperService;
     private readonly ILogService _log;
     private readonly IThemeService _themeService;
     private readonly IDialogService _dialogService;
@@ -150,6 +153,13 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    private bool _isTerminalTabSelected;
+    public bool IsTerminalTabSelected
+    {
+        get => _isTerminalTabSelected;
+        set => SetProperty(ref _isTerminalTabSelected, value);
+    }
+
     public LogViewModel LogViewModel { get; }
     public CreatePresetViewModel CreatePresetViewModel { get; }
     public CreateProcessViewModel CreateProcessViewModel { get; }
@@ -172,6 +182,8 @@ public sealed class MainViewModel : ObservableObject
         IInstallerService installerService,
         IUpdateService updateService,
         IAuthService authService,
+        IProcessExecutionService processExecutionService,
+        ILicenseScraperService licenseScraperService,
         ILogService log,
         IThemeService themeService,
         IDialogService dialogService,
@@ -183,6 +195,8 @@ public sealed class MainViewModel : ObservableObject
         _installerService = installerService;
         _updateService = updateService;
         _authService = authService;
+        _processExecutionService = processExecutionService;
+        _licenseScraperService = licenseScraperService;
         _log = log;
         _themeService = themeService;
         _dialogService = dialogService;
@@ -191,10 +205,22 @@ public sealed class MainViewModel : ObservableObject
         _loginVmFactory = loginVmFactory;
         LogViewModel = logViewModel;
 
+        // Auto-switch output view to Terminal whenever a process emits output.
+        // This makes the live stdout/stderr stream visible even if the user is on the "Log" tab.
+        _log.LogAdded += (_, entry) =>
+        {
+            if (entry.Level is not ("STDOUT" or "STDERR")) return;
+            var dispatcher = App.Current?.Dispatcher;
+            if (dispatcher is null) { IsTerminalTabSelected = true; return; } // unit tests / non-WPF contexts
+            dispatcher.BeginInvoke(() => IsTerminalTabSelected = true);
+        };
+
         CreatePresetViewModel = new CreatePresetViewModel(_presetIconService);
         CreatePresetViewModel.CloseRequested += OnCreatePresetCloseRequested;
+        CreatePresetViewModel.DeleteRequested += OnCreatePresetDeleteRequested;
 
         CreateProcessViewModel = new CreateProcessViewModel();
+        CreateProcessViewModel.DeleteRequested += OnCreateProcessDeleteRequested;
         CreateProcessViewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName != nameof(CreateProcessViewModel.DialogResult)) return;
@@ -205,6 +231,7 @@ public sealed class MainViewModel : ObservableObject
         SyncThemeProperties();
 
         IsPresetGridView = _prefsService.Preferences.PresetsViewMode == PresetsViewMode.Grid;
+        IsTerminalTabSelected = false;
 
         InitializeCommand = new AsyncRelayCommand(InitializeAsync);
         CreateProcessCommand = new RelayCommand(CreateProcess);
@@ -452,6 +479,37 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    private void OnCreateProcessDeleteRequested(object? sender, EventArgs e)
+    {
+        try
+        {
+            var vm = CreateProcessViewModel;
+            if (!vm.IsEditMode || string.IsNullOrWhiteSpace(vm.EditingProcessId)) return;
+
+            var confirmed = _dialogService.Confirm(
+                "Elimina processo",
+                $"Sei sicuro di voler eliminare il processo \"{vm.ProcessName}\"?");
+            if (!confirmed) return;
+
+            var deleted = _installerService.DeleteProcess(vm.EditingProcessId);
+            if (!deleted)
+            {
+                vm.ValidationError = "Impossibile eliminare questo processo.";
+                return;
+            }
+
+            foreach (var presetVm in Presets)
+                presetVm.Refresh();
+
+            RebuildExecutionQueue();
+            IsCreateProcessPanelOpen = false;
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Errore durante l'eliminazione del processo", ex);
+        }
+    }
+
     private void OpenCreatePreset()
     {
         try
@@ -550,6 +608,44 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    private void OnCreatePresetDeleteRequested(object? sender, EventArgs e)
+    {
+        try
+        {
+            var vm = CreatePresetViewModel;
+            if (!vm.IsEditMode) return;
+
+            var confirmed = _dialogService.Confirm(
+                "Elimina preset",
+                $"Sei sicuro di voler eliminare il preset \"{vm.Name}\"?");
+            if (!confirmed) return;
+
+            var deleted = _installerService.DeletePreset(vm.PresetId);
+            if (!deleted)
+            {
+                vm.ValidationError = "Impossibile eliminare questo preset.";
+                return;
+            }
+
+            _presetIconService.DeletePresetIcons(vm.PresetId);
+
+            var presetVm = Presets.FirstOrDefault(p => p.Preset.Id == vm.PresetId);
+            if (presetVm is not null)
+            {
+                var wasSelected = presetVm.IsSelected;
+                Presets.Remove(presetVm);
+                ApplyPresetFilter();
+                if (wasSelected) RebuildExecutionQueue();
+            }
+
+            IsCreatePresetPanelOpen = false;
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Errore durante l'eliminazione del preset", ex);
+        }
+    }
+
     private void ClearPresetSearch()
     {
         PresetSearchText = string.Empty;
@@ -574,18 +670,50 @@ public sealed class MainViewModel : ObservableObject
 
         IsRunning = true;
         OverallStatus = "Esecuzione in corso...";
+        IsTerminalTabSelected = true;
+        LogViewModel.ClearTerminal();
 
         try
         {
+            IReadOnlyList<LicenseEntry>? licenses = null;
+
             foreach (var step in enabledSteps)
             {
                 step.SetStatus("▶️", "In esecuzione...");
                 _log.Info($"[{step.Order}] Starting: {step.Name}");
-                // Actual execution is handled by PackageDetailViewModel / ProcessExecutionService
-                // Here we simulate for demo — replace with real call
-                await Task.Delay(800); // Demo delay
-                step.SetStatus("✅", "Completato");
-                _log.Info($"[{step.Order}] Completed: {step.Name}");
+
+                var process = step.Process;
+                var args = process.Arguments ?? string.Empty;
+
+                if (process.RequiresLicense)
+                {
+                    licenses ??= await _licenseScraperService.FetchLicensesAsync();
+                    var key = _licenseScraperService.ExtractLicenseKey(licenses, process.Name, customerName: string.Empty);
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        step.SetStatus("❌", "Licenza non trovata");
+                        _log.Warning($"License key not found for process: {process.Name}");
+                        OverallStatus = "Errore: licenza non trovata.";
+                        return;
+                    }
+
+                    args = args.Replace("{LICENSE_KEY}", key);
+                }
+
+                var result = await RunDeploymentProcessAsync(process, args);
+
+                if (result.ExitCode == 0)
+                {
+                    step.SetStatus("✅", "Completato");
+                    _log.Info($"[{step.Order}] Completed: {step.Name}");
+                }
+                else
+                {
+                    step.SetStatus("❌", $"Errore (exit {result.ExitCode})");
+                    _log.Error($"[{step.Order}] Failed: {step.Name} (exit {result.ExitCode})");
+                    OverallStatus = $"Errore: {step.Name} (exit {result.ExitCode})";
+                    return;
+                }
             }
             OverallStatus = $"Completato — {enabledSteps.Count} step eseguiti.";
         }
@@ -597,6 +725,75 @@ public sealed class MainViewModel : ObservableObject
         finally
         {
             IsRunning = false;
+        }
+    }
+
+    private async Task<ProcessResult> RunDeploymentProcessAsync(DeploymentProcess process, string arguments)
+    {
+        switch (process.Kind)
+        {
+            case ProcessKind.Installer:
+            {
+                if (string.IsNullOrWhiteSpace(process.RelativePath))
+                    throw new InvalidOperationException($"Installer path missing for process: {process.Name}");
+
+                var installerPath = Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+                return await _processExecutionService.RunAsync(installerPath, arguments, process.RunAsAdmin);
+            }
+            case ProcessKind.PowerShellScript:
+            {
+                if (!string.IsNullOrWhiteSpace(process.ScriptContent))
+                {
+                    return await _processExecutionService.RunPowerShellAsync(process.ScriptContent, isInlineScript: true, process.RunAsAdmin);
+                }
+
+                if (string.IsNullOrWhiteSpace(process.RelativePath))
+                    throw new InvalidOperationException($"PowerShell script path missing for process: {process.Name}");
+
+                var scriptPath = Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+                return await _processExecutionService.RunPowerShellAsync(scriptPath, isInlineScript: false, process.RunAsAdmin);
+            }
+            case ProcessKind.BatchScript:
+            {
+                if (!string.IsNullOrWhiteSpace(process.ScriptContent))
+                {
+                    return await _processExecutionService.RunBatchAsync(process.ScriptContent, isInlineScript: true, process.RunAsAdmin);
+                }
+
+                if (string.IsNullOrWhiteSpace(process.RelativePath))
+                    throw new InvalidOperationException($"Batch script path missing for process: {process.Name}");
+
+                var scriptPath = Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+                return await _processExecutionService.RunBatchAsync(scriptPath, isInlineScript: false, process.RunAsAdmin);
+            }
+            case ProcessKind.BashScript:
+            {
+                if (!string.IsNullOrWhiteSpace(process.ScriptContent))
+                {
+                    return await _processExecutionService.RunBashAsync(process.ScriptContent, isInlineScript: true);
+                }
+
+                if (string.IsNullOrWhiteSpace(process.RelativePath))
+                    throw new InvalidOperationException($"Bash script path missing for process: {process.Name}");
+
+                var scriptPath = Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+                return await _processExecutionService.RunBashAsync(scriptPath, isInlineScript: false);
+            }
+            case ProcessKind.RegistryFile:
+            {
+                if (string.IsNullOrWhiteSpace(process.RelativePath))
+                    throw new InvalidOperationException($"Registry file path missing for process: {process.Name}");
+
+                var regPath = Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+                var args = $"import \"{regPath}\"";
+                return await _processExecutionService.RunAsync("reg.exe", args, process.RunAsAdmin);
+            }
+            case ProcessKind.ConfigAction:
+            default:
+            {
+                _log.Warning($"ConfigAction not implemented: {process.Name}");
+                return new ProcessResult(0, string.Empty, string.Empty);
+            }
         }
     }
 

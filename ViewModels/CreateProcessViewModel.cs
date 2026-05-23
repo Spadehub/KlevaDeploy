@@ -11,6 +11,7 @@ namespace KlevaDeploy.ViewModels;
 public sealed class CreateProcessViewModel : ObservableObject
 {
     private string? _existingProcessId;
+    public string? EditingProcessId => _existingProcessId;
 
     private string _processName = string.Empty;
     public string ProcessName
@@ -102,11 +103,19 @@ public sealed class CreateProcessViewModel : ObservableObject
         set => SetProperty(ref _isEditMode, value);
     }
 
+    private bool _canDelete;
+    public bool CanDelete
+    {
+        get => _canDelete;
+        set => SetProperty(ref _canDelete, value);
+    }
+
     public ObservableCollection<ProcessKind> AvailableProcessKinds { get; } = new()
     {
         ProcessKind.Installer,
         ProcessKind.PowerShellScript,
-        ProcessKind.BatchScript
+        ProcessKind.BatchScript,
+        ProcessKind.BashScript
     };
 
     public ObservableCollection<IconOption> AvailableIcons { get; } = new()
@@ -126,7 +135,10 @@ public sealed class CreateProcessViewModel : ObservableObject
     };
 
     public bool IsInstallerMode => SelectedProcessKind == ProcessKind.Installer;
-    public bool IsScriptMode => SelectedProcessKind == ProcessKind.PowerShellScript || SelectedProcessKind == ProcessKind.BatchScript;
+    public bool IsScriptMode =>
+        SelectedProcessKind == ProcessKind.PowerShellScript ||
+        SelectedProcessKind == ProcessKind.BatchScript ||
+        SelectedProcessKind == ProcessKind.BashScript;
 
     public DeploymentProcess? CreatedProcess { get; private set; }
     private bool? _dialogResult;
@@ -139,12 +151,16 @@ public sealed class CreateProcessViewModel : ObservableObject
     public IRelayCommand BrowseFileCommand { get; }
     public IRelayCommand SaveCommand { get; }
     public IRelayCommand CancelCommand { get; }
+    public IRelayCommand DeleteCommand { get; }
+
+    public event EventHandler? DeleteRequested;
 
     public CreateProcessViewModel()
     {
         BrowseFileCommand = new RelayCommand(BrowseFile);
         SaveCommand = new RelayCommand(Save);
         CancelCommand = new RelayCommand(Cancel);
+        DeleteCommand = new RelayCommand(RequestDelete);
     }
 
     public void InitializeNew()
@@ -161,6 +177,7 @@ public sealed class CreateProcessViewModel : ObservableObject
         SelectedIconKey = "IconPackage";
         Title = "Nuovo Processo";
         IsEditMode = false;
+        CanDelete = false;
         CreatedProcess = null;
         ValidationError = null;
         DialogResult = null;
@@ -180,6 +197,7 @@ public sealed class CreateProcessViewModel : ObservableObject
         SelectedIconKey = process.IconKey;
         Title = "Modifica Processo";
         IsEditMode = true;
+        CanDelete = process.IsUserCreated;
         CreatedProcess = null;
         ValidationError = null;
         DialogResult = null;
@@ -203,6 +221,11 @@ public sealed class CreateProcessViewModel : ObservableObject
         {
             dialog.Filter = "Script Batch (*.bat;*.cmd)|*.bat;*.cmd|Tutti i file (*.*)|*.*";
             dialog.Title = "Seleziona Script Batch";
+        }
+        else if (SelectedProcessKind == ProcessKind.BashScript)
+        {
+            dialog.Filter = "Script Bash (*.sh)|*.sh|Tutti i file (*.*)|*.*";
+            dialog.Title = "Seleziona Script Bash";
         }
 
         if (dialog.ShowDialog() == true)
@@ -260,6 +283,12 @@ public sealed class CreateProcessViewModel : ObservableObject
         ValidationError = null;
         CreatedProcess = null;
         DialogResult = false;
+    }
+
+    private void RequestDelete()
+    {
+        ValidationError = null;
+        DeleteRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private bool ValidateInput()

@@ -1,6 +1,7 @@
 using KlevaDeploy.Models;
 using KlevaDeploy.Services.Interfaces;
 using KlevaDeploy.Views;
+using System.Windows;
 
 namespace KlevaDeploy.Services;
 
@@ -39,6 +40,21 @@ public sealed class DialogService : IDialogService
         }
         
         return result == true;
+    }
+
+    public bool Confirm(string title, string message)
+    {
+        var owner = Application.Current?.MainWindow;
+        if (owner is null)
+        {
+            return MessageBox.Show(message, title, MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+        }
+
+        var dialog = new ConfirmDialog(title, message)
+        {
+            Owner = owner
+        };
+        return dialog.ShowDialog() == true;
     }
 
     public void ResetDisableRequiredWarningPreference()

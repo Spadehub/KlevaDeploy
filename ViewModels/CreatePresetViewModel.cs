@@ -51,6 +51,7 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     public ObservableCollection<PresetIconLibraryItem> LibraryIcons { get; } = new();
 
     public event EventHandler? CloseRequested;
+    public event EventHandler? DeleteRequested;
 
     public CreatePresetViewModel(IPresetIconService? presetIconService = null)
     {
@@ -379,6 +380,13 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     {
         CreatedPreset = null;
         CloseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    [RelayCommand]
+    private void Delete()
+    {
+        ValidationError = null;
+        DeleteRequested?.Invoke(this, EventArgs.Empty);
     }
 
     [RelayCommand]

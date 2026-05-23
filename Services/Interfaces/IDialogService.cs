@@ -10,6 +10,8 @@ public interface IDialogService
     /// </summary>
     bool ShowDisableRequiredWarning(string processName);
 
+    bool Confirm(string title, string message);
+
     /// <summary>
     /// Resets the "Don't show again" preference for the disable required warning dialog.
     /// Useful for testing or allowing users to re-enable the warning.
