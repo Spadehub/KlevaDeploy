@@ -20,11 +20,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="DeploymentApp.Tests\**\*.cs" />
-    <EmbeddedResource Remove="DeploymentApp.Tests\**\*" />
-    <None Remove="DeploymentApp.Tests\**\*" />
-    <Content Remove="DeploymentApp.Tests\**\*" />
-    <Page Remove="DeploymentApp.Tests\**\*" />
+    <Compile Remove="KlevaDeploy.Tests\**\*.cs" />
+    <EmbeddedResource Remove="KlevaDeploy.Tests\**\*" />
+    <None Remove="KlevaDeploy.Tests\**\*" />
+    <Content Remove="KlevaDeploy.Tests\**\*" />
+    <Page Remove="KlevaDeploy.Tests\**\*" />
   </ItemGroup>
 
 </Project>

@@ -1,10 +1,10 @@
-﻿using System.IO;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
-using DeploymentApp.Models;
-using DeploymentApp.ViewModels;
+using KlevaDeploy.Models;
+using KlevaDeploy.ViewModels;
 
-namespace DeploymentApp.Tests;
+namespace KlevaDeploy.Tests;
 
 public sealed class MainWindowRegressionTests
 {
@@ -43,7 +43,7 @@ public sealed class MainWindowRegressionTests
         var dir = new DirectoryInfo(startDirectory);
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "InstallerIT.sln")))
+            if (File.Exists(Path.Combine(dir.FullName, "KlevaDeploy.sln")))
             {
                 return dir.FullName;
             }
@@ -51,7 +51,7 @@ public sealed class MainWindowRegressionTests
             dir = dir.Parent;
         }
 
-        throw new DirectoryNotFoundException("InstallerIT.sln not found walking up from test output directory.");
+        throw new DirectoryNotFoundException("KlevaDeploy.sln not found walking up from test output directory.");
     }
 }
 

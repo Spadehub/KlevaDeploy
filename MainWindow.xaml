@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        xmlns:behaviors="clr-namespace:DeploymentApp.Behaviors"
+        xmlns:behaviors="clr-namespace:KlevaDeploy.Behaviors"
         mc:Ignorable="d"
         Title="IT Deployment Configurator"
         Width="1200" Height="760"

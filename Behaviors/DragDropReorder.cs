@@ -6,9 +6,9 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
-using DeploymentApp.Models;
+using KlevaDeploy.Models;
 
-namespace DeploymentApp.Behaviors;
+namespace KlevaDeploy.Behaviors;
 
 public static class DragDropReorder
 {

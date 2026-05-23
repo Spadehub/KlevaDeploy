@@ -5,7 +5,7 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KlevaDeploy", "KlevaDeploy.csproj", "{1EED4D97-935A-41AC-8882-8E4B0CEAA368}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeploymentApp.Tests", "DeploymentApp.Tests\DeploymentApp.Tests.csproj", "{B2CBDD53-B6AC-4B7E-8FA5-62F3CBCE8C98}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KlevaDeploy.Tests", "KlevaDeploy.Tests\KlevaDeploy.Tests.csproj", "{B2CBDD53-B6AC-4B7E-8FA5-62F3CBCE8C98}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
