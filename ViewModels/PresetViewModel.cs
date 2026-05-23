@@ -3,11 +3,16 @@ using DeploymentApp.Models;
 
 namespace DeploymentApp.ViewModels;
 
-public sealed partial class PresetViewModel : ObservableObject
+public sealed class PresetViewModel : ObservableObject
 {
     public DeploymentPreset Preset { get; }
 
-    [ObservableProperty] private bool _isSelected;
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetProperty(ref _isSelected, value);
+    }
 
     public string Name => Preset.Name;
     public string Description => Preset.Description;

@@ -4,7 +4,7 @@ using DeploymentApp.Services.Interfaces;
 
 namespace DeploymentApp.ViewModels;
 
-public sealed partial class ProcessStepViewModel : ObservableObject
+public sealed class ProcessStepViewModel : ObservableObject
 {
     private readonly IDialogService _dialogService;
 
@@ -12,7 +12,12 @@ public sealed partial class ProcessStepViewModel : ObservableObject
     public int Order { get; }
     public bool IsRequired { get; }
 
-    [ObservableProperty] private bool _isInSelectedPreset;
+    private bool _isInSelectedPreset;
+    public bool IsInSelectedPreset
+    {
+        get => _isInSelectedPreset;
+        set => SetProperty(ref _isInSelectedPreset, value);
+    }
 
     // Manual property — intercepts attempts to disable a required step.
     private bool _isEnabled;
@@ -47,8 +52,19 @@ public sealed partial class ProcessStepViewModel : ObservableObject
         _suppressWarning = false;
     }
 
-    [ObservableProperty] private string _statusIcon = "⏳";
-    [ObservableProperty] private string _statusText = "In attesa";
+    private string _statusIcon = "⏳";
+    public string StatusIcon
+    {
+        get => _statusIcon;
+        set => SetProperty(ref _statusIcon, value);
+    }
+
+    private string _statusText = "In attesa";
+    public string StatusText
+    {
+        get => _statusText;
+        set => SetProperty(ref _statusText, value);
+    }
 
     public string Name => Process.Name;
     public string Description => Process.Description;

@@ -5,20 +5,60 @@ using DeploymentApp.Services.Interfaces;
 
 namespace DeploymentApp.ViewModels;
 
-public sealed partial class LoginViewModel : ObservableObject
+public sealed class LoginViewModel : ObservableObject
 {
     private readonly IAuthService _authService;
 
-    [ObservableProperty] private string _username = string.Empty;
-    [ObservableProperty] private string _password = string.Empty;
-    [ObservableProperty] private string _errorMessage = string.Empty;
-    [ObservableProperty] private bool _isBusy;
+    private string _username = string.Empty;
+    public string Username
+    {
+        get => _username;
+        set
+        {
+            if (!SetProperty(ref _username, value)) return;
+            LoginCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private string _password = string.Empty;
+    public string Password
+    {
+        get => _password;
+        set
+        {
+            if (!SetProperty(ref _password, value)) return;
+            LoginCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private string _errorMessage = string.Empty;
+    public string ErrorMessage
+    {
+        get => _errorMessage;
+        set => SetProperty(ref _errorMessage, value);
+    }
+
+    private bool _isBusy;
+    public bool IsBusy
+    {
+        get => _isBusy;
+        set
+        {
+            if (!SetProperty(ref _isBusy, value)) return;
+            LoginCommand.NotifyCanExecuteChanged();
+        }
+    }
 
     public bool LoginSucceeded { get; private set; }
 
-    public LoginViewModel(IAuthService authService) => _authService = authService;
+    public IAsyncRelayCommand LoginCommand { get; }
 
-    [RelayCommand(CanExecute = nameof(CanLogin))]
+    public LoginViewModel(IAuthService authService)
+    {
+        _authService = authService;
+        LoginCommand = new AsyncRelayCommand(LoginAsync, CanLogin);
+    }
+
     private async Task LoginAsync()
     {
         ErrorMessage = string.Empty;
@@ -44,8 +84,4 @@ public sealed partial class LoginViewModel : ObservableObject
 
     /// <summary>Raised when the VM wants the LoginWindow to close.</summary>
     public event EventHandler? CloseRequested;
-
-    partial void OnUsernameChanged(string value) => LoginCommand.NotifyCanExecuteChanged();
-    partial void OnPasswordChanged(string value) => LoginCommand.NotifyCanExecuteChanged();
-    partial void OnIsBusyChanged(bool value) => LoginCommand.NotifyCanExecuteChanged();
 }

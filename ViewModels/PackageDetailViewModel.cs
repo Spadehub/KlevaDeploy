@@ -1,5 +1,7 @@
+using System;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeploymentApp.Models;
@@ -8,7 +10,7 @@ using DeploymentApp.Views;
 
 namespace DeploymentApp.ViewModels;
 
-public sealed partial class PackageDetailViewModel : ObservableObject
+public sealed class PackageDetailViewModel : ObservableObject
 {
     private readonly IInstallerService _installerService;
     private readonly IProcessExecutionService _processService;
@@ -16,12 +18,39 @@ public sealed partial class PackageDetailViewModel : ObservableObject
     private readonly IAuthService _authService;
     private readonly ILogService _log;
 
-    [ObservableProperty] private SoftwarePackage? _selectedPackage;
-    [ObservableProperty] private bool _isBusy;
-    [ObservableProperty] private string _statusMessage = string.Empty;
+    private SoftwarePackage? _selectedPackage;
+    public SoftwarePackage? SelectedPackage
+    {
+        get => _selectedPackage;
+        set
+        {
+            if (!SetProperty(ref _selectedPackage, value)) return;
+            InstallCommand.NotifyCanExecuteChanged();
+            RebuildFeatures(value);
+        }
+    }
+
+    private bool _isBusy;
+    public bool IsBusy
+    {
+        get => _isBusy;
+        set
+        {
+            if (!SetProperty(ref _isBusy, value)) return;
+            InstallCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private string _statusMessage = string.Empty;
+    public string StatusMessage
+    {
+        get => _statusMessage;
+        set => SetProperty(ref _statusMessage, value);
+    }
 
     /// <summary>Feature items for the currently selected package preset.</summary>
     public ObservableCollection<FeatureItemViewModel> Features { get; } = new();
+    public IAsyncRelayCommand InstallCommand { get; }
 
     public PackageDetailViewModel(
         IInstallerService installerService,
@@ -35,12 +64,8 @@ public sealed partial class PackageDetailViewModel : ObservableObject
         _licenseScraperService = licenseScraperService;
         _authService = authService;
         _log = log;
-    }
 
-    partial void OnSelectedPackageChanged(SoftwarePackage? value)
-    {
-        InstallCommand.NotifyCanExecuteChanged();
-        RebuildFeatures(value);
+        InstallCommand = new AsyncRelayCommand(InstallAsync, CanInstall);
     }
 
     /// <summary>
@@ -77,7 +102,6 @@ public sealed partial class PackageDetailViewModel : ObservableObject
         e.DontShowAgain = dialog.DontShowAgain;
     }
 
-    [RelayCommand(CanExecute = nameof(CanInstall))]
     private async Task InstallAsync()
     {
         if (SelectedPackage is null) return;
@@ -116,6 +140,4 @@ public sealed partial class PackageDetailViewModel : ObservableObject
     }
 
     private bool CanInstall() => SelectedPackage is not null && !IsBusy;
-
-    partial void OnIsBusyChanged(bool value) => InstallCommand.NotifyCanExecuteChanged();
 }

@@ -13,15 +13,65 @@ namespace DeploymentApp.ViewModels;
 /// <summary>
 /// ViewModel for creating or editing a deployment preset with a sliding panel UI.
 /// </summary>
-public sealed partial class CreatePresetViewModel : ObservableObject
+public sealed class CreatePresetViewModel : ObservableObject
 {
-    [ObservableProperty] private string _name = string.Empty;
-    [ObservableProperty] private string _icon = "📦";
-    [ObservableProperty] private string _description = string.Empty;
-    [ObservableProperty] private string _category = string.Empty;
-    [ObservableProperty] private string _availableSearchText = string.Empty;
-    [ObservableProperty] private string _selectedSearchText = string.Empty;
-    [ObservableProperty] private string? _validationError;
+    private string _name = string.Empty;
+    public string Name
+    {
+        get => _name;
+        set => SetProperty(ref _name, value);
+    }
+
+    private string _icon = "📦";
+    public string Icon
+    {
+        get => _icon;
+        set => SetProperty(ref _icon, value);
+    }
+
+    private string _description = string.Empty;
+    public string Description
+    {
+        get => _description;
+        set => SetProperty(ref _description, value);
+    }
+
+    private string _category = string.Empty;
+    public string Category
+    {
+        get => _category;
+        set => SetProperty(ref _category, value);
+    }
+
+    private string _availableSearchText = string.Empty;
+    public string AvailableSearchText
+    {
+        get => _availableSearchText;
+        set
+        {
+            if (!SetProperty(ref _availableSearchText, value)) return;
+            ApplyAvailableFilter();
+        }
+    }
+
+    private string _selectedSearchText = string.Empty;
+    public string SelectedSearchText
+    {
+        get => _selectedSearchText;
+        set
+        {
+            if (!SetProperty(ref _selectedSearchText, value)) return;
+            SelectedProcessesView.Refresh();
+            OnPropertyChanged(nameof(IsSelectedReorderEnabled));
+        }
+    }
+
+    private string? _validationError;
+    public string? ValidationError
+    {
+        get => _validationError;
+        set => SetProperty(ref _validationError, value);
+    }
 
     private DeploymentPreset? _editingPreset;
     public bool IsEditMode => _editingPreset != null;
@@ -46,9 +96,25 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     {
         SelectedProcessesView = CollectionViewSource.GetDefaultView(SelectedProcesses);
         SelectedProcessesView.Filter = FilterSelected;
+
+        ActivateProcessCommand = new RelayCommand<ProcessSelectionItem?>(ActivateProcess);
+        DeactivateProcessCommand = new RelayCommand<ProcessSelectionItem?>(DeactivateProcess);
+        MoveProcessUpCommand = new RelayCommand<ProcessSelectionItem?>(MoveProcessUp);
+        MoveProcessDownCommand = new RelayCommand<ProcessSelectionItem?>(MoveProcessDown);
+        ReorderSelectedProcessCommand = new RelayCommand<ProcessReorderRequest?>(ReorderSelectedProcess);
+        SaveCommand = new RelayCommand(Save);
+        CancelCommand = new RelayCommand(Cancel);
     }
 
     public DeploymentPreset? CreatedPreset { get; private set; }
+
+    public IRelayCommand<ProcessSelectionItem?> ActivateProcessCommand { get; }
+    public IRelayCommand<ProcessSelectionItem?> DeactivateProcessCommand { get; }
+    public IRelayCommand<ProcessSelectionItem?> MoveProcessUpCommand { get; }
+    public IRelayCommand<ProcessSelectionItem?> MoveProcessDownCommand { get; }
+    public IRelayCommand<ProcessReorderRequest?> ReorderSelectedProcessCommand { get; }
+    public IRelayCommand SaveCommand { get; }
+    public IRelayCommand CancelCommand { get; }
 
     /// <summary>
     /// Initialize the ViewModel with available processes for creating a new preset.
@@ -81,7 +147,7 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             OnPropertyChanged(nameof(IsEditMode));
             ValidationError = null;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             ValidationError = "Errore durante l'inizializzazione del pannello.";
             // Nota: qui potremmo iniettare ILogService se volessimo loggare anche qui
@@ -144,17 +210,10 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             OnPropertyChanged(nameof(IsEditMode));
             ValidationError = null;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             ValidationError = "Errore durante il caricamento del preset per la modifica.";
         }
-    }
-
-    partial void OnAvailableSearchTextChanged(string value) => ApplyAvailableFilter();
-    partial void OnSelectedSearchTextChanged(string value)
-    {
-        SelectedProcessesView.Refresh();
-        OnPropertyChanged(nameof(IsSelectedReorderEnabled));
     }
 
     public bool IsSelectedReorderEnabled => string.IsNullOrWhiteSpace(SelectedSearchText);
@@ -190,9 +249,9 @@ public sealed partial class CreatePresetViewModel : ObservableObject
                item.Description.ToLowerInvariant().Contains(searchLower);
     }
 
-    [RelayCommand]
-    private void ActivateProcess(ProcessSelectionItem item)
+    private void ActivateProcess(ProcessSelectionItem? item)
     {
+        if (item is null) return;
         AvailableProcesses.Remove(item);
         item.IsSelected = true;
         SelectedProcesses.Add(item);
@@ -203,9 +262,9 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         ValidationError = null;
     }
 
-    [RelayCommand]
-    private void DeactivateProcess(ProcessSelectionItem item)
+    private void DeactivateProcess(ProcessSelectionItem? item)
     {
+        if (item is null) return;
         SelectedProcesses.Remove(item);
         item.IsSelected = false;
         item.Order = 0;
@@ -228,8 +287,7 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private void ReorderSelectedProcess(ProcessReorderRequest request)
+    private void ReorderSelectedProcess(ProcessReorderRequest? request)
     {
         if (request is null) return;
         if (ReferenceEquals(request.Source, request.Target)) return;
@@ -253,9 +311,9 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         SelectedProcessesView.Refresh();
     }
 
-    [RelayCommand]
-    private void MoveProcessUp(ProcessSelectionItem item)
+    private void MoveProcessUp(ProcessSelectionItem? item)
     {
+        if (item is null) return;
         var index = SelectedProcesses.IndexOf(item);
         if (index <= 0) return;
 
@@ -264,9 +322,9 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         SelectedProcessesView.Refresh();
     }
 
-    [RelayCommand]
-    private void MoveProcessDown(ProcessSelectionItem item)
+    private void MoveProcessDown(ProcessSelectionItem? item)
     {
+        if (item is null) return;
         var index = SelectedProcesses.IndexOf(item);
         if (index < 0 || index >= SelectedProcesses.Count - 1) return;
 
@@ -275,7 +333,6 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         SelectedProcessesView.Refresh();
     }
 
-    [RelayCommand]
     private void Save()
     {
         if (!ValidateInput()) return;
@@ -284,7 +341,6 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         CloseRequested?.Invoke(this, EventArgs.Empty);
     }
 
-    [RelayCommand]
     private void Cancel()
     {
         CreatedPreset = null;

@@ -1,5 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeploymentApp.Models;
@@ -8,7 +11,7 @@ using DeploymentApp.Views;
 
 namespace DeploymentApp.ViewModels;
 
-public sealed partial class MainViewModel : ObservableObject
+public sealed class MainViewModel : ObservableObject
 {
     private readonly IInstallerService _installerService;
     private readonly IUpdateService _updateService;
@@ -28,19 +31,111 @@ public sealed partial class MainViewModel : ObservableObject
     public ObservableCollection<ProcessStepViewModel> ExecutionQueue { get; } = new();
     public ObservableCollection<ProcessStepViewModel> FilteredExecutionQueue { get; } = new();
 
-    [ObservableProperty] private bool _isInitializing;
-    [ObservableProperty] private bool _isAuthenticated;
-    [ObservableProperty] private bool _isRunning;
-    [ObservableProperty] private string _overallStatus = "Pronto";
-    [ObservableProperty] private int _selectedPresetCount;
-    [ObservableProperty] private string _themeToggleTooltip = "Passa al tema chiaro";
-    [ObservableProperty] private bool _isDemoMode = true;
-    [ObservableProperty] private string _presetSearchText = string.Empty;
-    [ObservableProperty] private string _processSearchText = string.Empty;
-    [ObservableProperty] private bool _isCreatePresetPanelOpen;
+    private bool _isInitializing;
+    public bool IsInitializing
+    {
+        get => _isInitializing;
+        set
+        {
+            if (!SetProperty(ref _isInitializing, value)) return;
+            RunQueueCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private bool _isAuthenticated;
+    public bool IsAuthenticated
+    {
+        get => _isAuthenticated;
+        set => SetProperty(ref _isAuthenticated, value);
+    }
+
+    private bool _isRunning;
+    public bool IsRunning
+    {
+        get => _isRunning;
+        set
+        {
+            if (!SetProperty(ref _isRunning, value)) return;
+            RunQueueCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private string _overallStatus = "Pronto";
+    public string OverallStatus
+    {
+        get => _overallStatus;
+        set => SetProperty(ref _overallStatus, value);
+    }
+
+    private int _selectedPresetCount;
+    public int SelectedPresetCount
+    {
+        get => _selectedPresetCount;
+        set => SetProperty(ref _selectedPresetCount, value);
+    }
+
+    private string _themeToggleTooltip = "Passa al tema chiaro";
+    public string ThemeToggleTooltip
+    {
+        get => _themeToggleTooltip;
+        set => SetProperty(ref _themeToggleTooltip, value);
+    }
+
+    private bool _isDemoMode = true;
+    public bool IsDemoMode
+    {
+        get => _isDemoMode;
+        set
+        {
+            if (!SetProperty(ref _isDemoMode, value)) return;
+            _log.Info($"Demo mode changed to: {value}");
+            _ = LoadDataAsync();
+        }
+    }
+
+    private string _presetSearchText = string.Empty;
+    public string PresetSearchText
+    {
+        get => _presetSearchText;
+        set
+        {
+            if (!SetProperty(ref _presetSearchText, value)) return;
+            ApplyPresetFilter();
+        }
+    }
+
+    private string _processSearchText = string.Empty;
+    public string ProcessSearchText
+    {
+        get => _processSearchText;
+        set
+        {
+            if (!SetProperty(ref _processSearchText, value)) return;
+            ApplyProcessFilter();
+        }
+    }
+
+    private bool _isCreatePresetPanelOpen;
+    public bool IsCreatePresetPanelOpen
+    {
+        get => _isCreatePresetPanelOpen;
+        set => SetProperty(ref _isCreatePresetPanelOpen, value);
+    }
 
     public LogViewModel LogViewModel { get; }
     public CreatePresetViewModel CreatePresetViewModel { get; }
+
+    public IAsyncRelayCommand InitializeCommand { get; }
+    public IRelayCommand CreateProcessCommand { get; }
+    public IRelayCommand<ProcessStepViewModel?> EditProcessCommand { get; }
+    public IRelayCommand OpenCreatePresetCommand { get; }
+    public IRelayCommand<PresetViewModel?> EditPresetCommand { get; }
+    public IRelayCommand ClearPresetSearchCommand { get; }
+    public IRelayCommand ClearProcessSearchCommand { get; }
+    public IAsyncRelayCommand RunQueueCommand { get; }
+    public IRelayCommand OpenLoginCommand { get; }
+    public IRelayCommand LogoutCommand { get; }
+    public IRelayCommand ToggleThemeCommand { get; }
 
     public MainViewModel(
         IInstallerService installerService,
@@ -65,9 +160,22 @@ public sealed partial class MainViewModel : ObservableObject
         CreatePresetViewModel.CloseRequested += OnCreatePresetCloseRequested;
 
         SyncThemeProperties();
+
+        InitializeCommand = new AsyncRelayCommand(InitializeAsync);
+        CreateProcessCommand = new RelayCommand(CreateProcess);
+        EditProcessCommand = new RelayCommand<ProcessStepViewModel?>(EditProcess);
+        OpenCreatePresetCommand = new RelayCommand(OpenCreatePreset);
+        EditPresetCommand = new RelayCommand<PresetViewModel?>(EditPreset);
+        ClearPresetSearchCommand = new RelayCommand(ClearPresetSearch);
+        ClearProcessSearchCommand = new RelayCommand(ClearProcessSearch);
+        RunQueueCommand = new AsyncRelayCommand(RunQueueAsync, CanRunQueue);
+        OpenLoginCommand = new RelayCommand(OpenLogin);
+        LogoutCommand = new RelayCommand(Logout);
+        ToggleThemeCommand = new RelayCommand(ToggleTheme);
+
+        ExecutionQueue.CollectionChanged += (_, _) => RunQueueCommand.NotifyCanExecuteChanged();
     }
 
-    [RelayCommand]
     public async Task InitializeAsync()
     {
         await LoadDataAsync();
@@ -112,22 +220,6 @@ public sealed partial class MainViewModel : ObservableObject
             _ = Task.Run(() => _updateService.CheckAndUpdateAsync(packageList));
         }
         finally { IsInitializing = false; }
-    }
-
-    partial void OnIsDemoModeChanged(bool value)
-    {
-        _log.Info($"Demo mode changed to: {value}");
-        _ = LoadDataAsync();
-    }
-
-    partial void OnPresetSearchTextChanged(string value)
-    {
-        ApplyPresetFilter();
-    }
-
-    partial void OnProcessSearchTextChanged(string value)
-    {
-        ApplyProcessFilter();
     }
 
     private void ApplyPresetFilter()
@@ -252,7 +344,6 @@ public sealed partial class MainViewModel : ObservableObject
         _log.Info($"Execution queue rebuilt: {ExecutionQueue.Count} total processes ({processesInSelectedPresets.Count} in selected presets).");
     }
 
-    [RelayCommand]
     private void CreateProcess()
     {
         var vm = new CreateProcessViewModel();
@@ -271,9 +362,9 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private void EditProcess(ProcessStepViewModel stepVm)
+    private void EditProcess(ProcessStepViewModel? stepVm)
     {
+        if (stepVm is null) return;
         var vm = new CreateProcessViewModel();
         vm.InitializeForEdit(stepVm.Process);
         
@@ -292,7 +383,6 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
     private void OpenCreatePreset()
     {
         try
@@ -316,8 +406,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private void EditPreset(PresetViewModel presetVm)
+    private void EditPreset(PresetViewModel? presetVm)
     {
         try
         {
@@ -391,19 +480,16 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
     private void ClearPresetSearch()
     {
         PresetSearchText = string.Empty;
     }
 
-    [RelayCommand]
     private void ClearProcessSearch()
     {
         ProcessSearchText = string.Empty;
     }
 
-    [RelayCommand(CanExecute = nameof(CanRunQueue))]
     private async Task RunQueueAsync()
     {
         var enabledSteps = ExecutionQueue.Where(s => s.IsEnabled).ToList();
@@ -446,7 +532,6 @@ public sealed partial class MainViewModel : ObservableObject
 
     private bool CanRunQueue() => ExecutionQueue.Count > 0 && !IsRunning && !IsInitializing;
 
-    [RelayCommand]
     private void OpenLogin()
     {
         if (_authService.IsAuthenticated) { IsAuthenticated = true; return; }
@@ -456,14 +541,12 @@ public sealed partial class MainViewModel : ObservableObject
         IsAuthenticated = _authService.IsAuthenticated;
     }
 
-    [RelayCommand]
     private void Logout()
     {
         _authService.Logout();
         IsAuthenticated = false;
     }
 
-    [RelayCommand]
     private void ToggleTheme()
     {
         _themeService.ToggleTheme();
