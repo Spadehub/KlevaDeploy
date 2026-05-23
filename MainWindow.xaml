@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:behaviors="clr-namespace:DeploymentApp.Behaviors"
         mc:Ignorable="d"
         Title="IT Deployment Configurator"
         Width="1200" Height="760"
@@ -1253,7 +1254,7 @@
                                 <Grid Height="500">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="16"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
 
@@ -1269,7 +1270,10 @@
                                             </Grid.RowDefinitions>
                                             
                                             <Border Background="{DynamicResource SurfaceElevatedBrush}" Padding="10,8" CornerRadius="8,8,0,0">
-                                                <TextBlock Text="Disponibili" FontWeight="SemiBold" FontSize="12"/>
+                                                <TextBlock Text="Disponibili"
+                                                           FontWeight="SemiBold"
+                                                           FontSize="14"
+                                                           Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
 
                                             <TextBox Grid.Row="1"
@@ -1277,28 +1281,44 @@
                                                      Style="{StaticResource Win11TextBox}"
                                                      Margin="8"
                                                      Padding="8,4"
-                                                     FontSize="11"/>
+                                                     FontSize="14"/>
 
                                             <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                                                 <ItemsControl ItemsSource="{Binding FilteredAvailableProcesses}">
+                                                    <ItemsControl.ItemContainerStyle>
+                                                        <Style TargetType="ContentPresenter">
+                                                            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                                                        </Style>
+                                                    </ItemsControl.ItemContainerStyle>
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <Button Command="{Binding DataContext.ActivateProcessCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
-                                                                    CommandParameter="{Binding}"
-                                                                    Style="{StaticResource ProcessCardToggleButton}"
-                                                                    Margin="4" Padding="8,6">
+                                                            <ToggleButton Command="{Binding DataContext.ActivateProcessCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
+                                                                          CommandParameter="{Binding}"
+                                                                          Style="{StaticResource ProcessCardToggleButton}"
+                                                                          Margin="4" Padding="8,6">
                                                                 <Grid>
                                                                     <Grid.ColumnDefinitions>
                                                                         <ColumnDefinition Width="*"/>
                                                                         <ColumnDefinition Width="Auto"/>
                                                                     </Grid.ColumnDefinitions>
                                                                     <StackPanel>
-                                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="11"/>
-                                                                        <TextBlock Text="{Binding Description}" FontSize="10" Opacity="0.7" TextTrimming="CharacterEllipsis"/>
+                                                                        <TextBlock Text="{Binding Name}"
+                                                                                   FontWeight="SemiBold"
+                                                                                   FontSize="14"
+                                                                                   Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                                        <TextBlock Text="{Binding Description}"
+                                                                                   FontSize="12"
+                                                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                                   TextTrimming="CharacterEllipsis"/>
                                                                     </StackPanel>
-                                                                    <TextBlock Grid.Column="1" Text="➜" VerticalAlignment="Center" Margin="4,0,0,0" Opacity="0.5"/>
+                                                                    <TextBlock Grid.Column="1"
+                                                                               Text="➜"
+                                                                               FontSize="14"
+                                                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                               VerticalAlignment="Center"
+                                                                               Margin="4,0,0,0"/>
                                                                 </Grid>
-                                                            </Button>
+                                                            </ToggleButton>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
                                                 </ItemsControl>
@@ -1307,8 +1327,8 @@
                                     </Border>
 
                                     <!-- Center Arrows -->
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0">
-                                        <TextBlock Text="⇄" FontSize="24" Opacity="0.3" HorizontalAlignment="Center"/>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0">
+                                        <TextBlock Text="⇄" FontSize="18" Opacity="0.3" HorizontalAlignment="Center"/>
                                     </StackPanel>
 
                                     <!-- Right Column: Selected Processes -->
@@ -1323,7 +1343,10 @@
                                             </Grid.RowDefinitions>
 
                                             <Border Background="{DynamicResource SurfaceElevatedBrush}" Padding="10,8" CornerRadius="8,8,0,0">
-                                                <TextBlock Text="Selezionati (Coda)" FontWeight="SemiBold" FontSize="12"/>
+                                                <TextBlock Text="Selezionati (Coda)"
+                                                           FontWeight="SemiBold"
+                                                           FontSize="14"
+                                                           Foreground="{DynamicResource TextPrimaryBrush}"/>
                                             </Border>
 
                                             <TextBox Grid.Row="1"
@@ -1331,63 +1354,107 @@
                                                      Style="{StaticResource Win11TextBox}"
                                                      Margin="8"
                                                      Padding="8,4"
-                                                     FontSize="11"/>
+                                                     FontSize="14"/>
 
-                                            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-                                                <ItemsControl ItemsSource="{Binding FilteredSelectedProcesses}">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <Border Background="{DynamicResource SurfaceBrush}" 
-                                                                    BorderBrush="{DynamicResource BorderBrush}"
-                                                                    BorderThickness="1"
-                                                                    CornerRadius="4"
-                                                                    Margin="4" Padding="6">
-                                                                <Grid>
-                                                                    <Grid.RowDefinitions>
-                                                                        <RowDefinition Height="Auto"/>
-                                                                        <RowDefinition Height="Auto"/>
-                                                                    </Grid.RowDefinitions>
-                                                                    <Grid.ColumnDefinitions>
-                                                                        <ColumnDefinition Width="Auto"/>
-                                                                        <ColumnDefinition Width="*"/>
-                                                                        <ColumnDefinition Width="Auto"/>
-                                                                    </Grid.ColumnDefinitions>
+                                            <ListBox Grid.Row="2"
+                                                     ItemsSource="{Binding SelectedProcessesView}"
+                                                     Background="Transparent"
+                                                     BorderThickness="0"
+                                                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                                     HorizontalContentAlignment="Stretch"
+                                                     behaviors:DragDropReorder.IsEnabled="{Binding IsSelectedReorderEnabled}"
+                                                     behaviors:DragDropReorder.ReorderCommand="{Binding ReorderSelectedProcessCommand}">
+                                                <ListBox.ItemContainerStyle>
+                                                    <Style TargetType="ListBoxItem">
+                                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                                    </Style>
+                                                </ListBox.ItemContainerStyle>
+                                                <ListBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Background="{DynamicResource SurfaceBrush}"
+                                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="4"
+                                                                Margin="4"
+                                                                Padding="6"
+                                                                HorizontalAlignment="Stretch">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Opacity" Value="1"/>
+                                                                    <Setter Property="Effect" Value="{x:Null}"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=(behaviors:DragDropReorder.IsDropTarget)}" Value="True">
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                                            <Setter Property="BorderThickness" Value="2"/>
+                                                                        </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsDragging}" Value="True">
+                                                                        <Setter Property="Opacity" Value="0.35"/>
+                                                                        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                                    </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <Grid>
+                                                                <Grid.RowDefinitions>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                    <RowDefinition Height="Auto"/>
+                                                                </Grid.RowDefinitions>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                </Grid.ColumnDefinitions>
 
-                                                                    <Button Grid.Column="0"
-                                                                            Command="{Binding DataContext.DeactivateProcessCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
+                                                                <Button Grid.Column="0"
+                                                                        Command="{Binding DataContext.DeactivateProcessCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                                        CommandParameter="{Binding}"
+                                                                        Style="{StaticResource Win11Button}"
+                                                                        Width="28" Height="28" Padding="0" Margin="0,0,8,0">
+                                                                    <TextBlock Text="⬅"
+                                                                               FontSize="14"
+                                                                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                                </Button>
+
+                                                                <StackPanel Grid.Column="1">
+                                                                    <TextBlock Text="{Binding Name}"
+                                                                               FontWeight="SemiBold"
+                                                                               FontSize="14"
+                                                                               Foreground="{DynamicResource TextPrimaryBrush}"/>
+                                                                    <CheckBox IsChecked="{Binding IsRequired}" Margin="0,4,0,0">
+                                                                        <TextBlock Text="Richiesto"
+                                                                                   FontSize="12"
+                                                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                                   Opacity="0.7"/>
+                                                                    </CheckBox>
+                                                                </StackPanel>
+
+                                                                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                                                    <Button Command="{Binding DataContext.MoveProcessUpCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
                                                                             CommandParameter="{Binding}"
                                                                             Style="{StaticResource Win11Button}"
-                                                                            Width="24" Height="24" Padding="0" Margin="0,0,8,0">
-                                                                        <TextBlock Text="⬅" FontSize="12"/>
+                                                                            Width="28" Height="28" Padding="0" Margin="0,0,4,0">
+                                                                        <TextBlock Text="▲"
+                                                                                   FontSize="14"
+                                                                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                                                                   VerticalAlignment="Center"
+                                                                                   HorizontalAlignment="Center"/>
                                                                     </Button>
-
-                                                                    <StackPanel Grid.Column="1">
-                                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="11"/>
-                                                                        <CheckBox IsChecked="{Binding IsRequired}" Margin="0,2,0,0">
-                                                                            <TextBlock Text="Richiesto" FontSize="10" Opacity="0.7"/>
-                                                                        </CheckBox>
-                                                                    </StackPanel>
-
-                                                                    <StackPanel Grid.Column="2" Orientation="Horizontal">
-                                                                        <Button Command="{Binding DataContext.MoveProcessUpCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
-                                                                                CommandParameter="{Binding}"
-                                                                                Style="{StaticResource Win11Button}"
-                                                                                Width="22" Height="22" Margin="0,0,2,0">
-                                                                            <TextBlock Text="▲" FontSize="9"/>
-                                                                        </Button>
-                                                                        <Button Command="{Binding DataContext.MoveProcessDownCommand, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
-                                                                                CommandParameter="{Binding}"
-                                                                                Style="{StaticResource Win11Button}"
-                                                                                Width="22" Height="22">
-                                                                            <TextBlock Text="▼" FontSize="9"/>
-                                                                        </Button>
-                                                                    </StackPanel>
-                                                                </Grid>
-                                                            </Border>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </ScrollViewer>
+                                                                    <Button Command="{Binding DataContext.MoveProcessDownCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                                                            CommandParameter="{Binding}"
+                                                                            Style="{StaticResource Win11Button}"
+                                                                            Width="28" Height="28" Padding="0">
+                                                                        <TextBlock Text="▼"
+                                                                                   FontSize="14"
+                                                                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                                                                   VerticalAlignment="Center"
+                                                                                   HorizontalAlignment="Center"/>
+                                                                    </Button>
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                            </ListBox>
                                         </Grid>
                                     </Border>
                                 </Grid>

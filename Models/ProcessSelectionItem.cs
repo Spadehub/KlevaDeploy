@@ -13,6 +13,7 @@ public sealed partial class ProcessSelectionItem : ObservableObject
     [ObservableProperty] private bool _isSelected;
     [ObservableProperty] private bool _isRequired;
     [ObservableProperty] private int _order;
+    [ObservableProperty] private bool _isDragging;
 
     public ProcessSelectionItem(DeploymentProcess process)
     {

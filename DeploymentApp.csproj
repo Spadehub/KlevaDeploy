@@ -17,4 +17,12 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.8" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="DeploymentApp.Tests\**\*.cs" />
+    <EmbeddedResource Remove="DeploymentApp.Tests\**\*" />
+    <None Remove="DeploymentApp.Tests\**\*" />
+    <Content Remove="DeploymentApp.Tests\**\*" />
+    <Page Remove="DeploymentApp.Tests\**\*" />
+  </ItemGroup>
+
 </Project>

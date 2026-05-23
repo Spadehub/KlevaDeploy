@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
+using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DeploymentApp.Models;
@@ -28,7 +31,7 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     public ObservableCollection<ProcessSelectionItem> FilteredAvailableProcesses { get; } = new();
     
     public ObservableCollection<ProcessSelectionItem> SelectedProcesses { get; } = new();
-    public ObservableCollection<ProcessSelectionItem> FilteredSelectedProcesses { get; } = new();
+    public ICollectionView SelectedProcessesView { get; }
 
     // Available icons from Icons.xaml
     public ObservableCollection<string> AvailableIcons { get; } = new()
@@ -41,6 +44,8 @@ public sealed partial class CreatePresetViewModel : ObservableObject
 
     public CreatePresetViewModel()
     {
+        SelectedProcessesView = CollectionViewSource.GetDefaultView(SelectedProcesses);
+        SelectedProcessesView.Filter = FilterSelected;
     }
 
     public DeploymentPreset? CreatedPreset { get; private set; }
@@ -71,7 +76,8 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             }
             
             ApplyAvailableFilter();
-            ApplySelectedFilter();
+            UpdateProcessOrdering();
+            SelectedProcessesView.Refresh();
             OnPropertyChanged(nameof(IsEditMode));
             ValidationError = null;
         }
@@ -133,7 +139,8 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             }
             
             ApplyAvailableFilter();
-            ApplySelectedFilter();
+            UpdateProcessOrdering();
+            SelectedProcessesView.Refresh();
             OnPropertyChanged(nameof(IsEditMode));
             ValidationError = null;
         }
@@ -144,7 +151,13 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     }
 
     partial void OnAvailableSearchTextChanged(string value) => ApplyAvailableFilter();
-    partial void OnSelectedSearchTextChanged(string value) => ApplySelectedFilter();
+    partial void OnSelectedSearchTextChanged(string value)
+    {
+        SelectedProcessesView.Refresh();
+        OnPropertyChanged(nameof(IsSelectedReorderEnabled));
+    }
+
+    public bool IsSelectedReorderEnabled => string.IsNullOrWhiteSpace(SelectedSearchText);
 
     private void ApplyAvailableFilter()
     {
@@ -160,19 +173,21 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         foreach (var process in filtered) FilteredAvailableProcesses.Add(process);
     }
 
-    private void ApplySelectedFilter()
+    private bool FilterSelected(object obj)
     {
-        FilteredSelectedProcesses.Clear();
+        if (obj is not ProcessSelectionItem item)
+        {
+            return false;
+        }
+
         var searchLower = SelectedSearchText?.ToLowerInvariant() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(searchLower))
+        {
+            return true;
+        }
 
-        var filtered = string.IsNullOrWhiteSpace(searchLower)
-            ? SelectedProcesses.OrderBy(p => p.Order)
-            : SelectedProcesses.Where(p =>
-                p.Name.ToLowerInvariant().Contains(searchLower) ||
-                p.Description.ToLowerInvariant().Contains(searchLower))
-                .OrderBy(p => p.Order);
-
-        foreach (var process in filtered) FilteredSelectedProcesses.Add(process);
+        return item.Name.ToLowerInvariant().Contains(searchLower) ||
+               item.Description.ToLowerInvariant().Contains(searchLower);
     }
 
     [RelayCommand]
@@ -180,15 +195,11 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     {
         AvailableProcesses.Remove(item);
         item.IsSelected = true;
-        
-        // Find max order and add 10
-        int maxOrder = SelectedProcesses.Any() ? SelectedProcesses.Max(p => p.Order) : 0;
-        item.Order = maxOrder + 10;
-        
         SelectedProcesses.Add(item);
+        UpdateProcessOrdering();
         
         ApplyAvailableFilter();
-        ApplySelectedFilter();
+        SelectedProcessesView.Refresh();
         ValidationError = null;
     }
 
@@ -206,46 +217,62 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         UpdateProcessOrdering();
         
         ApplyAvailableFilter();
-        ApplySelectedFilter();
+        SelectedProcessesView.Refresh();
     }
 
     private void UpdateProcessOrdering()
     {
-        var ordered = SelectedProcesses.OrderBy(p => p.Order).ToList();
-        for (int i = 0; i < ordered.Count; i++)
+        for (int i = 0; i < SelectedProcesses.Count; i++)
         {
-            ordered[i].Order = (i + 1) * 10;
+            SelectedProcesses[i].Order = (i + 1) * 10;
         }
+    }
+
+    [RelayCommand]
+    private void ReorderSelectedProcess(ProcessReorderRequest request)
+    {
+        if (request is null) return;
+        if (ReferenceEquals(request.Source, request.Target)) return;
+        if (!IsSelectedReorderEnabled) return;
+
+        var oldIndex = SelectedProcesses.IndexOf(request.Source);
+        if (oldIndex < 0) return;
+
+        var targetIndex = request.Target is null ? SelectedProcesses.Count - 1 : SelectedProcesses.IndexOf(request.Target);
+        if (targetIndex < 0) targetIndex = SelectedProcesses.Count - 1;
+
+        var insertIndex = targetIndex + (request.InsertAfter ? 1 : 0);
+        if (oldIndex < insertIndex) insertIndex--;
+        if (insertIndex < 0) insertIndex = 0;
+        if (insertIndex > SelectedProcesses.Count - 1) insertIndex = SelectedProcesses.Count - 1;
+
+        if (oldIndex == insertIndex) return;
+
+        SelectedProcesses.Move(oldIndex, insertIndex);
+        UpdateProcessOrdering();
+        SelectedProcessesView.Refresh();
     }
 
     [RelayCommand]
     private void MoveProcessUp(ProcessSelectionItem item)
     {
-        var ordered = SelectedProcesses.OrderBy(p => p.Order).ToList();
-        var index = ordered.IndexOf(item);
-        
-        if (index > 0)
-        {
-            var temp = ordered[index].Order;
-            ordered[index].Order = ordered[index - 1].Order;
-            ordered[index - 1].Order = temp;
-            ApplySelectedFilter();
-        }
+        var index = SelectedProcesses.IndexOf(item);
+        if (index <= 0) return;
+
+        SelectedProcesses.Move(index, index - 1);
+        UpdateProcessOrdering();
+        SelectedProcessesView.Refresh();
     }
 
     [RelayCommand]
     private void MoveProcessDown(ProcessSelectionItem item)
     {
-        var ordered = SelectedProcesses.OrderBy(p => p.Order).ToList();
-        var index = ordered.IndexOf(item);
-        
-        if (index < ordered.Count - 1)
-        {
-            var temp = ordered[index].Order;
-            ordered[index].Order = ordered[index + 1].Order;
-            ordered[index + 1].Order = temp;
-            ApplySelectedFilter();
-        }
+        var index = SelectedProcesses.IndexOf(item);
+        if (index < 0 || index >= SelectedProcesses.Count - 1) return;
+
+        SelectedProcesses.Move(index, index + 1);
+        UpdateProcessOrdering();
+        SelectedProcessesView.Refresh();
     }
 
     [RelayCommand]
@@ -285,7 +312,6 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     private DeploymentPreset CreatePreset()
     {
         var steps = SelectedProcesses
-            .OrderBy(p => p.Order)
             .Select(p => new PresetProcessStep
             {
                 ProcessId = p.Process.Id,
