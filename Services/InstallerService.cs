@@ -15,6 +15,7 @@ public sealed class InstallerService : IInstallerService
     
     private List<DeploymentPreset> _userCreatedPresets = new();
     private List<DeploymentProcess> _userCreatedProcesses = new();
+    private List<DeploymentProcess> _baseProcesses = new();
     private IReadOnlyList<DeploymentProcess> _cachedProcesses = Array.Empty<DeploymentProcess>();
     private IReadOnlyList<DeploymentPreset> _cachedPresets = Array.Empty<DeploymentPreset>();
 
@@ -302,7 +303,8 @@ public sealed class InstallerService : IInstallerService
             };
         }
         
-        _cachedProcesses = baseProcesses.Concat(_userCreatedProcesses).ToList();
+        _baseProcesses = baseProcesses;
+        RebuildProcessCache();
         return Task.FromResult(_cachedProcesses);
     }
 
@@ -484,8 +486,14 @@ public sealed class InstallerService : IInstallerService
 
     public void AddUserProcess(DeploymentProcess process)
     {
-        _userCreatedProcesses.Add(process);
+        var existingIndex = _userCreatedProcesses.FindIndex(p => p.Id == process.Id);
+        if (existingIndex >= 0)
+            _userCreatedProcesses[existingIndex] = process;
+        else
+            _userCreatedProcesses.Add(process);
+
         _log.Info($"User created process: {process.Name}");
+        RebuildProcessCache();
         SaveUserStorage();
     }
 
@@ -514,6 +522,7 @@ public sealed class InstallerService : IInstallerService
         {
             _userCreatedProcesses[index] = process;
             _log.Info($"Updated custom process: {process.Name}");
+            RebuildProcessCache();
             SaveUserStorage();
         }
         else
@@ -521,8 +530,51 @@ public sealed class InstallerService : IInstallerService
             // If it's a built-in process being "edited", we treat it as a new custom process
             _userCreatedProcesses.Add(process);
             _log.Info($"Promoted built-in process to custom: {process.Name}");
+            RebuildProcessCache();
             SaveUserStorage();
         }
+    }
+
+    public bool DeletePreset(string presetId)
+    {
+        var index = _userCreatedPresets.FindIndex(p => p.Id == presetId);
+        if (index < 0) return false;
+
+        var removed = _userCreatedPresets[index];
+        _userCreatedPresets.RemoveAt(index);
+        _log.Info($"Deleted custom preset: {removed.Name}");
+        SaveUserStorage();
+        return true;
+    }
+
+    public bool DeleteProcess(string processId)
+    {
+        var index = _userCreatedProcesses.FindIndex(p => p.Id == processId);
+        if (index < 0) return false;
+
+        var removed = _userCreatedProcesses[index];
+        _userCreatedProcesses.RemoveAt(index);
+
+        var existsInBase = _baseProcesses.Any(p => p.Id == processId);
+        if (!existsInBase)
+        {
+            foreach (var preset in _userCreatedPresets)
+            {
+                if (preset.Steps.Count == 0) continue;
+                var before = preset.Steps.Count;
+                preset.Steps = preset.Steps.Where(s => s.ProcessId != processId).OrderBy(s => s.Order).ToList();
+                if (preset.Steps.Count != before)
+                {
+                    for (var i = 0; i < preset.Steps.Count; i++)
+                        preset.Steps[i].Order = (i + 1) * 10;
+                }
+            }
+        }
+
+        _log.Info($"Deleted custom process: {removed.Name}");
+        RebuildProcessCache();
+        SaveUserStorage();
+        return true;
     }
 
     public IReadOnlyList<DeploymentProcess> GetAllAvailableProcesses()
@@ -534,5 +586,18 @@ public sealed class InstallerService : IInstallerService
     {
         // Combine cached presets with user-created presets
         return _cachedPresets.Concat(_userCreatedPresets).ToList();
+    }
+
+    private void RebuildProcessCache()
+    {
+        var merged = new List<DeploymentProcess>(_baseProcesses);
+        foreach (var custom in _userCreatedProcesses)
+        {
+            var idx = merged.FindIndex(p => p.Id == custom.Id);
+            if (idx >= 0) merged[idx] = custom;
+            else merged.Add(custom);
+        }
+
+        _cachedProcesses = merged;
     }
 }

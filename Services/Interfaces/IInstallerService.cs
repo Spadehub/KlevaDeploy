@@ -45,4 +45,7 @@ public interface IInstallerService
     /// Updates an existing process.
     /// </summary>
     void UpdateProcess(DeploymentProcess process);
+
+    bool DeletePreset(string presetId);
+    bool DeleteProcess(string processId);
 }
