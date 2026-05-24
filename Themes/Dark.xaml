@@ -54,6 +54,21 @@
     <SolidColorBrush x:Key="ToolbarBrush" Color="{StaticResource ToolbarColor}"/>
     <SolidColorBrush x:Key="OutputLineHoverBrush" Color="#22000000"/>
 
+    <SolidColorBrush x:Key="SelectionSurfaceBrush" Color="#1A0078D4"/>
+    <SolidColorBrush x:Key="SelectionBorderBrush" Color="{StaticResource AccentColor}"/>
+    <SolidColorBrush x:Key="SelectionForegroundBrush" Color="{StaticResource TextPrimaryColor}"/>
+
+    <SolidColorBrush x:Key="InfoSurfaceBrush" Color="#1A0078D4"/>
+    <SolidColorBrush x:Key="SuccessSurfaceBrush" Color="#1A4CAF50"/>
+    <SolidColorBrush x:Key="WarningSurfaceBrush" Color="#1AFFC107"/>
+    <SolidColorBrush x:Key="ErrorSurfaceBrush" Color="#1ACF6679"/>
+
+    <SolidColorBrush x:Key="FocusRingBrush" Color="{StaticResource AccentColor}"/>
+
+    <SolidColorBrush x:Key="BrandRailBrush" Color="#FFB00010"/>
+    <SolidColorBrush x:Key="BrandRailForegroundBrush" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="BrandRailSecondaryForegroundBrush" Color="#CCFFFFFF"/>
+
     <!-- Theme toggle icon -->
     <sys:String x:Key="ThemeToggleIcon">☀</sys:String>
     <sys:String x:Key="ThemeToggleTooltip">Passa al tema chiaro</sys:String>

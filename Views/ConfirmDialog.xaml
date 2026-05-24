@@ -25,13 +25,6 @@
                       CornerRadius="12"/>
     </WindowChrome.WindowChrome>
 
-    <Window.Resources>
-        <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource Win11Button}">
-            <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}"/>
-        </Style>
-    </Window.Resources>
-
     <Border Background="{DynamicResource AppBackgroundBrush}"
             BorderBrush="{DynamicResource BorderBrush}"
             BorderThickness="1"
@@ -102,7 +95,7 @@
                             IsCancel="True"/>
                     <Button x:Name="ConfirmButton"
                             Content="Elimina"
-                            Style="{StaticResource DangerButtonStyle}"
+                            Style="{StaticResource Win11DangerButton}"
                             Width="110" Height="32"
                             IsDefault="True"/>
                 </StackPanel>

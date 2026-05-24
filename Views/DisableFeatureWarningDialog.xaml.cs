@@ -17,5 +17,10 @@ public partial class DisableFeatureWarningDialog : Window
 
         ConfirmButton.Click += (_, _) => { DialogResult = true; };
         CancelButton.Click  += (_, _) => { DialogResult = false; };
+        BtnClose.Click += (_, _) => { DialogResult = false; };
+        TitleBar.MouseLeftButtonDown += (_, e) =>
+        {
+            if (e.ClickCount == 1) DragMove();
+        };
     }
 }

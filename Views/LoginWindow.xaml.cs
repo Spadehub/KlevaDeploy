@@ -13,13 +13,16 @@ public partial class LoginWindow : Window
         _vm = vm;
         DataContext = vm;
 
-        // Wire password box (PasswordBox cannot bind directly for security reasons)
         PasswordBox.PasswordChanged += (_, _) =>
         {
             _vm.Password = PasswordBox.Password;
         };
 
-        // Close window when VM signals success
-        vm.CloseRequested += (_, _) => DialogResult = true;
+        vm.CloseRequested += (_, _) => DialogResult = vm.LoginSucceeded;
+
+        TitleBar.MouseLeftButtonDown += (_, e) =>
+        {
+            if (e.ClickCount == 1) DragMove();
+        };
     }
 }
