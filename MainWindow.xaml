@@ -32,6 +32,42 @@
     <Window.Resources>
         <conv:BoolToDoubleConverter x:Key="OutputTabsIndicatorLeftConverter" FalseValue="0" TrueValue="79"/>
 
+        <Style x:Key="Win11SegmentRadioButton" TargetType="RadioButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="HoverRoot"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{TemplateBinding Tag}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="HoverRoot" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                                <Setter TargetName="HoverRoot" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="HoverRoot" Property="Opacity" Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource SelectionForegroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ── Preset card item style ── -->
         <Style x:Key="PresetCardItem" TargetType="ListBoxItem">
             <Setter Property="Background" Value="Transparent"/>
@@ -54,7 +90,7 @@
                                 <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="#1A0078D4"/>
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource SelectionSurfaceBrush}"/>
                                 <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -167,7 +203,7 @@
                                 <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="CardBorder" Property="Background" Value="#1A0078D4"/>
+                                <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource SelectionSurfaceBrush}"/>
                                 <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                                 <Trigger.EnterActions>
                                     <BeginStoryboard>
@@ -197,7 +233,7 @@
                                     <Condition Property="IsChecked" Value="True"/>
                                     <Condition Property="IsMouseOver" Value="True"/>
                                 </MultiTrigger.Conditions>
-                                <Setter TargetName="CardBorder" Property="Background" Value="#1A0078D4"/>
+                                <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource SelectionSurfaceBrush}"/>
                                 <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
                             </MultiTrigger>
                         </ControlTemplate.Triggers>
@@ -262,7 +298,7 @@
                                 <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsDemoMode}" Value="True">
-                                        <Setter Property="Background" Value="#1AFF9800"/>
+                                        <Setter Property="Background" Value="{DynamicResource WarningSurfaceBrush}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -289,13 +325,12 @@
                                 </TextBlock>
                             </CheckBox>
                             <Border Background="{DynamicResource WarningBrush}"
-                                    CornerRadius="3"
-                                    Padding="5,2"
+                                    Style="{StaticResource Win11Badge}"
                                     VerticalAlignment="Center"
                                     Visibility="{Binding IsDemoMode, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock Text="DATI TEST"
+                                           Style="{StaticResource Win11BadgeText}"
                                            Foreground="White"
-                                           FontSize="9"
                                            FontWeight="Bold"/>
                             </Border>
                         </StackPanel>
@@ -315,7 +350,7 @@
                                 <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsAuthenticated}" Value="True">
-                                        <Setter Property="Background" Value="#1A4CAF50"/>
+                                        <Setter Property="Background" Value="{DynamicResource SuccessSurfaceBrush}"/>
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -357,6 +392,36 @@
                                      Style="{StaticResource Win11ProgressBar}"
                                      Margin="0,0,12,0"
                                      Visibility="{Binding IsInitializing, Converter={StaticResource BoolToVisibility}}"/>
+
+                        <Button Command="{Binding CheckAppUpdateCommand}"
+                                Style="{StaticResource Win11Button}"
+                                Margin="0,0,6,0"
+                                Padding="10,6">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="{DynamicResource IconRefresh}"
+                                       Width="14" Height="14"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,6,0"
+                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                <TextBlock Text="Update" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <Button Command="{Binding DownloadAndRestartForUpdateCommand}"
+                                Style="{StaticResource Win11AccentButton}"
+                                Margin="0,0,6,0"
+                                Padding="10,6"
+                                Visibility="{Binding IsAppUpdateAvailable, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="{DynamicResource IconDownload}"
+                                       Width="14" Height="14"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,6,0"
+                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                <TextBlock Text="{Binding AvailableAppVersion, StringFormat=Aggiorna {0}}"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
 
                         <Button Command="{Binding OpenLoginCommand}"
                                 Style="{StaticResource Win11Button}"
@@ -492,14 +557,25 @@
                                                         Canvas.Left="{Binding IsPresetGridView, Converter={StaticResource PresetViewIndicatorLeftConverter}}"
                                                         Width="59"
                                                         Height="34"
-                                                        CornerRadius="8"
                                                         Background="{DynamicResource AccentBrush}"
                                                         BorderBrush="{DynamicResource AccentBrush}"
                                                         BorderThickness="1"
                                                         Opacity="0.18"
-                                                        IsHitTestVisible="False"/>
+                                                        Panel.ZIndex="0"
+                                                        IsHitTestVisible="False">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="CornerRadius" Value="8,0,0,8"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsPresetGridView}" Value="True">
+                                                                    <Setter Property="CornerRadius" Value="0,8,8,0"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                </Border>
                                             </Canvas>
-                                            <Grid>
+                                            <Grid Panel.ZIndex="1">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="*"/>
@@ -538,14 +614,14 @@
                                                             </ControlTemplate.Triggers>
                                                         </ControlTemplate>
                                                     </RadioButton.Template>
-                                                    <Viewbox Width="16" Height="16" Margin="0,1,0,0">
+                                                    <Viewbox Width="{StaticResource IconSizeLg}" Height="{StaticResource IconSizeLg}">
                                                         <Path Data="M4 6H20V8H4V6ZM4 11H20V13H4V11ZM4 16H20V18H4V16Z">
                                                             <Path.Style>
                                                                 <Style TargetType="Path">
                                                                     <Setter Property="Fill" Value="{DynamicResource TextSecondaryBrush}"/>
                                                                     <Style.Triggers>
                                                                         <DataTrigger Binding="{Binding IsPresetGridView}" Value="False">
-                                                                            <Setter Property="Fill" Value="{DynamicResource AccentBrush}"/>
+                                                                            <Setter Property="Fill" Value="{DynamicResource SelectionForegroundBrush}"/>
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
@@ -587,14 +663,14 @@
                                                             </ControlTemplate.Triggers>
                                                         </ControlTemplate>
                                                     </RadioButton.Template>
-                                                    <Viewbox Width="16" Height="16" Margin="0,1,0,0">
+                                                    <Viewbox Width="{StaticResource IconSizeLg}" Height="{StaticResource IconSizeLg}">
                                                         <Path Data="M4 4H10V10H4V4ZM14 4H20V10H14V4ZM4 14H10V20H4V14ZM14 14H20V20H14V14Z">
                                                             <Path.Style>
                                                                 <Style TargetType="Path">
                                                                     <Setter Property="Fill" Value="{DynamicResource TextSecondaryBrush}"/>
                                                                     <Style.Triggers>
                                                                         <DataTrigger Binding="{Binding IsPresetGridView}" Value="True">
-                                                                            <Setter Property="Fill" Value="{DynamicResource AccentBrush}"/>
+                                                                            <Setter Property="Fill" Value="{DynamicResource SelectionForegroundBrush}"/>
                                                                         </DataTrigger>
                                                                     </Style.Triggers>
                                                                 </Style>
@@ -763,11 +839,11 @@
                                                                 Margin="8,0,0,0">
                                                         <Border Background="{DynamicResource SurfaceElevatedBrush}"
                                                                 CornerRadius="{StaticResource CornerRadiusSmall}"
-                                                                Padding="8,3"
+                                                            Padding="6,2"
                                                                 Visibility="{Binding IsSelected, Converter={StaticResource InverseBoolToVisibility}}">
                                                             <TextBlock Text="{Binding StepCount, StringFormat='{}{0} step', Mode=OneWay}"
                                                                        Foreground="{DynamicResource TextSecondaryBrush}"
-                                                                       FontSize="11"/>
+                                                                   FontSize="10"/>
                                                         </Border>
                                                         <Border Width="22" Height="22"
                                                                 Background="White"
@@ -780,86 +856,47 @@
                                                                        HorizontalAlignment="Center"
                                                                        VerticalAlignment="Center"/>
                                                         </Border>
-
-                                                        <Button Command="{Binding DataContext.EditPresetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                                CommandParameter="{Binding}"
+                                                        <Button Style="{StaticResource Win11IconButton}"
                                                                 Margin="8,0,0,0"
-                                                                ToolTip="Modifica Preset"
-                                                                Cursor="Hand"
-                                                                Background="Transparent"
-                                                                BorderThickness="0">
-                                                            <Button.Template>
-                                                                <ControlTemplate TargetType="Button">
-                                                                    <Border Background="Transparent" Padding="4">
-                                                                        <Viewbox x:Name="PencilIcon"
-                                                                                 Width="14"
-                                                                                 Height="14"
-                                                                                 Opacity="0.7"
-                                                                                 RenderTransformOrigin="0.5,0.5">
-                                                                            <Viewbox.RenderTransform>
-                                                                                <ScaleTransform ScaleX="1" ScaleY="1"/>
-                                                                            </Viewbox.RenderTransform>
-                                                                            <Path x:Name="PencilPath"
-                                                                                  Fill="{DynamicResource TextSecondaryBrush}"
-                                                                                  Data="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                                                                        </Viewbox>
-                                                                    </Border>
-                                                                    <ControlTemplate.Triggers>
-                                                                        <MultiDataTrigger>
-                                                                            <MultiDataTrigger.Conditions>
-                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsMouseOver}" Value="True"/>
-                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="True"/>
-                                                                            </MultiDataTrigger.Conditions>
-                                                                            <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
-                                                                            <Setter TargetName="PencilPath" Property="Fill" Value="White"/>
-                                                                            <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                                <Setter.Value>
-                                                                                    <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
-                                                                                </Setter.Value>
-                                                                            </Setter>
-                                                                        </MultiDataTrigger>
-                                                                        <MultiDataTrigger>
-                                                                            <MultiDataTrigger.Conditions>
-                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsMouseOver}" Value="True"/>
-                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="False"/>
-                                                                            </MultiDataTrigger.Conditions>
-                                                                            <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
-                                                                            <Setter TargetName="PencilPath" Property="Fill" Value="{DynamicResource TextPrimaryBrush}"/>
-                                                                            <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                                <Setter.Value>
-                                                                                    <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
-                                                                                </Setter.Value>
-                                                                            </Setter>
-                                                                        </MultiDataTrigger>
-                                                                        <MultiDataTrigger>
-                                                                            <MultiDataTrigger.Conditions>
-                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsPressed}" Value="True"/>
-                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="True"/>
-                                                                            </MultiDataTrigger.Conditions>
-                                                                            <Setter TargetName="PencilIcon" Property="Opacity" Value="0.85"/>
-                                                                            <Setter TargetName="PencilPath" Property="Fill" Value="White"/>
-                                                                            <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                                <Setter.Value>
-                                                                                    <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
-                                                                                </Setter.Value>
-                                                                            </Setter>
-                                                                        </MultiDataTrigger>
-                                                                        <MultiDataTrigger>
-                                                                            <MultiDataTrigger.Conditions>
-                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsPressed}" Value="True"/>
-                                                                                <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="False"/>
-                                                                            </MultiDataTrigger.Conditions>
-                                                                            <Setter TargetName="PencilIcon" Property="Opacity" Value="0.85"/>
-                                                                            <Setter TargetName="PencilPath" Property="Fill" Value="{DynamicResource TextPrimaryBrush}"/>
-                                                                            <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                                <Setter.Value>
-                                                                                    <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
-                                                                                </Setter.Value>
-                                                                            </Setter>
-                                                                        </MultiDataTrigger>
-                                                                    </ControlTemplate.Triggers>
-                                                                </ControlTemplate>
-                                                            </Button.Template>
+                                                                ToolTip="Azioni"
+                                                                AutomationProperties.Name="Azioni"
+                                                                behaviors:ContextMenuOpenOnClickBehavior.IsEnabled="True"
+                                                                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                            <Button.Content>
+                                                                <Image Source="{DynamicResource IconMoreHorizontal}"
+                                                                       Width="{StaticResource IconSizeMd}"
+                                                                       Height="{StaticResource IconSizeMd}"
+                                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                            </Button.Content>
+                                                            <Button.ContextMenu>
+                                                                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+                                                                             Style="{StaticResource Win11ContextMenu}"
+                                                                             ItemContainerStyle="{StaticResource Win11ContextMenuItem}">
+                                                                    <ContextMenu.Resources>
+                                                                        <Style TargetType="Separator" BasedOn="{StaticResource Win11ContextMenuSeparator}"/>
+                                                                    </ContextMenu.Resources>
+                                                                    <MenuItem Header="Modifica"
+                                                                              Command="{Binding PlacementTarget.Tag.EditPresetCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                              CommandParameter="{Binding}">
+                                                                        <MenuItem.Icon>
+                                                                            <Image Source="{DynamicResource IconEdit}"
+                                                                                   Width="{StaticResource IconSizeMd}"
+                                                                                   Height="{StaticResource IconSizeMd}"
+                                                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                        </MenuItem.Icon>
+                                                                    </MenuItem>
+                                                                    <MenuItem Header="Elimina"
+                                                                              Command="{Binding PlacementTarget.Tag.DeletePresetCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                              CommandParameter="{Binding}">
+                                                                        <MenuItem.Icon>
+                                                                            <Image Source="{DynamicResource IconDelete}"
+                                                                                   Width="{StaticResource IconSizeMd}"
+                                                                                   Height="{StaticResource IconSizeMd}"
+                                                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                        </MenuItem.Icon>
+                                                                    </MenuItem>
+                                                                </ContextMenu>
+                                                            </Button.ContextMenu>
                                                         </Button>
                                                     </StackPanel>
                                                     </Grid>
@@ -960,84 +997,46 @@
                                                                     Orientation="Horizontal"
                                                                     HorizontalAlignment="Right"
                                                                     VerticalAlignment="Top">
-                                                            <Button Command="{Binding DataContext.EditPresetCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                                                                    CommandParameter="{Binding}"
-                                                                    ToolTip="Modifica Preset"
-                                                                    Cursor="Hand"
-                                                                    Background="Transparent"
-                                                                    BorderThickness="0">
-                                                                <Button.Template>
-                                                                    <ControlTemplate TargetType="Button">
-                                                                        <Border Background="Transparent" Padding="4">
-                                                                            <Viewbox x:Name="PencilIcon"
-                                                                                     Width="14"
-                                                                                     Height="14"
-                                                                                     Opacity="0.7"
-                                                                                     RenderTransformOrigin="0.5,0.5">
-                                                                                <Viewbox.RenderTransform>
-                                                                                    <ScaleTransform ScaleX="1" ScaleY="1"/>
-                                                                                </Viewbox.RenderTransform>
-                                                                                <Path x:Name="PencilPath"
-                                                                                      Fill="{DynamicResource TextSecondaryBrush}"
-                                                                                      Data="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                                                                            </Viewbox>
-                                                                        </Border>
-                                                                        <ControlTemplate.Triggers>
-                                                                            <MultiDataTrigger>
-                                                                                <MultiDataTrigger.Conditions>
-                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsMouseOver}" Value="True"/>
-                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="True"/>
-                                                                                </MultiDataTrigger.Conditions>
-                                                                                <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
-                                                                                <Setter TargetName="PencilPath" Property="Fill" Value="White"/>
-                                                                                <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                                    <Setter.Value>
-                                                                                        <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
-                                                                                    </Setter.Value>
-                                                                                </Setter>
-                                                                            </MultiDataTrigger>
-                                                                            <MultiDataTrigger>
-                                                                                <MultiDataTrigger.Conditions>
-                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsMouseOver}" Value="True"/>
-                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="False"/>
-                                                                                </MultiDataTrigger.Conditions>
-                                                                                <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
-                                                                                <Setter TargetName="PencilPath" Property="Fill" Value="{DynamicResource TextPrimaryBrush}"/>
-                                                                                <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                                    <Setter.Value>
-                                                                                        <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
-                                                                                    </Setter.Value>
-                                                                                </Setter>
-                                                                            </MultiDataTrigger>
-                                                                            <MultiDataTrigger>
-                                                                                <MultiDataTrigger.Conditions>
-                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsPressed}" Value="True"/>
-                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="True"/>
-                                                                                </MultiDataTrigger.Conditions>
-                                                                                <Setter TargetName="PencilIcon" Property="Opacity" Value="0.85"/>
-                                                                                <Setter TargetName="PencilPath" Property="Fill" Value="White"/>
-                                                                                <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                                    <Setter.Value>
-                                                                                        <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
-                                                                                    </Setter.Value>
-                                                                                </Setter>
-                                                                            </MultiDataTrigger>
-                                                                            <MultiDataTrigger>
-                                                                                <MultiDataTrigger.Conditions>
-                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsPressed}" Value="True"/>
-                                                                                    <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="False"/>
-                                                                                </MultiDataTrigger.Conditions>
-                                                                                <Setter TargetName="PencilIcon" Property="Opacity" Value="0.85"/>
-                                                                                <Setter TargetName="PencilPath" Property="Fill" Value="{DynamicResource TextPrimaryBrush}"/>
-                                                                                <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                                    <Setter.Value>
-                                                                                        <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
-                                                                                    </Setter.Value>
-                                                                                </Setter>
-                                                                            </MultiDataTrigger>
-                                                                        </ControlTemplate.Triggers>
-                                                                    </ControlTemplate>
-                                                                </Button.Template>
+                                                            <Button Style="{StaticResource Win11IconButton}"
+                                                                    ToolTip="Azioni"
+                                                                    AutomationProperties.Name="Azioni"
+                                                                    behaviors:ContextMenuOpenOnClickBehavior.IsEnabled="True"
+                                                                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                                <Button.Content>
+                                                                    <Image Source="{DynamicResource IconMoreHorizontal}"
+                                                                           Width="{StaticResource IconSizeMd}"
+                                                                           Height="{StaticResource IconSizeMd}"
+                                                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                </Button.Content>
+                                                                <Button.ContextMenu>
+                                                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+                                                                                 Style="{StaticResource Win11ContextMenu}"
+                                                                                 ItemContainerStyle="{StaticResource Win11ContextMenuItem}">
+                                                                        <ContextMenu.Resources>
+                                                                            <Style TargetType="Separator" BasedOn="{StaticResource Win11ContextMenuSeparator}"/>
+                                                                        </ContextMenu.Resources>
+                                                                        <MenuItem Header="Modifica"
+                                                                                  Command="{Binding PlacementTarget.Tag.EditPresetCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                                  CommandParameter="{Binding}">
+                                                                            <MenuItem.Icon>
+                                                                                <Image Source="{DynamicResource IconEdit}"
+                                                                                       Width="{StaticResource IconSizeMd}"
+                                                                                       Height="{StaticResource IconSizeMd}"
+                                                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                            </MenuItem.Icon>
+                                                                        </MenuItem>
+                                                                        <MenuItem Header="Elimina"
+                                                                                  Command="{Binding PlacementTarget.Tag.DeletePresetCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                                  CommandParameter="{Binding}">
+                                                                            <MenuItem.Icon>
+                                                                                <Image Source="{DynamicResource IconDelete}"
+                                                                                       Width="{StaticResource IconSizeMd}"
+                                                                                       Height="{StaticResource IconSizeMd}"
+                                                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                            </MenuItem.Icon>
+                                                                        </MenuItem>
+                                                                    </ContextMenu>
+                                                                </Button.ContextMenu>
                                                             </Button>
                                                         </StackPanel>
 
@@ -1238,7 +1237,78 @@
                             <ItemsControl ItemsSource="{Binding FilteredExecutionQueue}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <ToggleButton IsChecked="{Binding IsEnabled, Mode=TwoWay}">
+                                        <ToggleButton IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                                                      Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                                            <ToggleButton.ContextMenu>
+                                                <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+                                                             Style="{StaticResource Win11ContextMenu}"
+                                                             ItemContainerStyle="{StaticResource Win11ContextMenuItem}">
+                                                    <ContextMenu.Resources>
+                                                        <Style TargetType="Separator" BasedOn="{StaticResource Win11ContextMenuSeparator}"/>
+                                                    </ContextMenu.Resources>
+                                                    <MenuItem Header="Modifica"
+                                                              Command="{Binding PlacementTarget.Tag.EditProcessCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding}">
+                                                        <MenuItem.Icon>
+                                                            <Image Source="{DynamicResource IconEdit}"
+                                                                   Width="{StaticResource IconSizeMd}"
+                                                                   Height="{StaticResource IconSizeMd}"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
+                                                    <MenuItem Header="Elimina"
+                                                              Command="{Binding PlacementTarget.Tag.DeleteProcessCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding}">
+                                                        <MenuItem.Icon>
+                                                            <Image Source="{DynamicResource IconDelete}"
+                                                                   Width="{StaticResource IconSizeMd}"
+                                                                   Height="{StaticResource IconSizeMd}"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
+                                                    <Separator/>
+                                                    <MenuItem Header="Aggiorna installer"
+                                                              Command="{Binding PlacementTarget.Tag.UpdateInstallerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding}">
+                                                        <MenuItem.Icon>
+                                                            <Image Source="{DynamicResource IconRefresh}"
+                                                                   Width="{StaticResource IconSizeMd}"
+                                                                   Height="{StaticResource IconSizeMd}"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        </MenuItem.Icon>
+                                                        <MenuItem.Style>
+                                                            <Style TargetType="MenuItem" BasedOn="{StaticResource Win11ContextMenuItem}">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Process.Kind}" Value="{x:Static models:ProcessKind.Installer}">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </MenuItem.Style>
+                                                    </MenuItem>
+                                                    <MenuItem Header="Apri cartella installer"
+                                                              Command="{Binding PlacementTarget.Tag.RevealInstallerInExplorerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding}">
+                                                        <MenuItem.Icon>
+                                                            <Image Source="{DynamicResource IconFolder}"
+                                                                   Width="{StaticResource IconSizeMd}"
+                                                                   Height="{StaticResource IconSizeMd}"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        </MenuItem.Icon>
+                                                        <MenuItem.Style>
+                                                            <Style TargetType="MenuItem" BasedOn="{StaticResource Win11ContextMenuItem}">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Process.Kind}" Value="{x:Static models:ProcessKind.Installer}">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </MenuItem.Style>
+                                                    </MenuItem>
+                                                </ContextMenu>
+                                            </ToggleButton.ContextMenu>
                                             <ToggleButton.Style>
                                                 <Style TargetType="ToggleButton" BasedOn="{StaticResource ProcessCardToggleButton}">
                                                     <Style.Triggers>
@@ -1336,119 +1406,107 @@
                                                 <!-- Action icons (Internet + Edit + Kind) -->
                                                 <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                                                     <!-- Internet Badge -->
-                                                    <Border Background="#1A0078D4"
-                                                            CornerRadius="3"
-                                                            Padding="5,1"
+                                                    <Border Background="{DynamicResource InfoSurfaceBrush}"
+                                                            Style="{StaticResource Win11Badge}"
                                                             Margin="6,0,0,0"
                                                             Visibility="{Binding Process.RequiresInternet, Converter={StaticResource BoolToVisibility}}">
                                                         <TextBlock Text="🌐 WEB"
-                                                                   Foreground="{DynamicResource AccentBrush}"
-                                                                   FontWeight="SemiBold"
-                                                                   FontSize="9"/>
+                                                                   Style="{StaticResource Win11BadgeText}"
+                                                                   Foreground="{DynamicResource AccentBrush}"/>
                                                     </Border>
 
-                                                    <!-- Edit Button (Pencil) -->
-                                                    <Button Command="{Binding DataContext.EditProcessCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                            CommandParameter="{Binding}"
+                                                    <Button Style="{StaticResource Win11IconButton}"
                                                             Margin="6,0,0,0"
-                                                            Cursor="Hand"
-                                                            Background="Transparent"
-                                                            BorderThickness="0"
-                                                            ToolTip="Modifica Processo">
-                                                        <Button.Style>
-                                                            <Style TargetType="Button">
-                                                                <Setter Property="Opacity" Value="0"/>
-                                                                <Setter Property="IsHitTestVisible" Value="False"/>
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsMouseOver}" Value="True">
-                                                                        <Setter Property="Opacity" Value="1"/>
-                                                                        <Setter Property="IsHitTestVisible" Value="True"/>
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Button.Style>
-                                                        <Button.Template>
-                                                            <ControlTemplate TargetType="Button">
-                                                                <Border Background="Transparent" Padding="4">
-                                                                    <Viewbox x:Name="PencilIcon"
-                                                                             Width="14"
-                                                                             Height="14"
-                                                                             Opacity="0.85"
-                                                                             RenderTransformOrigin="0.5,0.5">
-                                                                        <Viewbox.RenderTransform>
-                                                                            <ScaleTransform ScaleX="1" ScaleY="1"/>
-                                                                        </Viewbox.RenderTransform>
-                                                                        <Path x:Name="PencilPath"
-                                                                              Fill="{DynamicResource TextSecondaryBrush}"
-                                                                              Data="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                                                                    </Viewbox>
-                                                                </Border>
-                                                                <ControlTemplate.Triggers>
-                                                                    <MultiDataTrigger>
-                                                                        <MultiDataTrigger.Conditions>
-                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsMouseOver}" Value="True"/>
-                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="True"/>
-                                                                        </MultiDataTrigger.Conditions>
-                                                                        <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
-                                                                        <Setter TargetName="PencilPath" Property="Fill" Value="White"/>
-                                                                        <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                            <Setter.Value>
-                                                                                <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
-                                                                            </Setter.Value>
-                                                                        </Setter>
-                                                                    </MultiDataTrigger>
-                                                                    <MultiDataTrigger>
-                                                                        <MultiDataTrigger.Conditions>
-                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsMouseOver}" Value="True"/>
-                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="False"/>
-                                                                        </MultiDataTrigger.Conditions>
-                                                                        <Setter TargetName="PencilIcon" Property="Opacity" Value="1.0"/>
-                                                                        <Setter TargetName="PencilPath" Property="Fill" Value="{DynamicResource TextPrimaryBrush}"/>
-                                                                        <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                            <Setter.Value>
-                                                                                <ScaleTransform ScaleX="1.1" ScaleY="1.1"/>
-                                                                            </Setter.Value>
-                                                                        </Setter>
-                                                                    </MultiDataTrigger>
-                                                                    <MultiDataTrigger>
-                                                                        <MultiDataTrigger.Conditions>
-                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsPressed}" Value="True"/>
-                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="True"/>
-                                                                        </MultiDataTrigger.Conditions>
-                                                                        <Setter TargetName="PencilIcon" Property="Opacity" Value="0.85"/>
-                                                                        <Setter TargetName="PencilPath" Property="Fill" Value="White"/>
-                                                                        <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                            <Setter.Value>
-                                                                                <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
-                                                                            </Setter.Value>
-                                                                        </Setter>
-                                                                    </MultiDataTrigger>
-                                                                    <MultiDataTrigger>
-                                                                        <MultiDataTrigger.Conditions>
-                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=IsPressed}" Value="True"/>
-                                                                            <Condition Binding="{Binding RelativeSource={RelativeSource AncestorType=ToggleButton}, Path=IsChecked}" Value="False"/>
-                                                                        </MultiDataTrigger.Conditions>
-                                                                        <Setter TargetName="PencilIcon" Property="Opacity" Value="0.85"/>
-                                                                        <Setter TargetName="PencilPath" Property="Fill" Value="{DynamicResource TextPrimaryBrush}"/>
-                                                                        <Setter TargetName="PencilIcon" Property="RenderTransform">
-                                                                            <Setter.Value>
-                                                                                <ScaleTransform ScaleX="0.95" ScaleY="0.95"/>
-                                                                            </Setter.Value>
-                                                                        </Setter>
-                                                                    </MultiDataTrigger>
-                                                                </ControlTemplate.Triggers>
-                                                            </ControlTemplate>
-                                                        </Button.Template>
+                                                            ToolTip="Azioni"
+                                                            AutomationProperties.Name="Azioni"
+                                                            behaviors:ContextMenuOpenOnClickBehavior.IsEnabled="True"
+                                                            Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                        <Button.Content>
+                                                            <Image Source="{DynamicResource IconMoreHorizontal}"
+                                                                   Width="{StaticResource IconSizeMd}"
+                                                                   Height="{StaticResource IconSizeMd}"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        </Button.Content>
+                                                        <Button.ContextMenu>
+                                                            <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+                                                                         Style="{StaticResource Win11ContextMenu}"
+                                                                         ItemContainerStyle="{StaticResource Win11ContextMenuItem}">
+                                                                <ContextMenu.Resources>
+                                                                    <Style TargetType="Separator" BasedOn="{StaticResource Win11ContextMenuSeparator}"/>
+                                                                </ContextMenu.Resources>
+                                                                <MenuItem Header="Modifica"
+                                                                          Command="{Binding PlacementTarget.Tag.EditProcessCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                          CommandParameter="{Binding}">
+                                                                    <MenuItem.Icon>
+                                                                        <Image Source="{DynamicResource IconEdit}"
+                                                                               Width="{StaticResource IconSizeMd}"
+                                                                               Height="{StaticResource IconSizeMd}"
+                                                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                    </MenuItem.Icon>
+                                                                </MenuItem>
+                                                                <MenuItem Header="Elimina"
+                                                                          Command="{Binding PlacementTarget.Tag.DeleteProcessCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                          CommandParameter="{Binding}">
+                                                                    <MenuItem.Icon>
+                                                                        <Image Source="{DynamicResource IconDelete}"
+                                                                               Width="{StaticResource IconSizeMd}"
+                                                                               Height="{StaticResource IconSizeMd}"
+                                                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                    </MenuItem.Icon>
+                                                                </MenuItem>
+                                                                <Separator/>
+                                                                <MenuItem Header="Aggiorna installer"
+                                                                          Command="{Binding PlacementTarget.Tag.UpdateInstallerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                          CommandParameter="{Binding}">
+                                                                    <MenuItem.Icon>
+                                                                        <Image Source="{DynamicResource IconRefresh}"
+                                                                               Width="{StaticResource IconSizeMd}"
+                                                                               Height="{StaticResource IconSizeMd}"
+                                                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                    </MenuItem.Icon>
+                                                                    <MenuItem.Style>
+                                                                        <Style TargetType="MenuItem" BasedOn="{StaticResource Win11ContextMenuItem}">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding Process.Kind}" Value="{x:Static models:ProcessKind.Installer}">
+                                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </MenuItem.Style>
+                                                                </MenuItem>
+                                                                <MenuItem Header="Apri cartella installer"
+                                                                          Command="{Binding PlacementTarget.Tag.RevealInstallerInExplorerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                          CommandParameter="{Binding}">
+                                                                    <MenuItem.Icon>
+                                                                        <Image Source="{DynamicResource IconFolder}"
+                                                                               Width="{StaticResource IconSizeMd}"
+                                                                               Height="{StaticResource IconSizeMd}"
+                                                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                    </MenuItem.Icon>
+                                                                    <MenuItem.Style>
+                                                                        <Style TargetType="MenuItem" BasedOn="{StaticResource Win11ContextMenuItem}">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding Process.Kind}" Value="{x:Static models:ProcessKind.Installer}">
+                                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </MenuItem.Style>
+                                                                </MenuItem>
+                                                            </ContextMenu>
+                                                        </Button.ContextMenu>
                                                     </Button>
 
                                                     <!-- Kind label badge -->
                                                     <Border Background="{DynamicResource SurfaceElevatedBrush}"
-                                                            CornerRadius="3"
-                                                            Padding="5,1"
+                                                            Style="{StaticResource Win11Badge}"
                                                             Margin="6,0,0,0">
                                                         <TextBlock Text="{Binding KindLabel}"
                                                                    Foreground="{DynamicResource TextSecondaryBrush}"
-                                                                   FontSize="10"/>
+                                                                   FontSize="9"
+                                                                   VerticalAlignment="Center"/>
                                                     </Border>
                                                 </StackPanel>
 
@@ -1461,16 +1519,16 @@
                                                                TextTrimming="CharacterEllipsis"
                                                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
                                                     <!-- Required badge -->
-                                                    <Border Background="#1AFF9800"
-                                                            CornerRadius="3"
-                                                            Padding="5,1"
+                                                    <Border Background="{DynamicResource WarningSurfaceBrush}"
+                                                            Style="{StaticResource Win11Badge}"
                                                             Margin="6,0,0,0"
                                                             VerticalAlignment="Center"
                                                             Visibility="{Binding IsRequired, Converter={StaticResource BoolToVisibility}}">
                                                         <TextBlock Text="Richiesto"
                                                                    Foreground="{DynamicResource WarningBrush}"
-                                                                   FontSize="10"
-                                                                   FontWeight="SemiBold"/>
+                                                                   FontSize="9"
+                                                                   FontWeight="SemiBold"
+                                                                   VerticalAlignment="Center"/>
                                                     </Border>
                                                     <!-- Status text -->
                                                     <TextBlock Text="{Binding StatusText}"
@@ -1539,14 +1597,25 @@
                                         <Border Canvas.Left="{Binding IsTerminalTabSelected, Converter={StaticResource OutputTabsIndicatorLeftConverter}}"
                                                 Width="79"
                                                 Height="28"
-                                                CornerRadius="8"
                                                 Background="{DynamicResource AccentBrush}"
                                                 BorderBrush="{DynamicResource AccentBrush}"
                                                 BorderThickness="1"
                                                 Opacity="0.16"
-                                                IsHitTestVisible="False"/>
+                                                Panel.ZIndex="0"
+                                                IsHitTestVisible="False">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="CornerRadius" Value="8,0,0,8"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsTerminalTabSelected}" Value="True">
+                                                            <Setter Property="CornerRadius" Value="0,8,8,0"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                        </Border>
                                     </Canvas>
-                                    <Grid>
+                                    <Grid Panel.ZIndex="1">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="*"/>
@@ -1585,14 +1654,13 @@
                                                 </ControlTemplate>
                                             </RadioButton.Template>
                                             <TextBlock Text="Log"
-                                                       FontSize="12"
-                                                       Margin="0,1,0,0">
+                                                       FontSize="12">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
                                                         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding IsTerminalTabSelected}" Value="False">
-                                                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource SelectionForegroundBrush}"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -1633,14 +1701,13 @@
                                                 </ControlTemplate>
                                             </RadioButton.Template>
                                             <TextBlock Text="Terminal"
-                                                       FontSize="12"
-                                                       Margin="0,1,0,0">
+                                                       FontSize="12">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
                                                         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding IsTerminalTabSelected}" Value="True">
-                                                                <Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                                                                <Setter Property="Foreground" Value="{DynamicResource SelectionForegroundBrush}"/>
                                                             </DataTrigger>
                                                         </Style.Triggers>
                                                     </Style>
@@ -1883,7 +1950,7 @@
                             </Grid.RowDefinitions>
 
                             <Border Grid.Row="0"
-                                    Background="#1AFF3333"
+                                    Background="{DynamicResource ErrorSurfaceBrush}"
                                     BorderBrush="{DynamicResource ErrorBrush}"
                                     BorderThickness="1"
                                     CornerRadius="{StaticResource CornerRadiusSmall}"
@@ -1891,13 +1958,22 @@
                                     Margin="20,16,20,0"
                                     Panel.ZIndex="100"
                                     Visibility="{Binding ValidationError, Converter={StaticResource StringToVisibilityConverter}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="⚠️" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="{Binding ValidationError}"
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Image Source="{DynamicResource IconWarning}"
+                                           Width="16" Height="16"
+                                           VerticalAlignment="Center"
+                                           Margin="0,0,8,0"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding ValidationError}"
                                                Foreground="{DynamicResource ErrorBrush}"
                                                TextWrapping="Wrap"
                                                VerticalAlignment="Center"/>
-                                </StackPanel>
+                                </Grid>
                             </Border>
 
                             <ScrollViewer Grid.Row="1"
@@ -2684,7 +2760,7 @@
                             </Grid.RowDefinitions>
 
                             <Border Grid.Row="0"
-                                    Background="#1AFF3333"
+                                    Background="{DynamicResource ErrorSurfaceBrush}"
                                     BorderBrush="{DynamicResource ErrorBrush}"
                                     BorderThickness="1"
                                     CornerRadius="{StaticResource CornerRadiusSmall}"
@@ -2692,17 +2768,22 @@
                                     Margin="20,16,20,0"
                                     Panel.ZIndex="100"
                                     Visibility="{Binding ValidationError, Converter={StaticResource StringToVisibilityConverter}}">
-                                <StackPanel Orientation="Horizontal">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
                                     <Image Source="{DynamicResource IconError}"
                                            Width="16" Height="16"
                                            VerticalAlignment="Center"
                                            Margin="0,0,8,0"
                                            RenderOptions.BitmapScalingMode="HighQuality"/>
-                                    <TextBlock Text="{Binding ValidationError}"
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding ValidationError}"
                                                Foreground="{DynamicResource ErrorBrush}"
                                                TextWrapping="Wrap"
                                                VerticalAlignment="Center"/>
-                                </StackPanel>
+                                </Grid>
                             </Border>
 
                             <ScrollViewer Grid.Row="1"
@@ -2786,6 +2867,35 @@
                                         <TextBox Text="{Binding Arguments, UpdateSourceTrigger=PropertyChanged}"
                                                  Style="{StaticResource Win11TextBox}"
                                                  Margin="0,0,0,16"/>
+
+                                        <TextBlock Text="Cartella Download (Web)"
+                                                   Style="{StaticResource Win11TextBody}"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,6"/>
+                                        <TextBox Text="{Binding DownloadBaseFolderUrl, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource Win11TextBox}"
+                                                 Margin="0,0,0,8"/>
+
+                                        <TextBlock Text="Installer da Scaricare"
+                                                   Style="{StaticResource Win11TextBody}"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,6"/>
+                                        <Grid Margin="0,0,0,16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox Grid.Column="0"
+                                                      ItemsSource="{Binding RemoteInstallerFiles}"
+                                                      SelectedItem="{Binding DownloadSelectedFileName, Mode=TwoWay}"
+                                                      Style="{StaticResource Win11ComboBox}"
+                                                      Margin="0,0,8,0"/>
+                                            <Button Grid.Column="1"
+                                                    Content="Aggiorna elenco"
+                                                    Command="{Binding RefreshRemoteInstallerFilesCommand}"
+                                                    Style="{StaticResource Win11Button}"
+                                                    Padding="12,6"/>
+                                        </Grid>
                                     </StackPanel>
 
                                     <StackPanel Visibility="{Binding IsScriptMode, Converter={StaticResource BoolToVisibility}}">

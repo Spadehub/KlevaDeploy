@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Parse Version
+        id: ver
+        shell: pwsh
+        run: |
+          $tag = "${env:GITHUB_REF_NAME}"
+          $v = $tag.TrimStart('v','V')
+          $prefix = $v
+          $suffix = ""
+          if ($v.Contains("-")) {
+            $split = $v.Split("-", 2)
+            $prefix = $split[0]
+            $suffix = $split[1]
+          }
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "prefix=$prefix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "suffix=$suffix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Restore
+        run: dotnet restore .\KlevaDeploy.sln
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          $prefix = "${{ steps.ver.outputs.prefix }}"
+          $suffix = "${{ steps.ver.outputs.suffix }}"
+          $args = @(
+            "publish", ".\KlevaDeploy.csproj",
+            "-c", "Release",
+            "-r", "win-x64",
+            "--self-contained", "true",
+            "/p:PublishSingleFile=true",
+            "/p:IncludeNativeLibrariesForSelfExtract=true",
+            "/p:VersionPrefix=$prefix"
+          )
+          if (![string]::IsNullOrWhiteSpace($suffix)) {
+            $args += "/p:VersionSuffix=$suffix"
+          } else {
+            $args += "/p:VersionSuffix="
+          }
+          dotnet @args
+
+      - name: Create Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${env:GITHUB_REF_NAME}"
+          $suffix = "${{ steps.ver.outputs.suffix }}"
+          $exe = "bin\\Release\\net8.0-windows\\win-x64\\publish\\KlevaDeploy.exe"
+          if (!(Test-Path $exe)) { throw "Publish output not found: $exe" }
+          $args = @("release", "create", $tag, $exe, "--title", $tag, "--generate-notes")
+          if (![string]::IsNullOrWhiteSpace($suffix)) { $args += "--prerelease" }
+          gh @args

@@ -41,6 +41,8 @@ public sealed class PresetViewToggleTests
         var installer = new FakeInstallerService();
         var update = new FakeUpdateService();
         var auth = new FakeAuthService();
+        var downloads = new FakeDownloadDirectoryListingService();
+        var appUpdate = new FakeAppUpdateService();
         var processExecution = new FakeProcessExecutionService();
         var licenseScraper = new FakeLicenseScraperService();
         var log = new FakeLogService();
@@ -54,6 +56,8 @@ public sealed class PresetViewToggleTests
             installer,
             update,
             auth,
+            downloads,
+            appUpdate,
             processExecution,
             licenseScraper,
             log,
@@ -97,14 +101,45 @@ public sealed class PresetViewToggleTests
 
     private sealed class FakeUpdateService : IUpdateService
     {
-        public Task CheckAndUpdateAsync(IReadOnlyList<SoftwarePackage> packages, CancellationToken ct = default) =>
+        public Task CheckAndUpdateInstallersAsync(IReadOnlyList<DeploymentProcess> processes, CancellationToken ct = default) =>
             Task.CompletedTask;
+
+        public Task UpdateSingleInstallerAsync(DeploymentProcess process, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task RedownloadSingleInstallerAsync(DeploymentProcess process, CancellationToken ct = default) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class FakeDownloadDirectoryListingService : IDownloadDirectoryListingService
+    {
+        public Task<LatestFolderExeListing?> GetLatestFolderExeListingAsync(string baseFolderUrl, bool pickLatestFolderByName, CancellationToken ct = default) =>
+            Task.FromResult<LatestFolderExeListing?>(null);
+
+        public Task<IReadOnlyList<string>> ListSubfoldersAsync(string baseFolderUrl, bool pickLatestFolderByName, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+
+        public Task<LatestFolderExeListing?> GetFolderExeListingAsync(string folderUrl, CancellationToken ct = default) =>
+            Task.FromResult<LatestFolderExeListing?>(null);
+
+        public Task<string?> ResolveDownloadUrlAsync(string baseFolderUrl, bool pickLatestFolderByName, string selectedFileTemplate, CancellationToken ct = default) =>
+            Task.FromResult<string?>(null);
+
+        public Task<string?> ResolveDownloadUrlAsync(string baseFolderUrl, bool pickLatestFolderByName, string selectedFileTemplate, string? versionFolderName, CancellationToken ct = default) =>
+            Task.FromResult<string?>(null);
+    }
+
+    private sealed class FakeAppUpdateService : IAppUpdateService
+    {
+        public Task<AppUpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default) => Task.FromResult<AppUpdateInfo?>(null);
+        public Task<string?> DownloadUpdateAsync(AppUpdateInfo info, CancellationToken ct = default) => Task.FromResult<string?>(null);
     }
 
     private sealed class FakeAuthService : IAuthService
     {
         public bool IsAuthenticated => false;
         public Task<bool> LoginAsync(string username, string password, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<bool> TryRestoreSessionAsync(CancellationToken ct = default) => Task.FromResult(false);
         public void Logout() { }
     }
 

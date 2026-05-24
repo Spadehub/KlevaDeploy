@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -17,6 +18,8 @@ public sealed class MainViewModel : ObservableObject
     private readonly IInstallerService _installerService;
     private readonly IUpdateService _updateService;
     private readonly IAuthService _authService;
+    private readonly IDownloadDirectoryListingService _downloadDirectoryListingService;
+    private readonly IAppUpdateService _appUpdateService;
     private readonly IProcessExecutionService _processExecutionService;
     private readonly ILicenseScraperService _licenseScraperService;
     private readonly ILogService _log;
@@ -160,6 +163,38 @@ public sealed class MainViewModel : ObservableObject
         set => SetProperty(ref _isTerminalTabSelected, value);
     }
 
+    private bool _isAppUpdateAvailable;
+    public bool IsAppUpdateAvailable
+    {
+        get => _isAppUpdateAvailable;
+        set
+        {
+            if (!SetProperty(ref _isAppUpdateAvailable, value)) return;
+            DownloadAndRestartForUpdateCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private string _availableAppVersion = string.Empty;
+    public string AvailableAppVersion
+    {
+        get => _availableAppVersion;
+        set => SetProperty(ref _availableAppVersion, value);
+    }
+
+    private bool _isDownloadingAppUpdate;
+    public bool IsDownloadingAppUpdate
+    {
+        get => _isDownloadingAppUpdate;
+        set
+        {
+            if (!SetProperty(ref _isDownloadingAppUpdate, value)) return;
+            DownloadAndRestartForUpdateCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private AppUpdateInfo? _pendingAppUpdate;
+    private string? _downloadedAppUpdatePath;
+
     public LogViewModel LogViewModel { get; }
     public CreatePresetViewModel CreatePresetViewModel { get; }
     public CreateProcessViewModel CreateProcessViewModel { get; }
@@ -167,11 +202,17 @@ public sealed class MainViewModel : ObservableObject
     public IAsyncRelayCommand InitializeCommand { get; }
     public IRelayCommand CreateProcessCommand { get; }
     public IRelayCommand<ProcessStepViewModel?> EditProcessCommand { get; }
+    public IRelayCommand<ProcessStepViewModel?> DeleteProcessCommand { get; }
     public IRelayCommand OpenCreatePresetCommand { get; }
     public IRelayCommand<PresetViewModel?> EditPresetCommand { get; }
+    public IRelayCommand<PresetViewModel?> DeletePresetCommand { get; }
     public IRelayCommand ClearPresetSearchCommand { get; }
     public IRelayCommand ClearProcessSearchCommand { get; }
     public IAsyncRelayCommand RunQueueCommand { get; }
+    public IAsyncRelayCommand<ProcessStepViewModel?> UpdateInstallerCommand { get; }
+    public IRelayCommand<ProcessStepViewModel?> RevealInstallerInExplorerCommand { get; }
+    public IAsyncRelayCommand CheckAppUpdateCommand { get; }
+    public IAsyncRelayCommand DownloadAndRestartForUpdateCommand { get; }
     public IRelayCommand OpenLoginCommand { get; }
     public IRelayCommand LogoutCommand { get; }
     public IRelayCommand ToggleThemeCommand { get; }
@@ -182,6 +223,8 @@ public sealed class MainViewModel : ObservableObject
         IInstallerService installerService,
         IUpdateService updateService,
         IAuthService authService,
+        IDownloadDirectoryListingService downloadDirectoryListingService,
+        IAppUpdateService appUpdateService,
         IProcessExecutionService processExecutionService,
         ILicenseScraperService licenseScraperService,
         ILogService log,
@@ -195,6 +238,8 @@ public sealed class MainViewModel : ObservableObject
         _installerService = installerService;
         _updateService = updateService;
         _authService = authService;
+        _downloadDirectoryListingService = downloadDirectoryListingService;
+        _appUpdateService = appUpdateService;
         _processExecutionService = processExecutionService;
         _licenseScraperService = licenseScraperService;
         _log = log;
@@ -219,7 +264,7 @@ public sealed class MainViewModel : ObservableObject
         CreatePresetViewModel.CloseRequested += OnCreatePresetCloseRequested;
         CreatePresetViewModel.DeleteRequested += OnCreatePresetDeleteRequested;
 
-        CreateProcessViewModel = new CreateProcessViewModel();
+        CreateProcessViewModel = new CreateProcessViewModel(_authService, _downloadDirectoryListingService, _log);
         CreateProcessViewModel.DeleteRequested += OnCreateProcessDeleteRequested;
         CreateProcessViewModel.PropertyChanged += (_, e) =>
         {
@@ -236,11 +281,17 @@ public sealed class MainViewModel : ObservableObject
         InitializeCommand = new AsyncRelayCommand(InitializeAsync);
         CreateProcessCommand = new RelayCommand(CreateProcess);
         EditProcessCommand = new RelayCommand<ProcessStepViewModel?>(EditProcess);
+        DeleteProcessCommand = new RelayCommand<ProcessStepViewModel?>(DeleteProcess);
         OpenCreatePresetCommand = new RelayCommand(OpenCreatePreset);
         EditPresetCommand = new RelayCommand<PresetViewModel?>(EditPreset);
+        DeletePresetCommand = new RelayCommand<PresetViewModel?>(DeletePreset);
         ClearPresetSearchCommand = new RelayCommand(ClearPresetSearch);
         ClearProcessSearchCommand = new RelayCommand(ClearProcessSearch);
         RunQueueCommand = new AsyncRelayCommand(RunQueueAsync, CanRunQueue);
+        UpdateInstallerCommand = new AsyncRelayCommand<ProcessStepViewModel?>(UpdateInstallerAsync, CanUpdateInstaller);
+        RevealInstallerInExplorerCommand = new RelayCommand<ProcessStepViewModel?>(RevealInstallerInExplorer, CanRevealInstallerInExplorer);
+        CheckAppUpdateCommand = new AsyncRelayCommand(CheckAppUpdateAsync);
+        DownloadAndRestartForUpdateCommand = new AsyncRelayCommand(DownloadAndRestartForUpdateAsync, CanDownloadAndRestartForUpdate);
         OpenLoginCommand = new RelayCommand(OpenLogin);
         LogoutCommand = new RelayCommand(Logout);
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
@@ -252,9 +303,11 @@ public sealed class MainViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
+        IsAuthenticated = await _authService.TryRestoreSessionAsync();
         await LoadDataAsync();
         // ISSUE 3 FIX: Rebuild execution queue at startup to show all processes
         RebuildExecutionQueue();
+        _ = CheckAppUpdateAsync();
     }
 
     private async Task LoadDataAsync()
@@ -280,18 +333,7 @@ public sealed class MainViewModel : ObservableObject
             ApplyPresetFilter();
             _log.Info($"Loaded {_allPresets.Count} presets and {_allProcesses.Count} processes (Demo Mode: {IsDemoMode}).");
 
-            // Background update check — fire and forget, errors are logged internally
-            var packageList = _allProcesses
-                .Select(p => new SoftwarePackage
-                {
-                    Id = p.Id,
-                    Name = p.Name,
-                    LocalInstallerRelativePath = p.RelativePath,
-                    DownloadUrl = p.DownloadUrl,
-                    RequiresAuth = p.RequiresAuth
-                })
-                .ToList();
-            _ = Task.Run(() => _updateService.CheckAndUpdateAsync(packageList));
+            _ = Task.Run(() => _updateService.CheckAndUpdateInstallersAsync(_allProcesses));
         }
         finally { IsInitializing = false; }
     }
@@ -416,6 +458,39 @@ public sealed class MainViewModel : ObservableObject
 
         ApplyProcessFilter();
         _log.Info($"Execution queue rebuilt: {ExecutionQueue.Count} total processes ({processesInSelectedPresets.Count} in selected presets).");
+    }
+
+    private bool CanUpdateInstaller(ProcessStepViewModel? step) =>
+        step is not null && step.Process.Kind == ProcessKind.Installer && !IsInitializing;
+
+    private async Task UpdateInstallerAsync(ProcessStepViewModel? step)
+    {
+        if (step is null) return;
+
+        try
+        {
+            step.SetStatus("⏳", "Aggiornamento...");
+            await _updateService.UpdateSingleInstallerAsync(step.Process);
+            step.SetStatus("✅", "Verificato");
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Installer update failed for {step.Process.Name}", ex);
+            step.SetStatus("❌", "Errore update");
+        }
+    }
+
+    private bool CanRevealInstallerInExplorer(ProcessStepViewModel? step) =>
+        step is not null && step.Process.Kind == ProcessKind.Installer;
+
+    private void RevealInstallerInExplorer(ProcessStepViewModel? step)
+    {
+        if (step is null) return;
+        if (string.IsNullOrWhiteSpace(step.Process.RelativePath)) return;
+
+        var path = Path.Combine(AppContext.BaseDirectory, step.Process.RelativePath);
+        var args = $"/select,\"{path}\"";
+        Process.Start(new ProcessStartInfo("explorer.exe", args) { UseShellExecute = true });
     }
 
     private void CreateProcess()
@@ -555,6 +630,66 @@ public sealed class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             _log.Error($"Errore durante l'apertura della modifica per il preset {presetVm?.Name}", ex);
+        }
+    }
+
+    private void DeletePreset(PresetViewModel? presetVm)
+    {
+        try
+        {
+            if (presetVm is null) return;
+
+            var confirmed = _dialogService.Confirm(
+                "Elimina preset",
+                $"Sei sicuro di voler eliminare il preset \"{presetVm.Name}\"?");
+            if (!confirmed) return;
+
+            var deleted = _installerService.DeletePreset(presetVm.Preset.Id);
+            if (!deleted)
+            {
+                _log.Error($"Impossibile eliminare il preset: {presetVm.Name}");
+                return;
+            }
+
+            _presetIconService.DeletePresetIcons(presetVm.Preset.Id);
+
+            var wasSelected = presetVm.IsSelected;
+            Presets.Remove(presetVm);
+            ApplyPresetFilter();
+            if (wasSelected) RebuildExecutionQueue();
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Errore durante l'eliminazione del preset", ex);
+        }
+    }
+
+    private void DeleteProcess(ProcessStepViewModel? stepVm)
+    {
+        try
+        {
+            if (stepVm is null) return;
+
+            var confirmed = _dialogService.Confirm(
+                "Elimina processo",
+                $"Sei sicuro di voler eliminare il processo \"{stepVm.Name}\"?\n\nQuesta operazione influirà su tutti i preset che lo utilizzano.");
+            if (!confirmed) return;
+
+            var deleted = _installerService.DeleteProcess(stepVm.Process.Id);
+            if (!deleted)
+            {
+                _log.Error($"Impossibile eliminare il processo: {stepVm.Name}");
+                return;
+            }
+
+            foreach (var presetVm in Presets)
+                presetVm.Refresh();
+
+            RebuildExecutionQueue();
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Errore durante l'eliminazione del processo", ex);
         }
     }
 
@@ -804,6 +939,15 @@ public sealed class MainViewModel : ObservableObject
         if (_authService.IsAuthenticated) { IsAuthenticated = true; return; }
         var vm = _loginVmFactory();
         var win = new LoginWindow(vm);
+        var owner = System.Windows.Application.Current?.Windows.OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive)
+                    ?? System.Windows.Application.Current?.MainWindow;
+        if (owner is null)
+            win.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterScreen;
+        else
+        {
+            win.Owner = owner;
+            win.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner;
+        }
         win.ShowDialog();
         IsAuthenticated = _authService.IsAuthenticated;
     }
@@ -812,6 +956,69 @@ public sealed class MainViewModel : ObservableObject
     {
         _authService.Logout();
         IsAuthenticated = false;
+    }
+
+    private async Task CheckAppUpdateAsync()
+    {
+        try
+        {
+            var info = await _appUpdateService.CheckForUpdateAsync();
+            _pendingAppUpdate = info;
+
+            if (info is null)
+            {
+                IsAppUpdateAvailable = false;
+                AvailableAppVersion = string.Empty;
+            }
+            else
+            {
+                IsAppUpdateAvailable = true;
+                AvailableAppVersion = info.Version;
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Error("App update check failed", ex);
+            IsAppUpdateAvailable = false;
+            AvailableAppVersion = string.Empty;
+        }
+    }
+
+    private bool CanDownloadAndRestartForUpdate() =>
+        IsAppUpdateAvailable && !IsDownloadingAppUpdate && _pendingAppUpdate is not null;
+
+    private async Task DownloadAndRestartForUpdateAsync()
+    {
+        if (_pendingAppUpdate is null) return;
+        if (string.IsNullOrWhiteSpace(Environment.ProcessPath)) return;
+
+        IsDownloadingAppUpdate = true;
+        try
+        {
+            var path = await _appUpdateService.DownloadUpdateAsync(_pendingAppUpdate);
+            if (string.IsNullOrWhiteSpace(path)) return;
+
+            _downloadedAppUpdatePath = path;
+            var pid = Environment.ProcessId;
+            var target = Environment.ProcessPath!;
+
+            Process.Start(new ProcessStartInfo(path, $"--apply-update --pid {pid} --target \"{target}\"")
+            {
+                UseShellExecute = true
+            });
+
+            var app = System.Windows.Application.Current;
+            if (app is not null) app.Shutdown();
+            else Environment.Exit(0);
+        }
+        catch (Exception ex)
+        {
+            _log.Error("App update download failed", ex);
+        }
+        finally
+        {
+            IsDownloadingAppUpdate = false;
+        }
     }
 
     private void ToggleTheme()

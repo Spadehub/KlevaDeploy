@@ -20,6 +20,7 @@
             <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility"/>
             <conv:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
             <conv:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+            <conv:CollectionNotEmptyToVisibilityConverter x:Key="CollectionNotEmptyToVisibilityConverter"/>
             <conv:BusyToTextConverter x:Key="BusyToTextConverter"/>
             <conv:OrderToDisplayConverter x:Key="OrderToDisplayConverter"/>
             <conv:IconVariantToImageSourceConverter x:Key="IconVariantToImageSourceConverter"/>
