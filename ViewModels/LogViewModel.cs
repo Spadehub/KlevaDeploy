@@ -75,6 +75,7 @@ public sealed partial class LogViewModel : ObservableObject
     [RelayCommand]
     private void CopyTerminalLine(int selectionStart)
     {
+        if (selectionStart < 0) return;
         var line = TryExtractLine(TerminalText, selectionStart);
         if (line is null) return;
         _clipboard.SetText(line);
@@ -116,6 +117,7 @@ public sealed partial class LogViewModel : ObservableObject
     [RelayCommand]
     private void CopyLogLine(int selectionStart)
     {
+        if (selectionStart < 0) return;
         var line = TryExtractLine(LogText, selectionStart);
         if (line is null) return;
         _clipboard.SetText(line);

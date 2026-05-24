@@ -23,6 +23,13 @@ public static class TextBoxLineHoverBehavior
             typeof(TextBoxLineHoverBehavior),
             new PropertyMetadata(Brushes.Transparent, OnHoverBrushChanged));
 
+    public static readonly DependencyProperty HoverCharacterIndexProperty =
+        DependencyProperty.RegisterAttached(
+            "HoverCharacterIndex",
+            typeof(int),
+            typeof(TextBoxLineHoverBehavior),
+            new PropertyMetadata(-1));
+
     private static readonly DependencyProperty AdornerProperty =
         DependencyProperty.RegisterAttached(
             "Adorner",
@@ -41,6 +48,12 @@ public static class TextBoxLineHoverBehavior
 
     public static Brush GetHoverBrush(DependencyObject element) =>
         (Brush)element.GetValue(HoverBrushProperty);
+
+    public static void SetHoverCharacterIndex(DependencyObject element, int value) =>
+        element.SetValue(HoverCharacterIndexProperty, value);
+
+    public static int GetHoverCharacterIndex(DependencyObject element) =>
+        (int)element.GetValue(HoverCharacterIndexProperty);
 
     private static void OnIsEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -95,10 +108,12 @@ public static class TextBoxLineHoverBehavior
         var index = textBox.GetCharacterIndexFromPoint(e.GetPosition(textBox), true);
         if (index < 0)
         {
+            textBox.SetValue(HoverCharacterIndexProperty, -1);
             adorner.SetHoverRect(null);
             return;
         }
 
+        textBox.SetValue(HoverCharacterIndexProperty, index);
         var lineIndex = textBox.GetLineIndexFromCharacterIndex(index);
         if (lineIndex < 0)
         {
@@ -122,6 +137,7 @@ public static class TextBoxLineHoverBehavior
     {
         if (sender is not TextBox textBox) return;
         var adorner = (LineHoverAdorner?)textBox.GetValue(AdornerProperty);
+        textBox.SetValue(HoverCharacterIndexProperty, -1);
         adorner?.SetHoverRect(null);
     }
 

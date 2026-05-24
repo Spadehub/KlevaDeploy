@@ -39,7 +39,14 @@ public sealed class AppUpdateService : IAppUpdateService
         using var response = await SendWithRedirectsAsync(request, ct);
         if (response is null || !response.IsSuccessStatusCode)
         {
-            _log.Warning($"App update check failed: HTTP {(int)(response?.StatusCode ?? 0)} (owner={owner}, repo={repo})");
+            if (response?.StatusCode == HttpStatusCode.NotFound)
+            {
+                _log.Warning($"App update check failed: HTTP 404 (owner={owner}, repo={repo}). Repo missing/private or no GitHub Releases yet.");
+            }
+            else
+            {
+                _log.Warning($"App update check failed: HTTP {(int)(response?.StatusCode ?? 0)} (owner={owner}, repo={repo})");
+            }
             return null;
         }
 
