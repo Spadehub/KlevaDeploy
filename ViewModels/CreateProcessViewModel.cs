@@ -4,12 +4,18 @@ using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KlevaDeploy.Models;
+using KlevaDeploy.Services.Interfaces;
 using Microsoft.Win32;
 
 namespace KlevaDeploy.ViewModels;
 
 public sealed class CreateProcessViewModel : ObservableObject
 {
+    private readonly IAuthService? _authService;
+    private readonly IDownloadDirectoryListingService? _downloadDirectoryListingService;
+    private readonly ILogService? _log;
+    private string _latestRemoteFolderName = string.Empty;
+
     private string? _existingProcessId;
     public string? EditingProcessId => _existingProcessId;
 
@@ -74,6 +80,26 @@ public sealed class CreateProcessViewModel : ObservableObject
         get => _requiresInternet;
         set => SetProperty(ref _requiresInternet, value);
     }
+
+    private string _downloadBaseFolderUrl = string.Empty;
+    public string DownloadBaseFolderUrl
+    {
+        get => _downloadBaseFolderUrl;
+        set
+        {
+            if (!SetProperty(ref _downloadBaseFolderUrl, value)) return;
+            RefreshRemoteInstallerFilesCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private string _downloadSelectedFileName = string.Empty;
+    public string DownloadSelectedFileName
+    {
+        get => _downloadSelectedFileName;
+        set => SetProperty(ref _downloadSelectedFileName, value);
+    }
+
+    public ObservableCollection<string> RemoteInstallerFiles { get; } = new();
 
     private string _selectedIconKey = "IconPackage";
     public string SelectedIconKey
@@ -152,15 +178,21 @@ public sealed class CreateProcessViewModel : ObservableObject
     public IRelayCommand SaveCommand { get; }
     public IRelayCommand CancelCommand { get; }
     public IRelayCommand DeleteCommand { get; }
+    public IAsyncRelayCommand RefreshRemoteInstallerFilesCommand { get; }
 
     public event EventHandler? DeleteRequested;
 
-    public CreateProcessViewModel()
+    public CreateProcessViewModel(IAuthService? authService = null, IDownloadDirectoryListingService? downloadDirectoryListingService = null, ILogService? log = null)
     {
+        _authService = authService;
+        _downloadDirectoryListingService = downloadDirectoryListingService;
+        _log = log;
+
         BrowseFileCommand = new RelayCommand(BrowseFile);
         SaveCommand = new RelayCommand(Save);
         CancelCommand = new RelayCommand(Cancel);
         DeleteCommand = new RelayCommand(RequestDelete);
+        RefreshRemoteInstallerFilesCommand = new AsyncRelayCommand(RefreshRemoteInstallerFilesAsync, CanRefreshRemoteInstallerFiles);
     }
 
     public void InitializeNew()
@@ -174,6 +206,10 @@ public sealed class CreateProcessViewModel : ObservableObject
         ScriptContent = string.Empty;
         RunAsAdmin = false;
         RequiresInternet = false;
+        DownloadBaseFolderUrl = string.Empty;
+        DownloadSelectedFileName = string.Empty;
+        RemoteInstallerFiles.Clear();
+        _latestRemoteFolderName = string.Empty;
         SelectedIconKey = "IconPackage";
         Title = "Nuovo Processo";
         IsEditMode = false;
@@ -194,6 +230,12 @@ public sealed class CreateProcessViewModel : ObservableObject
         ScriptContent = process.ScriptContent;
         RunAsAdmin = process.RunAsAdmin;
         RequiresInternet = process.RequiresInternet;
+        DownloadBaseFolderUrl = process.DownloadBaseFolderUrl;
+        DownloadSelectedFileName = !string.IsNullOrWhiteSpace(process.DownloadSelectedFileName)
+            ? process.DownloadSelectedFileName
+            : process.DownloadSelectedFileTemplate;
+        RemoteInstallerFiles.Clear();
+        _latestRemoteFolderName = string.Empty;
         SelectedIconKey = process.IconKey;
         Title = "Modifica Processo";
         IsEditMode = true;
@@ -259,6 +301,10 @@ public sealed class CreateProcessViewModel : ObservableObject
         if (IsInstallerMode)
         {
             process.RelativePath = FilePath;
+            process.DownloadBaseFolderUrl = DownloadBaseFolderUrl.Trim();
+            process.DownloadSelectedFileName = DownloadSelectedFileName.Trim();
+            process.DownloadSelectedFileTemplate = BuildDownloadTemplate(process.DownloadSelectedFileName);
+            process.DownloadPickLatestFolderByName = !string.IsNullOrWhiteSpace(process.DownloadBaseFolderUrl);
         }
         else if (IsScriptMode)
         {
@@ -307,7 +353,8 @@ public sealed class CreateProcessViewModel : ObservableObject
                 return false;
             }
 
-            if (!File.Exists(FilePath))
+            var hasRemote = !string.IsNullOrWhiteSpace(DownloadBaseFolderUrl);
+            if (!hasRemote && !File.Exists(FilePath))
             {
                 ValidationError = "Il file specificato non esiste.";
                 return false;
@@ -317,6 +364,12 @@ public sealed class CreateProcessViewModel : ObservableObject
             if (ext != ".exe" && ext != ".msi" && ext != ".zip")
             {
                 ValidationError = "L'installer deve essere un file .exe, .msi o .zip.";
+                return false;
+            }
+
+            if (hasRemote && string.IsNullOrWhiteSpace(DownloadSelectedFileName))
+            {
+                ValidationError = "Seleziona l'installer remoto da scaricare.";
                 return false;
             }
         }
@@ -340,6 +393,69 @@ public sealed class CreateProcessViewModel : ObservableObject
 
         ValidationError = null;
         return true;
+    }
+
+    private bool CanRefreshRemoteInstallerFiles() =>
+        !string.IsNullOrWhiteSpace(DownloadBaseFolderUrl);
+
+    private async Task RefreshRemoteInstallerFilesAsync()
+    {
+        ValidationError = null;
+
+        if (_downloadDirectoryListingService is null || _authService is null)
+        {
+            ValidationError = "Funzione download non disponibile.";
+            return;
+        }
+
+        if (!_authService.IsAuthenticated)
+        {
+            ValidationError = "Effettua il login prima di caricare gli installer dal portale.";
+            return;
+        }
+
+        try
+        {
+            var url = DownloadBaseFolderUrl.Trim();
+            _log?.Info($"Loading remote installers list from: {url}");
+
+            var listing = await _downloadDirectoryListingService.GetLatestFolderExeListingAsync(
+                url,
+                pickLatestFolderByName: true);
+
+            RemoteInstallerFiles.Clear();
+            _latestRemoteFolderName = listing?.FolderName ?? string.Empty;
+
+            foreach (var f in listing?.ExeFiles ?? Array.Empty<string>())
+                RemoteInstallerFiles.Add(f);
+
+            if (RemoteInstallerFiles.Count == 0)
+            {
+                ValidationError = "Nessun installer .exe trovato nella cartella.";
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(DownloadSelectedFileName) &&
+                !RemoteInstallerFiles.Any(f => string.Equals(f, DownloadSelectedFileName, StringComparison.OrdinalIgnoreCase)))
+            {
+                DownloadSelectedFileName = string.Empty;
+            }
+        }
+        catch (Exception ex)
+        {
+            _log?.Error("Failed to load remote installers list", ex);
+            ValidationError = "Errore durante il caricamento elenco installer.";
+        }
+    }
+
+    private string BuildDownloadTemplate(string selectedFileName)
+    {
+        if (string.IsNullOrWhiteSpace(selectedFileName)) return string.Empty;
+        if (string.IsNullOrWhiteSpace(_latestRemoteFolderName)) return selectedFileName;
+
+        return selectedFileName.Contains(_latestRemoteFolderName, StringComparison.OrdinalIgnoreCase)
+            ? selectedFileName.Replace(_latestRemoteFolderName, "{VERSION}", StringComparison.OrdinalIgnoreCase)
+            : selectedFileName;
     }
 }
 

@@ -8,5 +8,6 @@ public interface IAuthService
     /// Stores the auth cookie in the shared CookieContainer for the session.
     /// </summary>
     Task<bool> LoginAsync(string username, string password, CancellationToken ct = default);
+    Task<bool> TryRestoreSessionAsync(CancellationToken ct = default);
     void Logout();
 }

@@ -71,25 +71,30 @@
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0"
-                        Background="#1AFF3333"
+                        Background="{DynamicResource ErrorSurfaceBrush}"
                         BorderBrush="{DynamicResource ErrorBrush}"
                         BorderThickness="1"
-                        CornerRadius="4"
+                        CornerRadius="{StaticResource CornerRadiusSmall}"
                         Padding="12,8"
                         Margin="20,16,20,0"
                         Panel.ZIndex="100"
                         Visibility="{Binding ValidationError, Converter={StaticResource StringToVisibilityConverter}}">
-                    <StackPanel Orientation="Horizontal">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
                         <Image Source="{DynamicResource IconError}"
                                Width="16" Height="16"
                                VerticalAlignment="Center"
                                Margin="0,0,8,0"
                                RenderOptions.BitmapScalingMode="HighQuality"/>
                         <TextBlock Text="{Binding ValidationError}"
+                                   Grid.Column="1"
                                    Foreground="{DynamicResource ErrorBrush}"
                                    TextWrapping="Wrap"
                                    VerticalAlignment="Center"/>
-                    </StackPanel>
+                    </Grid>
                 </Border>
 
                 <ScrollViewer x:Name="ContentScrollViewer"
@@ -254,10 +259,10 @@
                     </StackPanel>
 
                     <!-- Warning for Edit Mode -->
-                    <Border Background="#1A0078D4"
+                    <Border Background="{DynamicResource InfoSurfaceBrush}"
                             BorderBrush="{DynamicResource AccentBrush}"
                             BorderThickness="1"
-                            CornerRadius="4"
+                            CornerRadius="{StaticResource CornerRadiusSmall}"
                             Padding="12,8"
                             Margin="0,0,0,16"
                             Visibility="{Binding IsEditMode, Converter={StaticResource BoolToVis}}">

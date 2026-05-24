@@ -2,6 +2,13 @@ namespace KlevaDeploy.Models;
 
 public enum ProcessKind { Installer, PowerShellScript, BatchScript, BashScript, RegistryFile, ConfigAction }
 
+public enum InstallerSourceMode
+{
+    StaticLocal,
+    StaticWeb,
+    DynamicWeb
+}
+
 public class DeploymentProcess
 {
     public string Id { get; set; } = string.Empty;
@@ -14,6 +21,13 @@ public class DeploymentProcess
     public string Arguments { get; set; } = string.Empty;
     /// <summary>URL to download/update this process's file (requires auth if RequiresAuth=true).</summary>
     public string DownloadUrl { get; set; } = string.Empty;
+    public string DownloadBaseFolderUrl { get; set; } = string.Empty;
+    public string DownloadSelectedFileName { get; set; } = string.Empty;
+    public string DownloadSelectedFileTemplate { get; set; } = string.Empty;
+    public bool DownloadPickLatestFolderByName { get; set; }
+    public InstallerSourceMode InstallerSourceMode { get; set; } = InstallerSourceMode.StaticLocal;
+    public bool DownloadUseLatestVersion { get; set; } = true;
+    public string DownloadVersionFolderName { get; set; } = string.Empty;
     public bool RequiresAuth { get; set; }
     public bool RequiresLicense { get; set; }
     public string LicenseExcelColumn { get; set; } = string.Empty;

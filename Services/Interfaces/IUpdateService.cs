@@ -1,13 +1,8 @@
-using KlevaDeploy.Models;
-
 namespace KlevaDeploy.Services.Interfaces;
 
 public interface IUpdateService
 {
-    /// <summary>
-    /// Checks internet connectivity. If online and authenticated,
-    /// downloads updated installers and overwrites local fallback copies.
-    /// Runs silently in the background.
-    /// </summary>
-    Task CheckAndUpdateAsync(IReadOnlyList<SoftwarePackage> packages, CancellationToken ct = default);
+    Task CheckAndUpdateInstallersAsync(IReadOnlyList<KlevaDeploy.Models.DeploymentProcess> processes, CancellationToken ct = default);
+    Task UpdateSingleInstallerAsync(KlevaDeploy.Models.DeploymentProcess process, CancellationToken ct = default);
+    Task RedownloadSingleInstallerAsync(KlevaDeploy.Models.DeploymentProcess process, CancellationToken ct = default);
 }

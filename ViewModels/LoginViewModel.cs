@@ -8,6 +8,7 @@ namespace KlevaDeploy.ViewModels;
 public sealed class LoginViewModel : ObservableObject
 {
     private readonly IAuthService _authService;
+    private CancellationTokenSource? _loginCts;
 
     private string _username = string.Empty;
     public string Username
@@ -52,11 +53,13 @@ public sealed class LoginViewModel : ObservableObject
     public bool LoginSucceeded { get; private set; }
 
     public IAsyncRelayCommand LoginCommand { get; }
+    public IRelayCommand CancelCommand { get; }
 
     public LoginViewModel(IAuthService authService)
     {
         _authService = authService;
         LoginCommand = new AsyncRelayCommand(LoginAsync, CanLogin);
+        CancelCommand = new RelayCommand(Cancel);
     }
 
     private async Task LoginAsync()
@@ -65,7 +68,10 @@ public sealed class LoginViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            var success = await _authService.LoginAsync(Username, Password);
+            _loginCts?.Dispose();
+            _loginCts = new CancellationTokenSource();
+
+            var success = await _authService.LoginAsync(Username, Password, _loginCts.Token);
             if (success)
             {
                 LoginSucceeded = true;
@@ -77,10 +83,21 @@ public sealed class LoginViewModel : ObservableObject
                 ErrorMessage = "Credenziali non valide. Riprovare.";
             }
         }
+        catch (OperationCanceledException)
+        {
+            ErrorMessage = "Accesso annullato.";
+        }
         finally { IsBusy = false; }
     }
 
     private bool CanLogin() => !IsBusy && !string.IsNullOrWhiteSpace(Username) && !string.IsNullOrWhiteSpace(Password);
+
+    private void Cancel()
+    {
+        _loginCts?.Cancel();
+        LoginSucceeded = false;
+        CloseRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>Raised when the VM wants the LoginWindow to close.</summary>
     public event EventHandler? CloseRequested;

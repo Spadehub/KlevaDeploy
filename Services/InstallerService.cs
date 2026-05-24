@@ -46,6 +46,7 @@ public sealed class InstallerService : IInstallerService
             {
                 var json = File.ReadAllText(_processesFilePath);
                 _userCreatedProcesses = JsonSerializer.Deserialize<List<DeploymentProcess>>(json) ?? new();
+                NormalizeInstallerProcesses(_userCreatedProcesses);
                 _log.Info($"Loaded {_userCreatedProcesses.Count} custom processes from storage.");
             }
             
@@ -598,6 +599,41 @@ public sealed class InstallerService : IInstallerService
             else merged.Add(custom);
         }
 
+        NormalizeInstallerProcesses(merged);
         _cachedProcesses = merged;
+    }
+
+    private static void NormalizeInstallerProcesses(List<DeploymentProcess> processes)
+    {
+        foreach (var p in processes)
+        {
+            if (p.Kind != ProcessKind.Installer) continue;
+
+            var inferred =
+                !string.IsNullOrWhiteSpace(p.DownloadBaseFolderUrl) ? InstallerSourceMode.DynamicWeb :
+                !string.IsNullOrWhiteSpace(p.DownloadUrl) ? InstallerSourceMode.StaticWeb :
+                InstallerSourceMode.StaticLocal;
+
+            if (p.InstallerSourceMode == default && inferred != InstallerSourceMode.StaticLocal)
+                p.InstallerSourceMode = inferred;
+
+            if (p.InstallerSourceMode == InstallerSourceMode.StaticLocal)
+            {
+                p.DownloadUrl ??= string.Empty;
+                p.DownloadBaseFolderUrl ??= string.Empty;
+                p.DownloadSelectedFileName ??= string.Empty;
+                p.DownloadSelectedFileTemplate ??= string.Empty;
+                p.DownloadVersionFolderName ??= string.Empty;
+            }
+
+            if (p.InstallerSourceMode != InstallerSourceMode.DynamicWeb)
+            {
+                p.DownloadBaseFolderUrl ??= string.Empty;
+                p.DownloadSelectedFileName ??= string.Empty;
+                p.DownloadSelectedFileTemplate ??= string.Empty;
+                p.DownloadVersionFolderName ??= string.Empty;
+                p.DownloadUseLatestVersion = true;
+            }
+        }
     }
 }
