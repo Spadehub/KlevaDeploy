@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text.Json;
 using KlevaDeploy.Models;
@@ -14,6 +15,7 @@ public sealed class AppUpdateService : IAppUpdateService
     private const string DefaultRepo = "KlevaDeploy";
     private const string LegacyRepo = "InstallerIT";
     private const string DefaultAssetName = "KlevaDeploy.exe";
+    private const string TokenEnvVar = "KLEVADEPLOY_GITHUB_TOKEN";
 
     private readonly HttpClient _httpClient;
     private readonly ILogService _log;
@@ -33,6 +35,7 @@ public sealed class AppUpdateService : IAppUpdateService
             : new[] { repoFromEnv.Trim() };
         var assetName = GetSetting("KLEVADEPLOY_GITHUB_ASSET_NAME", DefaultAssetName);
         var includePrereleases = GetBoolSetting("KLEVADEPLOY_GITHUB_INCLUDE_PRERELEASES", false);
+        var token = Environment.GetEnvironmentVariable(TokenEnvVar);
 
         EnsureDefaultHeaders();
 
@@ -44,7 +47,8 @@ public sealed class AppUpdateService : IAppUpdateService
                 : $"https://api.github.com/repos/{owner}/{repo}/releases/latest";
 
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            using var response = await SendWithRedirectsAsync(request, ct);
+            ApplyGitHubAuth(request, token);
+            using var response = await SendWithRedirectsAsync(request, token, ct);
             lastStatus = response?.StatusCode;
 
             if (response is null || !response.IsSuccessStatusCode)
@@ -94,7 +98,10 @@ public sealed class AppUpdateService : IAppUpdateService
 
         if (lastStatus == HttpStatusCode.NotFound)
         {
-            _log.Warning($"App update check failed: HTTP 404 (owner={owner}, repo={string.Join("/", reposToTry)}). Repo missing/private or no GitHub Releases yet.");
+            var hint = string.IsNullOrWhiteSpace(token)
+                ? $" If the repo is private, set {TokenEnvVar}."
+                : string.Empty;
+            _log.Warning($"App update check failed: HTTP 404 (owner={owner}, repo={string.Join("/", reposToTry)}). Repo missing/private or no GitHub Releases yet.{hint}");
         }
 
         return null;
@@ -103,6 +110,7 @@ public sealed class AppUpdateService : IAppUpdateService
     public async Task<string?> DownloadUpdateAsync(AppUpdateInfo info, CancellationToken ct = default)
     {
         EnsureDefaultHeaders();
+        var token = Environment.GetEnvironmentVariable(TokenEnvVar);
 
         var storageDir = GetStorageDir();
         var dir = Path.Combine(storageDir, "app_updates");
@@ -113,7 +121,8 @@ public sealed class AppUpdateService : IAppUpdateService
         var tempPath = destPath + ".download";
 
         using var request = new HttpRequestMessage(HttpMethod.Get, info.DownloadUrl);
-        using var response = await SendWithRedirectsAsync(request, ct);
+        ApplyGitHubAuth(request, token);
+        using var response = await SendWithRedirectsAsync(request, token, ct);
         if (response is null || !response.IsSuccessStatusCode)
         {
             _log.Warning($"App update download failed: HTTP {(int)(response?.StatusCode ?? 0)}");
@@ -136,7 +145,7 @@ public sealed class AppUpdateService : IAppUpdateService
             _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "KlevaDeploy");
     }
 
-    private async Task<HttpResponseMessage?> SendWithRedirectsAsync(HttpRequestMessage request, CancellationToken ct)
+    private async Task<HttpResponseMessage?> SendWithRedirectsAsync(HttpRequestMessage request, string? token, CancellationToken ct)
     {
         const int maxRedirects = 10;
         HttpResponseMessage? response = null;
@@ -159,6 +168,7 @@ public sealed class AppUpdateService : IAppUpdateService
 
             currentRequest.Dispose();
             currentRequest = new HttpRequestMessage(HttpMethod.Get, nextUri);
+            ApplyGitHubAuth(currentRequest, token);
         }
 
         return response;
@@ -166,6 +176,26 @@ public sealed class AppUpdateService : IAppUpdateService
 
     private static bool IsRedirectStatusCode(HttpStatusCode code) =>
         code is HttpStatusCode.Moved or HttpStatusCode.Redirect or HttpStatusCode.RedirectMethod or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect;
+
+    private static void ApplyGitHubAuth(HttpRequestMessage request, string? token)
+    {
+        if (request.RequestUri is null) return;
+        if (!IsGitHubHost(request.RequestUri.Host)) return;
+
+        request.Headers.TryAddWithoutValidation("User-Agent", "KlevaDeploy");
+        request.Headers.TryAddWithoutValidation("Accept", "application/vnd.github+json");
+
+        if (string.IsNullOrWhiteSpace(token)) return;
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Trim());
+    }
+
+    private static bool IsGitHubHost(string host)
+    {
+        if (string.IsNullOrWhiteSpace(host)) return false;
+        return host.EndsWith("github.com", StringComparison.OrdinalIgnoreCase)
+               || host.EndsWith("githubusercontent.com", StringComparison.OrdinalIgnoreCase)
+               || host.EndsWith("githubassets.com", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string GetSetting(string envVar, string fallback)
     {
