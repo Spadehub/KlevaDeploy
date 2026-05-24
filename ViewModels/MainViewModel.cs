@@ -210,6 +210,7 @@ public sealed class MainViewModel : ObservableObject
     public IRelayCommand ClearProcessSearchCommand { get; }
     public IAsyncRelayCommand RunQueueCommand { get; }
     public IAsyncRelayCommand<ProcessStepViewModel?> UpdateInstallerCommand { get; }
+    public IAsyncRelayCommand<ProcessStepViewModel?> RedownloadInstallerCommand { get; }
     public IRelayCommand<ProcessStepViewModel?> RevealInstallerInExplorerCommand { get; }
     public IAsyncRelayCommand CheckAppUpdateCommand { get; }
     public IAsyncRelayCommand DownloadAndRestartForUpdateCommand { get; }
@@ -289,6 +290,7 @@ public sealed class MainViewModel : ObservableObject
         ClearProcessSearchCommand = new RelayCommand(ClearProcessSearch);
         RunQueueCommand = new AsyncRelayCommand(RunQueueAsync, CanRunQueue);
         UpdateInstallerCommand = new AsyncRelayCommand<ProcessStepViewModel?>(UpdateInstallerAsync, CanUpdateInstaller);
+        RedownloadInstallerCommand = new AsyncRelayCommand<ProcessStepViewModel?>(RedownloadInstallerAsync, CanRedownloadInstaller);
         RevealInstallerInExplorerCommand = new RelayCommand<ProcessStepViewModel?>(RevealInstallerInExplorer, CanRevealInstallerInExplorer);
         CheckAppUpdateCommand = new AsyncRelayCommand(CheckAppUpdateAsync);
         DownloadAndRestartForUpdateCommand = new AsyncRelayCommand(DownloadAndRestartForUpdateAsync, CanDownloadAndRestartForUpdate);
@@ -477,6 +479,30 @@ public sealed class MainViewModel : ObservableObject
         {
             _log.Error($"Installer update failed for {step.Process.Name}", ex);
             step.SetStatus("❌", "Errore update");
+        }
+    }
+
+    private bool CanRedownloadInstaller(ProcessStepViewModel? step) =>
+        step is not null &&
+        step.Process.Kind == ProcessKind.Installer &&
+        step.Process.InstallerSourceMode == InstallerSourceMode.StaticWeb &&
+        !string.IsNullOrWhiteSpace(step.Process.DownloadUrl) &&
+        !IsInitializing;
+
+    private async Task RedownloadInstallerAsync(ProcessStepViewModel? step)
+    {
+        if (step is null) return;
+
+        try
+        {
+            step.SetStatus("⏳", "Download...");
+            await _updateService.RedownloadSingleInstallerAsync(step.Process);
+            step.SetStatus("✅", "Scaricato");
+        }
+        catch (Exception ex)
+        {
+            _log.Error($"Installer redownload failed for {step.Process.Name}", ex);
+            step.SetStatus("❌", "Errore download");
         }
     }
 

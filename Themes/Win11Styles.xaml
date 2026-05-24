@@ -336,7 +336,7 @@
                             BorderThickness="1"
                             CornerRadius="{StaticResource CornerRadiusMedium}"
                             Padding="4"
-                            Effect="{StaticResource CardShadow}">
+                            Effect="{DynamicResource CardShadow}">
                         <StackPanel IsItemsHost="True"
                                     KeyboardNavigation.DirectionalNavigation="Cycle"/>
                     </Border>

@@ -184,7 +184,7 @@
                             <TextBox Grid.Row="5"
                                      Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
                                      Style="{StaticResource Win11TextBox}"
-                                     Height="36"/>
+                                     Height="40"/>
 
                             <TextBlock Grid.Row="7"
                                        Text="Password"
@@ -194,7 +194,7 @@
                             <PasswordBox Grid.Row="8"
                                          x:Name="PasswordBox"
                                          Style="{StaticResource Win11PasswordBox}"
-                                         Height="36"/>
+                                         Height="40"/>
 
                             <Grid Grid.Row="10">
                                 <Grid.ColumnDefinitions>
@@ -208,7 +208,7 @@
                                         Command="{Binding LoginCommand}"
                                         IsDefault="True"
                                         HorizontalAlignment="Stretch"
-                                        Height="36"
+                                        Height="40"
                                         Style="{StaticResource Win11AccentButton}"
                                         IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
 
@@ -216,7 +216,7 @@
                                         Content="Annulla"
                                         Command="{Binding CancelCommand}"
                                         IsCancel="True"
-                                        Height="36"
+                                        Height="40"
                                         Style="{StaticResource Win11Button}"
                                         IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
                             </Grid>
