@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KlevaDeploy.Models;
@@ -11,6 +12,7 @@ namespace KlevaDeploy.ViewModels;
 
 public sealed class CreateProcessViewModel : ObservableObject
 {
+    private const string LatestVersionLabel = "Ultima disponibile";
     private readonly IAuthService? _authService;
     private readonly IDownloadDirectoryListingService? _downloadDirectoryListingService;
     private readonly ILogService? _log;
@@ -92,6 +94,13 @@ public sealed class CreateProcessViewModel : ObservableObject
         }
     }
 
+    private string _downloadUrl = string.Empty;
+    public string DownloadUrl
+    {
+        get => _downloadUrl;
+        set => SetProperty(ref _downloadUrl, value);
+    }
+
     private string _downloadSelectedFileName = string.Empty;
     public string DownloadSelectedFileName
     {
@@ -100,6 +109,60 @@ public sealed class CreateProcessViewModel : ObservableObject
     }
 
     public ObservableCollection<string> RemoteInstallerFiles { get; } = new();
+
+    public ObservableCollection<string> RemoteInstallerVersions { get; } = new();
+
+    private string _downloadSelectedVersion = LatestVersionLabel;
+    public string DownloadSelectedVersion
+    {
+        get => _downloadSelectedVersion;
+        set => SetProperty(ref _downloadSelectedVersion, value);
+    }
+
+    private InstallerSourceMode _installerSourceMode = InstallerSourceMode.StaticLocal;
+    public InstallerSourceMode InstallerSourceMode
+    {
+        get => _installerSourceMode;
+        set
+        {
+            if (!SetProperty(ref _installerSourceMode, value)) return;
+            OnPropertyChanged(nameof(IsInstallerSourceLocal));
+            OnPropertyChanged(nameof(IsInstallerSourceStaticWeb));
+            OnPropertyChanged(nameof(IsInstallerSourceDynamicWeb));
+            RefreshRemoteInstallerFilesCommand.NotifyCanExecuteChanged();
+            ValidationError = null;
+        }
+    }
+
+    public bool IsInstallerSourceLocal
+    {
+        get => InstallerSourceMode == InstallerSourceMode.StaticLocal;
+        set
+        {
+            if (!value) return;
+            InstallerSourceMode = InstallerSourceMode.StaticLocal;
+        }
+    }
+
+    public bool IsInstallerSourceStaticWeb
+    {
+        get => InstallerSourceMode == InstallerSourceMode.StaticWeb;
+        set
+        {
+            if (!value) return;
+            InstallerSourceMode = InstallerSourceMode.StaticWeb;
+        }
+    }
+
+    public bool IsInstallerSourceDynamicWeb
+    {
+        get => InstallerSourceMode == InstallerSourceMode.DynamicWeb;
+        set
+        {
+            if (!value) return;
+            InstallerSourceMode = InstallerSourceMode.DynamicWeb;
+        }
+    }
 
     private string _selectedIconKey = "IconPackage";
     public string SelectedIconKey
@@ -201,14 +264,18 @@ public sealed class CreateProcessViewModel : ObservableObject
         ProcessName = string.Empty;
         Description = string.Empty;
         SelectedProcessKind = ProcessKind.Installer;
+        InstallerSourceMode = InstallerSourceMode.StaticLocal;
         FilePath = string.Empty;
         Arguments = string.Empty;
         ScriptContent = string.Empty;
         RunAsAdmin = false;
         RequiresInternet = false;
         DownloadBaseFolderUrl = string.Empty;
+        DownloadUrl = string.Empty;
         DownloadSelectedFileName = string.Empty;
+        DownloadSelectedVersion = LatestVersionLabel;
         RemoteInstallerFiles.Clear();
+        RemoteInstallerVersions.Clear();
         _latestRemoteFolderName = string.Empty;
         SelectedIconKey = "IconPackage";
         Title = "Nuovo Processo";
@@ -225,16 +292,22 @@ public sealed class CreateProcessViewModel : ObservableObject
         ProcessName = process.Name;
         Description = process.Description;
         SelectedProcessKind = process.Kind;
-        FilePath = process.RelativePath;
+        InstallerSourceMode = InferInstallerSourceMode(process);
+        FilePath = InstallerSourceMode == InstallerSourceMode.StaticLocal ? process.RelativePath : string.Empty;
         Arguments = process.Arguments;
         ScriptContent = process.ScriptContent;
         RunAsAdmin = process.RunAsAdmin;
         RequiresInternet = process.RequiresInternet;
         DownloadBaseFolderUrl = process.DownloadBaseFolderUrl;
+        DownloadUrl = process.DownloadUrl;
         DownloadSelectedFileName = !string.IsNullOrWhiteSpace(process.DownloadSelectedFileName)
             ? process.DownloadSelectedFileName
             : process.DownloadSelectedFileTemplate;
+        DownloadSelectedVersion = (!process.DownloadUseLatestVersion && !string.IsNullOrWhiteSpace(process.DownloadVersionFolderName))
+            ? process.DownloadVersionFolderName
+            : LatestVersionLabel;
         RemoteInstallerFiles.Clear();
+        RemoteInstallerVersions.Clear();
         _latestRemoteFolderName = string.Empty;
         SelectedIconKey = process.IconKey;
         Title = "Modifica Processo";
@@ -300,11 +373,38 @@ public sealed class CreateProcessViewModel : ObservableObject
 
         if (IsInstallerMode)
         {
-            process.RelativePath = FilePath;
-            process.DownloadBaseFolderUrl = DownloadBaseFolderUrl.Trim();
-            process.DownloadSelectedFileName = DownloadSelectedFileName.Trim();
-            process.DownloadSelectedFileTemplate = BuildDownloadTemplate(process.DownloadSelectedFileName);
-            process.DownloadPickLatestFolderByName = !string.IsNullOrWhiteSpace(process.DownloadBaseFolderUrl);
+            process.InstallerSourceMode = InstallerSourceMode;
+            process.RelativePath = InstallerSourceMode == InstallerSourceMode.StaticLocal
+                ? FilePath
+                : BuildDefaultInstallerCacheRelativePath(process.Id);
+
+            process.DownloadUrl = InstallerSourceMode == InstallerSourceMode.StaticWeb
+                ? DownloadUrl.Trim()
+                : string.Empty;
+
+            process.DownloadBaseFolderUrl = InstallerSourceMode == InstallerSourceMode.DynamicWeb
+                ? DownloadBaseFolderUrl.Trim()
+                : string.Empty;
+
+            process.DownloadSelectedFileName = InstallerSourceMode == InstallerSourceMode.DynamicWeb
+                ? DownloadSelectedFileName.Trim()
+                : string.Empty;
+
+            process.DownloadSelectedFileTemplate = InstallerSourceMode == InstallerSourceMode.DynamicWeb
+                ? BuildDownloadTemplate(process.DownloadSelectedFileName)
+                : string.Empty;
+
+            process.DownloadPickLatestFolderByName = InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
+                                                    !string.IsNullOrWhiteSpace(process.DownloadBaseFolderUrl);
+
+            var useLatest = string.IsNullOrWhiteSpace(DownloadSelectedVersion) ||
+                            string.Equals(DownloadSelectedVersion, LatestVersionLabel, StringComparison.OrdinalIgnoreCase);
+
+            process.DownloadUseLatestVersion = useLatest;
+            process.DownloadVersionFolderName = useLatest ? string.Empty : DownloadSelectedVersion.Trim();
+
+            process.RequiresAuth = InstallerSourceMode != InstallerSourceMode.StaticLocal &&
+                                   RequiresAuthForUrl(InstallerSourceMode == InstallerSourceMode.DynamicWeb ? process.DownloadBaseFolderUrl : process.DownloadUrl);
         }
         else if (IsScriptMode)
         {
@@ -347,30 +447,60 @@ public sealed class CreateProcessViewModel : ObservableObject
 
         if (IsInstallerMode)
         {
-            if (string.IsNullOrWhiteSpace(FilePath))
+            if (InstallerSourceMode == InstallerSourceMode.StaticLocal)
             {
-                ValidationError = "Il percorso del file è obbligatorio per gli installer.";
-                return false;
-            }
+                if (string.IsNullOrWhiteSpace(FilePath))
+                {
+                    ValidationError = "Il percorso del file è obbligatorio per gli installer locali.";
+                    return false;
+                }
 
-            var hasRemote = !string.IsNullOrWhiteSpace(DownloadBaseFolderUrl);
-            if (!hasRemote && !File.Exists(FilePath))
-            {
-                ValidationError = "Il file specificato non esiste.";
-                return false;
-            }
+                if (!File.Exists(FilePath))
+                {
+                    ValidationError = "Il file specificato non esiste.";
+                    return false;
+                }
 
-            var ext = Path.GetExtension(FilePath).ToLowerInvariant();
-            if (ext != ".exe" && ext != ".msi" && ext != ".zip")
-            {
-                ValidationError = "L'installer deve essere un file .exe, .msi o .zip.";
-                return false;
+                var ext = Path.GetExtension(FilePath).ToLowerInvariant();
+                if (ext != ".exe" && ext != ".msi" && ext != ".zip")
+                {
+                    ValidationError = "L'installer deve essere un file .exe, .msi o .zip.";
+                    return false;
+                }
             }
-
-            if (hasRemote && string.IsNullOrWhiteSpace(DownloadSelectedFileName))
+            else if (InstallerSourceMode == InstallerSourceMode.StaticWeb)
             {
-                ValidationError = "Seleziona l'installer remoto da scaricare.";
-                return false;
+                if (string.IsNullOrWhiteSpace(DownloadUrl))
+                {
+                    ValidationError = "Inserisci un link diretto all'installer (.exe).";
+                    return false;
+                }
+
+                if (!Uri.TryCreate(DownloadUrl.Trim(), UriKind.Absolute, out var uri))
+                {
+                    ValidationError = "Link non valido.";
+                    return false;
+                }
+
+                if (!uri.AbsolutePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    ValidationError = "Il link deve puntare a un file .exe.";
+                    return false;
+                }
+            }
+            else if (InstallerSourceMode == InstallerSourceMode.DynamicWeb)
+            {
+                if (string.IsNullOrWhiteSpace(DownloadBaseFolderUrl))
+                {
+                    ValidationError = "Inserisci una cartella web (es. .../Aggiornamenti/Retail/).";
+                    return false;
+                }
+
+                if (string.IsNullOrWhiteSpace(DownloadSelectedFileName))
+                {
+                    ValidationError = "Seleziona l'installer remoto da scaricare.";
+                    return false;
+                }
             }
         }
         else if (IsScriptMode)
@@ -396,6 +526,7 @@ public sealed class CreateProcessViewModel : ObservableObject
     }
 
     private bool CanRefreshRemoteInstallerFiles() =>
+        InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
         !string.IsNullOrWhiteSpace(DownloadBaseFolderUrl);
 
     private async Task RefreshRemoteInstallerFilesAsync()
@@ -419,12 +550,42 @@ public sealed class CreateProcessViewModel : ObservableObject
             var url = DownloadBaseFolderUrl.Trim();
             _log?.Info($"Loading remote installers list from: {url}");
 
-            var listing = await _downloadDirectoryListingService.GetLatestFolderExeListingAsync(
-                url,
-                pickLatestFolderByName: true);
+            var folders = await _downloadDirectoryListingService.ListSubfoldersAsync(url, pickLatestFolderByName: true);
+            LatestFolderExeListing? listing;
+
+            if (folders.Count > 0)
+            {
+                RemoteInstallerVersions.Clear();
+                RemoteInstallerVersions.Add(LatestVersionLabel);
+                foreach (var f in folders) RemoteInstallerVersions.Add(f);
+
+                _latestRemoteFolderName = folders.LastOrDefault() ?? string.Empty;
+
+                var selectedVersion = DownloadSelectedVersion;
+                if (string.IsNullOrWhiteSpace(selectedVersion) ||
+                    (!string.Equals(selectedVersion, LatestVersionLabel, StringComparison.OrdinalIgnoreCase) &&
+                     !folders.Any(v => string.Equals(v, selectedVersion, StringComparison.OrdinalIgnoreCase))))
+                {
+                    DownloadSelectedVersion = LatestVersionLabel;
+                    selectedVersion = LatestVersionLabel;
+                }
+
+                var versionToList = string.Equals(selectedVersion, LatestVersionLabel, StringComparison.OrdinalIgnoreCase)
+                    ? _latestRemoteFolderName
+                    : selectedVersion;
+
+                var folderUrl = url.TrimEnd('/') + "/" + versionToList.Trim('/') + "/";
+                listing = await _downloadDirectoryListingService.GetFolderExeListingAsync(folderUrl);
+                _latestRemoteFolderName = versionToList;
+            }
+            else
+            {
+                RemoteInstallerVersions.Clear();
+                listing = await _downloadDirectoryListingService.GetFolderExeListingAsync(url);
+                _latestRemoteFolderName = listing?.FolderName ?? string.Empty;
+            }
 
             RemoteInstallerFiles.Clear();
-            _latestRemoteFolderName = listing?.FolderName ?? string.Empty;
 
             foreach (var f in listing?.ExeFiles ?? Array.Empty<string>())
                 RemoteInstallerFiles.Add(f);
@@ -456,6 +617,23 @@ public sealed class CreateProcessViewModel : ObservableObject
         return selectedFileName.Contains(_latestRemoteFolderName, StringComparison.OrdinalIgnoreCase)
             ? selectedFileName.Replace(_latestRemoteFolderName, "{VERSION}", StringComparison.OrdinalIgnoreCase)
             : selectedFileName;
+    }
+
+    private static InstallerSourceMode InferInstallerSourceMode(DeploymentProcess process)
+    {
+        if (process.Kind != ProcessKind.Installer) return InstallerSourceMode.StaticLocal;
+        if (!string.IsNullOrWhiteSpace(process.DownloadBaseFolderUrl)) return InstallerSourceMode.DynamicWeb;
+        if (!string.IsNullOrWhiteSpace(process.DownloadUrl)) return InstallerSourceMode.StaticWeb;
+        return process.InstallerSourceMode;
+    }
+
+    private static string BuildDefaultInstallerCacheRelativePath(string processId) =>
+        Path.Combine("Data", "installers", processId, "installer.exe");
+
+    private static bool RequiresAuthForUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var u)) return false;
+        return string.Equals(u.Host, "download.passepartout.cloud", StringComparison.OrdinalIgnoreCase);
     }
 }
 
