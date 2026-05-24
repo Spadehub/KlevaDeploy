@@ -64,6 +64,7 @@ public static class TextBoxLineHoverBehavior
             textBox.Loaded += OnLoaded;
             textBox.Unloaded += OnUnloaded;
             textBox.PreviewMouseMove += OnMouseMove;
+            textBox.PreviewMouseRightButtonDown += OnPreviewMouseRightButtonDown;
             textBox.MouseLeave += OnMouseLeave;
             textBox.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(OnScrollChanged));
         }
@@ -72,6 +73,7 @@ public static class TextBoxLineHoverBehavior
             textBox.Loaded -= OnLoaded;
             textBox.Unloaded -= OnUnloaded;
             textBox.PreviewMouseMove -= OnMouseMove;
+            textBox.PreviewMouseRightButtonDown -= OnPreviewMouseRightButtonDown;
             textBox.MouseLeave -= OnMouseLeave;
             textBox.RemoveHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(OnScrollChanged));
             DetachAdorner(textBox);
@@ -102,35 +104,13 @@ public static class TextBoxLineHoverBehavior
     private static void OnMouseMove(object sender, MouseEventArgs e)
     {
         if (sender is not TextBox textBox) return;
-        var adorner = (LineHoverAdorner?)textBox.GetValue(AdornerProperty);
-        if (adorner is null) return;
+        UpdateHover(textBox, e.GetPosition(textBox));
+    }
 
-        var index = textBox.GetCharacterIndexFromPoint(e.GetPosition(textBox), true);
-        if (index < 0)
-        {
-            textBox.SetValue(HoverCharacterIndexProperty, -1);
-            adorner.SetHoverRect(null);
-            return;
-        }
-
-        textBox.SetValue(HoverCharacterIndexProperty, index);
-        var lineIndex = textBox.GetLineIndexFromCharacterIndex(index);
-        if (lineIndex < 0)
-        {
-            adorner.SetHoverRect(null);
-            return;
-        }
-
-        var firstChar = textBox.GetCharacterIndexFromLineIndex(lineIndex);
-        var rectFirst = textBox.GetRectFromCharacterIndex(firstChar);
-
-        var height = rectFirst.Height;
-        if (height <= 0)
-            height = Math.Max(12, textBox.FontSize * 1.45);
-
-        var y = rectFirst.Y;
-        var rect = new Rect(0, y, Math.Max(0, textBox.ActualWidth), height);
-        adorner.SetHoverRect(rect);
+    private static void OnPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not TextBox textBox) return;
+        UpdateHover(textBox, e.GetPosition(textBox));
     }
 
     private static void OnMouseLeave(object sender, MouseEventArgs e)
@@ -159,6 +139,41 @@ public static class TextBoxLineHoverBehavior
         var adorner = new LineHoverAdorner(textBox) { HoverBrush = GetHoverBrush(textBox) };
         layer.Add(adorner);
         textBox.SetValue(AdornerProperty, adorner);
+    }
+
+    private static void UpdateHover(TextBox textBox, Point position)
+    {
+        var adorner = (LineHoverAdorner?)textBox.GetValue(AdornerProperty);
+
+        var index = textBox.GetCharacterIndexFromPoint(position, true);
+        if (index < 0)
+        {
+            textBox.SetValue(HoverCharacterIndexProperty, -1);
+            adorner?.SetHoverRect(null);
+            return;
+        }
+
+        textBox.SetValue(HoverCharacterIndexProperty, index);
+
+        if (adorner is null) return;
+
+        var lineIndex = textBox.GetLineIndexFromCharacterIndex(index);
+        if (lineIndex < 0)
+        {
+            adorner.SetHoverRect(null);
+            return;
+        }
+
+        var firstChar = textBox.GetCharacterIndexFromLineIndex(lineIndex);
+        var rectFirst = textBox.GetRectFromCharacterIndex(firstChar);
+
+        var height = rectFirst.Height;
+        if (height <= 0)
+            height = Math.Max(12, textBox.FontSize * 1.45);
+
+        var y = rectFirst.Y;
+        var rect = new Rect(0, y, Math.Max(0, textBox.ActualWidth), height);
+        adorner.SetHoverRect(rect);
     }
 
     private static void DetachAdorner(TextBox textBox)

@@ -12,6 +12,7 @@ public sealed class AppUpdateService : IAppUpdateService
 {
     private const string DefaultOwner = "Spadehub";
     private const string DefaultRepo = "KlevaDeploy";
+    private const string LegacyRepo = "InstallerIT";
     private const string DefaultAssetName = "KlevaDeploy.exe";
 
     private readonly HttpClient _httpClient;
@@ -26,63 +27,74 @@ public sealed class AppUpdateService : IAppUpdateService
     public async Task<AppUpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default)
     {
         var owner = GetSetting("KLEVADEPLOY_GITHUB_OWNER", DefaultOwner);
-        var repo = GetSetting("KLEVADEPLOY_GITHUB_REPO", DefaultRepo);
+        var repoFromEnv = Environment.GetEnvironmentVariable("KLEVADEPLOY_GITHUB_REPO");
+        var reposToTry = string.IsNullOrWhiteSpace(repoFromEnv)
+            ? new[] { DefaultRepo, LegacyRepo }
+            : new[] { repoFromEnv.Trim() };
         var assetName = GetSetting("KLEVADEPLOY_GITHUB_ASSET_NAME", DefaultAssetName);
         var includePrereleases = GetBoolSetting("KLEVADEPLOY_GITHUB_INCLUDE_PRERELEASES", false);
 
         EnsureDefaultHeaders();
 
-        var url = includePrereleases
-            ? $"https://api.github.com/repos/{owner}/{repo}/releases?per_page=20"
-            : $"https://api.github.com/repos/{owner}/{repo}/releases/latest";
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        using var response = await SendWithRedirectsAsync(request, ct);
-        if (response is null || !response.IsSuccessStatusCode)
+        HttpStatusCode? lastStatus = null;
+        foreach (var repo in reposToTry)
         {
-            if (response?.StatusCode == HttpStatusCode.NotFound)
+            var url = includePrereleases
+                ? $"https://api.github.com/repos/{owner}/{repo}/releases?per_page=20"
+                : $"https://api.github.com/repos/{owner}/{repo}/releases/latest";
+
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            using var response = await SendWithRedirectsAsync(request, ct);
+            lastStatus = response?.StatusCode;
+
+            if (response is null || !response.IsSuccessStatusCode)
             {
-                _log.Warning($"App update check failed: HTTP 404 (owner={owner}, repo={repo}). Repo missing/private or no GitHub Releases yet.");
-            }
-            else
-            {
+                if (response?.StatusCode == HttpStatusCode.NotFound)
+                    continue;
+
                 _log.Warning($"App update check failed: HTTP {(int)(response?.StatusCode ?? 0)} (owner={owner}, repo={repo})");
+                return null;
             }
-            return null;
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+
+            var release = TryGetReleaseElement(doc.RootElement, includePrereleases);
+            if (release is null) return null;
+
+            var tag = release.Value.TryGetProperty("tag_name", out var tagEl) ? tagEl.GetString() : null;
+            if (string.IsNullOrWhiteSpace(tag)) return null;
+
+            var remoteVersionString = tag.Trim().TrimStart('v', 'V');
+
+            if (!SemVersion.TryParse(remoteVersionString, out var remoteVersion))
+                return null;
+
+            var currentVersionString = GetCurrentVersionString();
+            if (!SemVersion.TryParse(currentVersionString, out var currentVersion))
+                return null;
+
+            if (remoteVersion.CompareTo(currentVersion) <= 0)
+                return null;
+
+            if (!release.Value.TryGetProperty("assets", out var assetsEl) || assetsEl.ValueKind != JsonValueKind.Array)
+                return null;
+
+            foreach (var asset in assetsEl.EnumerateArray())
+            {
+                var name = asset.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
+                if (!string.Equals(name, assetName, StringComparison.OrdinalIgnoreCase)) continue;
+
+                var dl = asset.TryGetProperty("browser_download_url", out var dlEl) ? dlEl.GetString() : null;
+                if (string.IsNullOrWhiteSpace(dl)) return null;
+
+                return new AppUpdateInfo(remoteVersion.ToString(), dl, name ?? assetName);
+            }
         }
 
-        await using var stream = await response.Content.ReadAsStreamAsync(ct);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-
-        var release = TryGetReleaseElement(doc.RootElement, includePrereleases);
-        if (release is null) return null;
-
-        var tag = release.Value.TryGetProperty("tag_name", out var tagEl) ? tagEl.GetString() : null;
-        if (string.IsNullOrWhiteSpace(tag)) return null;
-
-        var remoteVersionString = tag.Trim().TrimStart('v', 'V');
-
-        if (!SemVersion.TryParse(remoteVersionString, out var remoteVersion))
-            return null;
-
-        var currentVersionString = GetCurrentVersionString();
-        if (!SemVersion.TryParse(currentVersionString, out var currentVersion))
-            return null;
-
-        if (remoteVersion.CompareTo(currentVersion) <= 0)
-            return null;
-
-        if (!release.Value.TryGetProperty("assets", out var assetsEl) || assetsEl.ValueKind != JsonValueKind.Array)
-            return null;
-
-        foreach (var asset in assetsEl.EnumerateArray())
+        if (lastStatus == HttpStatusCode.NotFound)
         {
-            var name = asset.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
-            if (!string.Equals(name, assetName, StringComparison.OrdinalIgnoreCase)) continue;
-
-            var dl = asset.TryGetProperty("browser_download_url", out var dlEl) ? dlEl.GetString() : null;
-            if (string.IsNullOrWhiteSpace(dl)) return null;
-
-            return new AppUpdateInfo(remoteVersion.ToString(), dl, name ?? assetName);
+            _log.Warning($"App update check failed: HTTP 404 (owner={owner}, repo={string.Join("/", reposToTry)}). Repo missing/private or no GitHub Releases yet.");
         }
 
         return null;
