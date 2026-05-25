@@ -73,6 +73,23 @@ public sealed class UpdateService : IUpdateService
         state.Save(storageDir);
     }
 
+    public bool IsStaticWebInstallerCachedForUrl(DeploymentProcess process)
+    {
+        if (process.Kind != ProcessKind.Installer) return false;
+        if (process.InstallerSourceMode != InstallerSourceMode.StaticWeb) return false;
+        if (string.IsNullOrWhiteSpace(process.DownloadUrl)) return false;
+        if (string.IsNullOrWhiteSpace(process.RelativePath)) return false;
+
+        var localPath = Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+        if (!File.Exists(localPath)) return false;
+
+        var storageDir = GetStorageDir();
+        var state = InstallerUpdateState.Load(storageDir);
+        if (!state.Entries.TryGetValue(process.Id, out var entry)) return false;
+
+        return string.Equals(entry.LastDownloadedFromUrl, process.DownloadUrl, StringComparison.OrdinalIgnoreCase);
+    }
+
     private async Task UpdateSingleInstallerInternalAsync(
         DeploymentProcess process,
         InstallerUpdateState state,
@@ -104,7 +121,12 @@ public sealed class UpdateService : IUpdateService
         entry.LastCheckedUtc = DateTimeOffset.UtcNow;
         entry.LastResolvedDownloadUrl = remoteUrl;
 
-        var needDownload = forceDownload || !File.Exists(localPath);
+        var fileExists = File.Exists(localPath);
+        var isAssociatedFallback = fileExists &&
+                                  string.Equals(entry.LastDownloadedFromUrl, remoteUrl, StringComparison.OrdinalIgnoreCase);
+
+        var needDownload = forceDownload || !fileExists ||
+                           (process.InstallerSourceMode == InstallerSourceMode.StaticWeb && !isAssociatedFallback);
         if (!needDownload) return;
 
         if (!forceDownload && process.InstallerSourceMode != InstallerSourceMode.StaticWeb)
@@ -137,6 +159,7 @@ public sealed class UpdateService : IUpdateService
 
         entry.LastDownloadedUtc = DateTimeOffset.UtcNow;
         entry.LastDownloadedBytes = downloadResult.BytesWritten;
+        entry.LastDownloadedFromUrl = remoteUrl;
 
         _log.Info($"'{process.Name}' installer updated ({downloadResult.BytesWritten} bytes).");
     }

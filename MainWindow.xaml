@@ -44,20 +44,38 @@
                     <ControlTemplate TargetType="RadioButton">
                         <Border x:Name="HoverRoot"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="{TemplateBinding Tag}">
+                                CornerRadius="0"
+                                ClipToBounds="True"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch">
                             <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
+                            <!-- Segment corner rounding (used by the installer source segmented toggle) -->
+                            <Trigger Property="Grid.Column" Value="0">
+                                <Setter TargetName="HoverRoot" Property="CornerRadius" Value="10,0,0,10"/>
+                            </Trigger>
+                            <Trigger Property="Grid.Column" Value="2">
+                                <Setter TargetName="HoverRoot" Property="CornerRadius" Value="0,10,10,0"/>
+                            </Trigger>
+
+                            <!-- Hover highlight only for unselected segments -->
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                    <Condition Property="IsChecked" Value="False"/>
+                                </MultiTrigger.Conditions>
                                 <Setter TargetName="HoverRoot" Property="Background" Value="{DynamicResource HoverBrush}"/>
                                 <Setter TargetName="HoverRoot" Property="Opacity" Value="0.7"/>
-                            </Trigger>
+                            </MultiTrigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="HoverRoot" Property="Opacity" Value="1"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter Property="Foreground" Value="{DynamicResource SelectionForegroundBrush}"/>
+                                <Setter TargetName="HoverRoot" Property="Background" Value="Transparent"/>
+                                <Setter TargetName="HoverRoot" Property="Opacity" Value="1"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Opacity" Value="0.4"/>
@@ -872,9 +890,6 @@
                                                                 <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
                                                                              Style="{StaticResource Win11ContextMenu}"
                                                                              ItemContainerStyle="{StaticResource Win11ContextMenuItem}">
-                                                                    <ContextMenu.Resources>
-                                                                        <Style TargetType="Separator" BasedOn="{StaticResource Win11ContextMenuSeparator}"/>
-                                                                    </ContextMenu.Resources>
                                                                     <MenuItem Header="Modifica"
                                                                               Command="{Binding PlacementTarget.Tag.EditPresetCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                               CommandParameter="{Binding}">
@@ -1012,9 +1027,6 @@
                                                                     <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
                                                                                  Style="{StaticResource Win11ContextMenu}"
                                                                                  ItemContainerStyle="{StaticResource Win11ContextMenuItem}">
-                                                                        <ContextMenu.Resources>
-                                                                            <Style TargetType="Separator" BasedOn="{StaticResource Win11ContextMenuSeparator}"/>
-                                                                        </ContextMenu.Resources>
                                                                         <MenuItem Header="Modifica"
                                                                                   Command="{Binding PlacementTarget.Tag.EditPresetCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                                   CommandParameter="{Binding}">
@@ -1243,9 +1255,6 @@
                                                 <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
                                                              Style="{StaticResource Win11ContextMenu}"
                                                              ItemContainerStyle="{StaticResource Win11ContextMenuItem}">
-                                                    <ContextMenu.Resources>
-                                                        <Style TargetType="Separator" BasedOn="{StaticResource Win11ContextMenuSeparator}"/>
-                                                    </ContextMenu.Resources>
                                                     <MenuItem Header="Modifica"
                                                               Command="{Binding PlacementTarget.Tag.EditProcessCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                               CommandParameter="{Binding}">
@@ -1266,7 +1275,7 @@
                                                                    RenderOptions.BitmapScalingMode="HighQuality"/>
                                                         </MenuItem.Icon>
                                                     </MenuItem>
-                                                    <Separator/>
+                                                    <MenuItem Style="{StaticResource Win11ContextMenuSeparatorItem}"/>
                                                     <MenuItem Header="Aggiorna installer"
                                                               Command="{Binding PlacementTarget.Tag.UpdateInstallerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                               CommandParameter="{Binding}">
@@ -1431,9 +1440,6 @@
                                                             <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
                                                                          Style="{StaticResource Win11ContextMenu}"
                                                                          ItemContainerStyle="{StaticResource Win11ContextMenuItem}">
-                                                                <ContextMenu.Resources>
-                                                                    <Style TargetType="Separator" BasedOn="{StaticResource Win11ContextMenuSeparator}"/>
-                                                                </ContextMenu.Resources>
                                                                 <MenuItem Header="Modifica"
                                                                           Command="{Binding PlacementTarget.Tag.EditProcessCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                           CommandParameter="{Binding}">
@@ -1454,7 +1460,7 @@
                                                                                RenderOptions.BitmapScalingMode="HighQuality"/>
                                                                     </MenuItem.Icon>
                                                                 </MenuItem>
-                                                                <Separator/>
+                                                                <MenuItem Style="{StaticResource Win11ContextMenuSeparatorItem}"/>
                                                                 <MenuItem Header="Aggiorna installer"
                                                                           Command="{Binding PlacementTarget.Tag.UpdateInstallerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                                           CommandParameter="{Binding}">
@@ -2071,7 +2077,7 @@
                                            Margin="0,0,0,12"/>
 
                                 <!-- Two Columns Layout for Process Selection -->
-                                <Grid Height="500">
+                                <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="16"/>
@@ -2112,7 +2118,7 @@
                                                        RenderOptions.BitmapScalingMode="HighQuality"/>
                                             </Grid>
 
-                                            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                                            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" MaxHeight="260">
                                                 <ScrollViewer.Resources>
                                                     <SolidColorBrush x:Key="ScrollFadeOverlayBrush" Color="{DynamicResource SurfaceColor}"/>
                                                 </ScrollViewer.Resources>
@@ -2202,6 +2208,7 @@
                                                      Background="Transparent"
                                                      BorderThickness="0"
                                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                                     MaxHeight="260"
                                                      HorizontalContentAlignment="Stretch"
                                                      behaviors:DragDropReorder.IsEnabled="{Binding IsSelectedReorderEnabled}"
                                                      behaviors:DragDropReorder.ReorderCommand="{Binding ReorderSelectedProcessCommand}">
@@ -2819,9 +2826,48 @@
                                                Style="{StaticResource Win11TextBody}"
                                                FontWeight="SemiBold"
                                                Margin="0,0,0,6"/>
-                                    <TextBox Text="{Binding ProcessName, UpdateSourceTrigger=PropertyChanged}"
-                                             Style="{StaticResource Win11TextBox}"
-                                             Margin="0,0,0,16"/>
+                                    <Grid Margin="0,0,0,16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <Button Grid.Column="0"
+                                                Command="{Binding OpenIconPickerCommand}"
+                                                Style="{StaticResource Win11Button}"
+                                                Width="44"
+                                                Height="44"
+                                                Padding="0"
+                                                Margin="0,0,10,0"
+                                                ToolTip="Seleziona icona">
+                                            <Grid>
+                                                <Image Width="22"
+                                                       Height="22"
+                                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                                       Visibility="{Binding HasCustomIcon, Converter={StaticResource BoolToVisibility}}">
+                                                    <Image.Source>
+                                                        <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                            <Binding Path="CustomIconLightPath"/>
+                                                            <Binding Path="CustomIconDarkPath"/>
+                                                            <Binding Path="DataContext.IsDarkTheme"
+                                                                     RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                        </MultiBinding>
+                                                    </Image.Source>
+                                                </Image>
+
+                                                <TextBlock Text="{Binding Icon}"
+                                                           FontSize="18"
+                                                           FontFamily="Segoe UI Emoji"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           Visibility="{Binding HasCustomIcon, Converter={StaticResource InverseBoolToVisibility}}"/>
+                                            </Grid>
+                                        </Button>
+
+                                        <TextBox Grid.Column="1"
+                                                 Text="{Binding ProcessName, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource Win11TextBox}"/>
+                                    </Grid>
 
                                     <TextBlock Text="Descrizione"
                                                Style="{StaticResource Win11TextBody}"
@@ -2887,7 +2933,6 @@
                                                 </Grid.ColumnDefinitions>
 
                                                 <Border x:Name="InstallerSourceIndicator"
-                                                        Grid.Column="0"
                                                         Background="{DynamicResource AccentBrush}"
                                                         BorderBrush="{DynamicResource AccentBrush}"
                                                         BorderThickness="1"
@@ -2918,7 +2963,6 @@
                                                              IsChecked="{Binding IsInstallerSourceLocal, Mode=TwoWay}"
                                                              Cursor="Hand"
                                                              Style="{StaticResource Win11SegmentRadioButton}"
-                                                             Tag="10,0,0,10"
                                                              Panel.ZIndex="1">
                                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                         <Viewbox Width="18" Height="18" Margin="0,0,8,0">
@@ -2938,7 +2982,6 @@
                                                              IsChecked="{Binding IsInstallerSourceStaticWeb, Mode=TwoWay}"
                                                              Cursor="Hand"
                                                              Style="{StaticResource Win11SegmentRadioButton}"
-                                                             Tag="0"
                                                              Panel.ZIndex="1">
                                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                         <Viewbox Width="18" Height="18" Margin="0,0,8,0">
@@ -2958,7 +3001,6 @@
                                                              IsChecked="{Binding IsInstallerSourceDynamicWeb, Mode=TwoWay}"
                                                              Cursor="Hand"
                                                              Style="{StaticResource Win11SegmentRadioButton}"
-                                                             Tag="0,10,10,0"
                                                              Panel.ZIndex="1">
                                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                         <Viewbox Width="18" Height="18" Margin="0,0,8,0">
@@ -3028,32 +3070,50 @@
                                                      Margin="0,0,0,16"/>
                                         </StackPanel>
 
-                                        <TextBlock Text="Argomenti Riga di Comando"
-                                                   Style="{StaticResource Win11TextBody}"
-                                                   FontWeight="SemiBold"
-                                                   Margin="0,0,0,6"/>
-                                        <TextBox Text="{Binding Arguments, UpdateSourceTrigger=PropertyChanged}"
-                                                 Style="{StaticResource Win11TextBox}"
-                                                 Margin="0,0,0,16"/>
-
                                         <StackPanel Visibility="{Binding IsInstallerSourceDynamicWeb, Converter={StaticResource BoolToVisibility}}">
                                             <TextBlock Text="Cartella Download (Web) *"
                                                        Style="{StaticResource Win11TextBody}"
                                                        FontWeight="SemiBold"
                                                        Margin="0,0,0,6"/>
-                                            <TextBox Text="{Binding DownloadBaseFolderUrl, UpdateSourceTrigger=PropertyChanged}"
-                                                     Style="{StaticResource Win11TextBox}"
-                                                     Margin="0,0,0,8"/>
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox Grid.Column="0"
+                                                         Text="{Binding DownloadBaseFolderUrl, UpdateSourceTrigger=PropertyChanged}"
+                                                         Style="{StaticResource Win11TextBox}"
+                                                         Margin="0,0,8,0"/>
+                                                <Button Grid.Column="1"
+                                                        Content="Su"
+                                                        Command="{Binding NavigateUpRemoteFolderCommand}"
+                                                        Style="{StaticResource Win11Button}"
+                                                        Padding="12,6"
+                                                        Visibility="{Binding IsRemoteFolderNavigationMode, Converter={StaticResource BoolToVisibility}}"/>
+                                            </Grid>
 
                                             <StackPanel Visibility="{Binding RemoteInstallerVersions, Converter={StaticResource CollectionNotEmptyToVisibilityConverter}}">
-                                                <TextBlock Text="Versione"
+                                                <TextBlock Text="{Binding RemoteFolderPickerLabel}"
                                                            Style="{StaticResource Win11TextBody}"
                                                            FontWeight="SemiBold"
                                                            Margin="0,0,0,6"/>
-                                                <ComboBox ItemsSource="{Binding RemoteInstallerVersions}"
-                                                          SelectedItem="{Binding DownloadSelectedVersion, Mode=TwoWay}"
-                                                          Style="{StaticResource Win11ComboBox}"
-                                                          Margin="0,0,0,8"/>
+                                                <Grid Margin="0,0,0,8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <ComboBox Grid.Column="0"
+                                                              ItemsSource="{Binding RemoteInstallerVersions}"
+                                                              SelectedItem="{Binding DownloadSelectedVersion, Mode=TwoWay}"
+                                                              Style="{StaticResource Win11ComboBox}"
+                                                              Margin="0,0,8,0"/>
+                                                    <Button Grid.Column="1"
+                                                            Content="Apri"
+                                                            Command="{Binding OpenSelectedRemoteFolderCommand}"
+                                                            Style="{StaticResource Win11Button}"
+                                                            Padding="12,6"
+                                                            Visibility="{Binding IsRemoteFolderNavigationMode, Converter={StaticResource BoolToVisibility}}"/>
+                                                </Grid>
                                             </StackPanel>
 
                                             <TextBlock Text="Installer da Scaricare"
@@ -3077,6 +3137,14 @@
                                                         Padding="12,6"/>
                                             </Grid>
                                         </StackPanel>
+
+                                        <TextBlock Text="Argomenti Riga di Comando"
+                                                   Style="{StaticResource Win11TextBody}"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,6"/>
+                                        <TextBox Text="{Binding Arguments, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource Win11TextBox}"
+                                                 Margin="0,0,0,16"/>
                                     </StackPanel>
 
                                     <StackPanel Visibility="{Binding IsScriptMode, Converter={StaticResource BoolToVisibility}}">
@@ -3119,17 +3187,6 @@
                                         </Grid>
                                     </StackPanel>
 
-                                    <TextBlock Text="Icona"
-                                               Style="{StaticResource Win11TextBody}"
-                                               FontWeight="SemiBold"
-                                               Margin="0,0,0,6"/>
-                                    <ComboBox ItemsSource="{Binding AvailableIcons}"
-                                              SelectedValue="{Binding SelectedIconKey}"
-                                              SelectedValuePath="Key"
-                                              DisplayMemberPath="DisplayName"
-                                              Style="{StaticResource Win11ComboBox}"
-                                              Margin="0,0,0,16"/>
-
                                     <StackPanel Margin="0,0,0,16">
                                         <CheckBox IsChecked="{Binding RunAsAdmin}"
                                                   Style="{StaticResource Win11CheckBox}"
@@ -3139,7 +3196,8 @@
                                         </CheckBox>
 
                                         <CheckBox IsChecked="{Binding RequiresInternet}"
-                                                  Style="{StaticResource Win11CheckBox}">
+                                                  Style="{StaticResource Win11CheckBox}"
+                                                  IsEnabled="{Binding IsRequiresInternetUserEditable}">
                                             <TextBlock Text="Richiede Connessione Internet"
                                                        Style="{StaticResource Win11TextBody}"/>
                                         </CheckBox>
@@ -3218,6 +3276,301 @@
                                 </Button>
                             </Grid>
                         </Border>
+
+                        <Grid Grid.RowSpan="3"
+                              Panel.ZIndex="200"
+                              Background="#80000000"
+                              Visibility="{Binding IsIconPickerOpen, Converter={StaticResource BoolToVisibility}}">
+                            <Border Style="{StaticResource Win11Card}"
+                                    Padding="16"
+                                    Width="620"
+                                    MaxHeight="680"
+                                    VerticalAlignment="Center"
+                                    HorizontalAlignment="Center">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <Grid Grid.Row="0" Margin="0,0,0,12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Text="Seleziona icona"
+                                                   Style="{StaticResource Win11TextSubtitle}"
+                                                   FontWeight="SemiBold"/>
+
+                                        <Button Grid.Column="1"
+                                                Command="{Binding CloseIconPickerCommand}"
+                                                Style="{StaticResource Win11CloseButton}"
+                                                Width="32"
+                                                Height="32"
+                                                Padding="0">
+                                            <TextBlock Text="✕" FontSize="14"/>
+                                        </Button>
+                                    </Grid>
+
+                                    <ScrollViewer Grid.Row="1"
+                                                  VerticalScrollBarVisibility="Auto">
+                                        <StackPanel>
+                                            <TextBlock Text="Emoji"
+                                                       Style="{StaticResource Win11TextBody}"
+                                                       FontWeight="SemiBold"
+                                                       Margin="0,0,0,8"/>
+
+                                            <ItemsControl ItemsSource="{Binding AvailableEmojiIcons}"
+                                                          Margin="0,0,0,16">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Button Command="{Binding DataContext.SelectEmojiIconCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}"
+                                                                Style="{StaticResource Win11Button}"
+                                                                Width="44"
+                                                                Height="44"
+                                                                Padding="0"
+                                                                Margin="0,0,8,8">
+                                                            <TextBlock Text="{Binding}"
+                                                                       FontSize="20"
+                                                                       FontFamily="Segoe UI Emoji"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"/>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <TextBlock Text="Icone caricate"
+                                                       Style="{StaticResource Win11TextBody}"
+                                                       FontWeight="SemiBold"
+                                                       Margin="0,0,0,8"/>
+
+                                            <Border Background="{DynamicResource SurfaceElevatedBrush}"
+                                                    BorderBrush="{DynamicResource BorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="{StaticResource CornerRadiusSmall}"
+                                                    Padding="12"
+                                                    Margin="0,0,0,12">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <Border Width="40"
+                                                            Height="40"
+                                                            CornerRadius="{StaticResource CornerRadiusSmall}"
+                                                            Background="{DynamicResource SurfaceBrush}"
+                                                            BorderBrush="{DynamicResource BorderBrush}"
+                                                            BorderThickness="1"
+                                                            VerticalAlignment="Center"
+                                                            Margin="0,0,12,0">
+                                                        <Grid>
+                                                            <Image Width="22"
+                                                                   Height="22"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                                                   Visibility="{Binding HasCustomIcon, Converter={StaticResource BoolToVisibility}}">
+                                                                <Image.Source>
+                                                                    <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                        <Binding Path="CustomIconLightPath"/>
+                                                                        <Binding Path="CustomIconDarkPath"/>
+                                                                        <Binding Path="DataContext.IsDarkTheme"
+                                                                                 RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                    </MultiBinding>
+                                                                </Image.Source>
+                                                            </Image>
+
+                                                            <TextBlock Text="{Binding Icon}"
+                                                                       FontSize="18"
+                                                                       FontFamily="Segoe UI Emoji"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"
+                                                                       Visibility="{Binding HasCustomIcon, Converter={StaticResource InverseBoolToVisibility}}"/>
+                                                        </Grid>
+                                                    </Border>
+
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <CheckBox Content="Scegli icona diversa per tema"
+                                                                  IsChecked="{Binding UseSeparateThemeIcons}"
+                                                                  Style="{StaticResource Win11ToggleSwitch}"/>
+                                                        <TextBlock Text="Se attivo, puoi scegliere un’icona per tema chiaro e una per tema scuro."
+                                                                   Style="{StaticResource Win11TextSecondary}"
+                                                                   FontSize="11"
+                                                                   Margin="0,4,0,0"/>
+                                                    </StackPanel>
+
+                                                    <Button Grid.Column="2"
+                                                            Content="Importa"
+                                                            Command="{Binding ImportLibraryIconCommand}"
+                                                            Style="{StaticResource Win11Button}"
+                                                            Height="36"
+                                                            MinWidth="120"
+                                                            VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </Border>
+
+                                            <StackPanel Orientation="Horizontal"
+                                                        Margin="0,0,0,12"
+                                                        Visibility="{Binding UseSeparateThemeIcons, Converter={StaticResource BoolToVisibility}}">
+                                                <Button Content="Chiaro"
+                                                        Command="{Binding SetIconPickerTargetLightCommand}"
+                                                        Height="32"
+                                                        MinWidth="120">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource Win11Button}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsIconPickerTargetDark}" Value="False">
+                                                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                                    <Setter Property="Foreground" Value="White"/>
+                                                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                                <Button Content="Scuro"
+                                                        Command="{Binding SetIconPickerTargetDarkCommand}"
+                                                        Height="32"
+                                                        MinWidth="120"
+                                                        Margin="8,0,0,0">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource Win11Button}">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsIconPickerTargetDark}" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                                    <Setter Property="Foreground" Value="White"/>
+                                                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                </Button>
+                                            </StackPanel>
+
+                                            <ItemsControl ItemsSource="{Binding LibraryIcons}"
+                                                          Margin="0,0,0,16">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Button Command="{Binding DataContext.SelectLibraryIconCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                CommandParameter="{Binding}"
+                                                                Style="{StaticResource Win11Button}"
+                                                                Width="56"
+                                                                Height="56"
+                                                                Padding="0"
+                                                                Margin="0,0,8,8">
+                                                            <Image Stretch="Uniform"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                                                   Width="28"
+                                                                   Height="28">
+                                                                <Image.Source>
+                                                                    <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                        <Binding Path="LightPath"/>
+                                                                        <Binding Path="DarkPath"/>
+                                                                        <Binding Path="DataContext.IsDarkTheme"
+                                                                                 RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                    </MultiBinding>
+                                                                </Image.Source>
+                                                            </Image>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="12"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="Chiaro"
+                                                               Style="{StaticResource Win11TextSecondary}"
+                                                               Margin="0,0,0,6"/>
+                                                    <Border Background="{DynamicResource SurfaceElevatedBrush}"
+                                                            BorderBrush="{DynamicResource BorderBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="{StaticResource CornerRadiusSmall}"
+                                                            Width="96"
+                                                            Height="96"
+                                                            HorizontalAlignment="Left">
+                                                        <Image Stretch="Uniform"
+                                                               RenderOptions.BitmapScalingMode="HighQuality">
+                                                            <Image.Source>
+                                                                <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                    <Binding Path="CustomIconLightPath"/>
+                                                                    <Binding Path="CustomIconDarkPath"/>
+                                                                    <Binding Source="False"/>
+                                                                </MultiBinding>
+                                                            </Image.Source>
+                                                        </Image>
+                                                    </Border>
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock Text="Scuro"
+                                                               Style="{StaticResource Win11TextSecondary}"
+                                                               Margin="0,0,0,6"/>
+                                                    <Border Background="{DynamicResource SurfaceElevatedBrush}"
+                                                            BorderBrush="{DynamicResource BorderBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="{StaticResource CornerRadiusSmall}"
+                                                            Width="96"
+                                                            Height="96"
+                                                            HorizontalAlignment="Left">
+                                                        <Image Stretch="Uniform"
+                                                               RenderOptions.BitmapScalingMode="HighQuality">
+                                                            <Image.Source>
+                                                                <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                    <Binding Path="CustomIconLightPath"/>
+                                                                    <Binding Path="CustomIconDarkPath"/>
+                                                                    <Binding Source="True"/>
+                                                                </MultiBinding>
+                                                            </Image.Source>
+                                                        </Image>
+                                                    </Border>
+                                                </StackPanel>
+                                            </Grid>
+                                        </StackPanel>
+                                    </ScrollViewer>
+
+                                    <Grid Grid.Row="2" Margin="0,12,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <Button Content="Rimuovi"
+                                                Command="{Binding RemoveCustomIconCommand}"
+                                                Style="{StaticResource Win11Button}"
+                                                Height="36"
+                                                Visibility="{Binding HasCustomIcon, Converter={StaticResource BoolToVisibility}}"
+                                                HorizontalAlignment="Left"/>
+
+                                        <Button Grid.Column="1"
+                                                Content="Chiudi"
+                                                Command="{Binding CloseIconPickerCommand}"
+                                                Style="{StaticResource Win11AccentButton}"
+                                                Height="36"
+                                                MinWidth="120"/>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </Grid>
                     </Grid>
                 </Border>
             </Grid>

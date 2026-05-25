@@ -109,6 +109,8 @@ public sealed class PresetViewToggleTests
 
         public Task RedownloadSingleInstallerAsync(DeploymentProcess process, CancellationToken ct = default) =>
             Task.CompletedTask;
+
+        public bool IsStaticWebInstallerCachedForUrl(DeploymentProcess process) => false;
     }
 
     private sealed class FakeDownloadDirectoryListingService : IDownloadDirectoryListingService

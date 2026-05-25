@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KlevaDeploy.Models;
@@ -13,8 +14,10 @@ namespace KlevaDeploy.ViewModels;
 public sealed class CreateProcessViewModel : ObservableObject
 {
     private const string LatestVersionLabel = "Ultima disponibile";
+    private static readonly Regex VersionFolderRegex = new(@"^(?<year>\d{4})(?<suffix>[A-Za-z0-9]+)$", RegexOptions.Compiled);
     private readonly IAuthService? _authService;
     private readonly IDownloadDirectoryListingService? _downloadDirectoryListingService;
+    private readonly IPresetIconService? _presetIconService;
     private readonly ILogService? _log;
     private string _latestRemoteFolderName = string.Empty;
 
@@ -44,6 +47,8 @@ public sealed class CreateProcessViewModel : ObservableObject
             if (!SetProperty(ref _selectedProcessKind, value)) return;
             OnPropertyChanged(nameof(IsInstallerMode));
             OnPropertyChanged(nameof(IsScriptMode));
+            OnPropertyChanged(nameof(IsRequiresInternetLocked));
+            OnPropertyChanged(nameof(IsRequiresInternetUserEditable));
             ValidationError = null;
         }
     }
@@ -91,6 +96,9 @@ public sealed class CreateProcessViewModel : ObservableObject
         {
             if (!SetProperty(ref _downloadBaseFolderUrl, value)) return;
             RefreshRemoteInstallerFilesCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(CanNavigateUpRemoteFolder));
+            OpenSelectedRemoteFolderCommand.NotifyCanExecuteChanged();
+            NavigateUpRemoteFolderCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -119,6 +127,21 @@ public sealed class CreateProcessViewModel : ObservableObject
         set => SetProperty(ref _downloadSelectedVersion, value);
     }
 
+    private bool _isRemoteFolderNavigationMode;
+    public bool IsRemoteFolderNavigationMode
+    {
+        get => _isRemoteFolderNavigationMode;
+        set
+        {
+            if (!SetProperty(ref _isRemoteFolderNavigationMode, value)) return;
+            OnPropertyChanged(nameof(RemoteFolderPickerLabel));
+        }
+    }
+
+    public string RemoteFolderPickerLabel => IsRemoteFolderNavigationMode ? "Sottocartella" : "Versione";
+
+    public bool CanNavigateUpRemoteFolder => TryGetParentFolderUrl(DownloadBaseFolderUrl) is not null;
+
     private InstallerSourceMode _installerSourceMode = InstallerSourceMode.StaticLocal;
     public InstallerSourceMode InstallerSourceMode
     {
@@ -129,8 +152,19 @@ public sealed class CreateProcessViewModel : ObservableObject
             OnPropertyChanged(nameof(IsInstallerSourceLocal));
             OnPropertyChanged(nameof(IsInstallerSourceStaticWeb));
             OnPropertyChanged(nameof(IsInstallerSourceDynamicWeb));
+            OnPropertyChanged(nameof(IsRequiresInternetLocked));
+            OnPropertyChanged(nameof(IsRequiresInternetUserEditable));
             RefreshRemoteInstallerFilesCommand.NotifyCanExecuteChanged();
             ValidationError = null;
+
+            if (IsInstallerMode && _installerSourceMode != InstallerSourceMode.StaticLocal)
+            {
+                RequiresInternet = true;
+            }
+            else if (IsInstallerMode && _installerSourceMode == InstallerSourceMode.StaticLocal)
+            {
+                RequiresInternet = false;
+            }
         }
     }
 
@@ -170,6 +204,58 @@ public sealed class CreateProcessViewModel : ObservableObject
         get => _selectedIconKey;
         set => SetProperty(ref _selectedIconKey, value);
     }
+
+    private string _icon = "📦";
+    public string Icon
+    {
+        get => _icon;
+        set => SetProperty(ref _icon, value);
+    }
+
+    private string? _customIconLightPath;
+    public string? CustomIconLightPath
+    {
+        get => _customIconLightPath;
+        set
+        {
+            if (!SetProperty(ref _customIconLightPath, value)) return;
+            OnPropertyChanged(nameof(HasCustomIcon));
+        }
+    }
+
+    private string? _customIconDarkPath;
+    public string? CustomIconDarkPath
+    {
+        get => _customIconDarkPath;
+        set
+        {
+            if (!SetProperty(ref _customIconDarkPath, value)) return;
+            OnPropertyChanged(nameof(HasCustomIcon));
+        }
+    }
+
+    private bool _isIconPickerOpen;
+    public bool IsIconPickerOpen
+    {
+        get => _isIconPickerOpen;
+        set => SetProperty(ref _isIconPickerOpen, value);
+    }
+
+    private bool _useSeparateThemeIcons;
+    public bool UseSeparateThemeIcons
+    {
+        get => _useSeparateThemeIcons;
+        set => SetProperty(ref _useSeparateThemeIcons, value);
+    }
+
+    private bool _isIconPickerTargetDark;
+    public bool IsIconPickerTargetDark
+    {
+        get => _isIconPickerTargetDark;
+        set => SetProperty(ref _isIconPickerTargetDark, value);
+    }
+
+    public bool HasCustomIcon => !string.IsNullOrWhiteSpace(CustomIconLightPath) || !string.IsNullOrWhiteSpace(CustomIconDarkPath);
 
     private string? _validationError;
     public string? ValidationError
@@ -223,11 +309,22 @@ public sealed class CreateProcessViewModel : ObservableObject
         new("IconLog", "📋 Log")
     };
 
+    public ObservableCollection<string> AvailableEmojiIcons { get; } = new()
+    {
+        "📦", "🖥️", "📊", "💻", "🏢", "🖧", "⚙️", "🔧",
+        "📁", "📂", "🗂️", "💾", "🔒", "🔓", "✅", "⚠️"
+    };
+
+    public ObservableCollection<PresetIconLibraryItem> LibraryIcons { get; } = new();
+
     public bool IsInstallerMode => SelectedProcessKind == ProcessKind.Installer;
     public bool IsScriptMode =>
         SelectedProcessKind == ProcessKind.PowerShellScript ||
         SelectedProcessKind == ProcessKind.BatchScript ||
         SelectedProcessKind == ProcessKind.BashScript;
+
+    public bool IsRequiresInternetLocked => IsInstallerMode && InstallerSourceMode != InstallerSourceMode.StaticLocal;
+    public bool IsRequiresInternetUserEditable => !IsRequiresInternetLocked;
 
     public DeploymentProcess? CreatedProcess { get; private set; }
     private bool? _dialogResult;
@@ -242,20 +339,41 @@ public sealed class CreateProcessViewModel : ObservableObject
     public IRelayCommand CancelCommand { get; }
     public IRelayCommand DeleteCommand { get; }
     public IAsyncRelayCommand RefreshRemoteInstallerFilesCommand { get; }
+    public IAsyncRelayCommand OpenSelectedRemoteFolderCommand { get; }
+    public IAsyncRelayCommand NavigateUpRemoteFolderCommand { get; }
+    public IRelayCommand OpenIconPickerCommand { get; }
+    public IRelayCommand CloseIconPickerCommand { get; }
+    public IRelayCommand<string?> SelectEmojiIconCommand { get; }
+    public IRelayCommand ImportLibraryIconCommand { get; }
+    public IRelayCommand<PresetIconLibraryItem?> SelectLibraryIconCommand { get; }
+    public IRelayCommand SetIconPickerTargetLightCommand { get; }
+    public IRelayCommand SetIconPickerTargetDarkCommand { get; }
+    public IRelayCommand RemoveCustomIconCommand { get; }
 
     public event EventHandler? DeleteRequested;
 
-    public CreateProcessViewModel(IAuthService? authService = null, IDownloadDirectoryListingService? downloadDirectoryListingService = null, ILogService? log = null)
+    public CreateProcessViewModel(IAuthService? authService = null, IDownloadDirectoryListingService? downloadDirectoryListingService = null, ILogService? log = null, IPresetIconService? presetIconService = null)
     {
         _authService = authService;
         _downloadDirectoryListingService = downloadDirectoryListingService;
         _log = log;
+        _presetIconService = presetIconService;
 
         BrowseFileCommand = new RelayCommand(BrowseFile);
         SaveCommand = new RelayCommand(Save);
         CancelCommand = new RelayCommand(Cancel);
         DeleteCommand = new RelayCommand(RequestDelete);
         RefreshRemoteInstallerFilesCommand = new AsyncRelayCommand(RefreshRemoteInstallerFilesAsync, CanRefreshRemoteInstallerFiles);
+        OpenSelectedRemoteFolderCommand = new AsyncRelayCommand(OpenSelectedRemoteFolderAsync, CanOpenSelectedRemoteFolder);
+        NavigateUpRemoteFolderCommand = new AsyncRelayCommand(NavigateUpRemoteFolderAsync, CanNavigateUpRemoteFolderAsync);
+        OpenIconPickerCommand = new RelayCommand(OpenIconPicker);
+        CloseIconPickerCommand = new RelayCommand(CloseIconPicker);
+        SelectEmojiIconCommand = new RelayCommand<string?>(SelectEmojiIcon);
+        ImportLibraryIconCommand = new RelayCommand(ImportLibraryIcon);
+        SelectLibraryIconCommand = new RelayCommand<PresetIconLibraryItem?>(SelectLibraryIcon);
+        SetIconPickerTargetLightCommand = new RelayCommand(SetIconPickerTargetLight);
+        SetIconPickerTargetDarkCommand = new RelayCommand(SetIconPickerTargetDark);
+        RemoveCustomIconCommand = new RelayCommand(RemoveCustomIcon);
     }
 
     public void InitializeNew()
@@ -276,8 +394,15 @@ public sealed class CreateProcessViewModel : ObservableObject
         DownloadSelectedVersion = LatestVersionLabel;
         RemoteInstallerFiles.Clear();
         RemoteInstallerVersions.Clear();
+        IsRemoteFolderNavigationMode = false;
         _latestRemoteFolderName = string.Empty;
         SelectedIconKey = "IconPackage";
+        Icon = "📦";
+        CustomIconLightPath = null;
+        CustomIconDarkPath = null;
+        IsIconPickerOpen = false;
+        UseSeparateThemeIcons = false;
+        IsIconPickerTargetDark = false;
         Title = "Nuovo Processo";
         IsEditMode = false;
         CanDelete = false;
@@ -308,14 +433,26 @@ public sealed class CreateProcessViewModel : ObservableObject
             : LatestVersionLabel;
         RemoteInstallerFiles.Clear();
         RemoteInstallerVersions.Clear();
+        IsRemoteFolderNavigationMode = false;
         _latestRemoteFolderName = string.Empty;
         SelectedIconKey = process.IconKey;
+        Icon = string.IsNullOrWhiteSpace(process.Icon) ? "📦" : process.Icon;
+        CustomIconLightPath = process.CustomIconLightPath;
+        CustomIconDarkPath = process.CustomIconDarkPath;
+        IsIconPickerOpen = false;
+        UseSeparateThemeIcons = false;
+        IsIconPickerTargetDark = false;
         Title = "Modifica Processo";
         IsEditMode = true;
         CanDelete = process.IsUserCreated;
         CreatedProcess = null;
         ValidationError = null;
         DialogResult = null;
+
+        if (IsRequiresInternetLocked)
+        {
+            RequiresInternet = true;
+        }
     }
 
     private void BrowseFile()
@@ -367,6 +504,9 @@ public sealed class CreateProcessViewModel : ObservableObject
             RequiresInternet = RequiresInternet,
             IsRequired = false,
             IconKey = SelectedIconKey,
+            Icon = Icon,
+            CustomIconLightPath = CustomIconLightPath,
+            CustomIconDarkPath = CustomIconDarkPath,
             IsUserCreated = true,
             EnabledByDefault = true
         };
@@ -422,6 +562,113 @@ public sealed class CreateProcessViewModel : ObservableObject
 
         CreatedProcess = process;
         DialogResult = true;
+    }
+
+    private void OpenIconPicker()
+    {
+        LoadLibraryIcons();
+        IsIconPickerOpen = true;
+        ValidationError = null;
+    }
+
+    private void CloseIconPicker() => IsIconPickerOpen = false;
+
+    private void SelectEmojiIcon(string? icon)
+    {
+        if (string.IsNullOrWhiteSpace(icon)) return;
+        Icon = icon;
+        CustomIconLightPath = null;
+        CustomIconDarkPath = null;
+        IsIconPickerOpen = false;
+        ValidationError = null;
+    }
+
+    private void ImportLibraryIcon()
+    {
+        ValidationError = null;
+
+        var path = PickIconFile("Seleziona file icona");
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        try
+        {
+            if (_presetIconService == null)
+            {
+                ValidationError = "Servizio icone non disponibile.";
+                return;
+            }
+
+            var item = _presetIconService.ImportLibraryIcon(path);
+            LibraryIcons.Insert(0, item);
+            SelectLibraryIcon(item);
+        }
+        catch (Exception ex)
+        {
+            ValidationError = $"Errore durante l'import icona: {ex.Message}";
+        }
+    }
+
+    private void SelectLibraryIcon(PresetIconLibraryItem? item)
+    {
+        if (item is null) return;
+        if (string.IsNullOrWhiteSpace(item.LightPath) && string.IsNullOrWhiteSpace(item.DarkPath)) return;
+
+        if (!UseSeparateThemeIcons)
+        {
+            var candidate = !string.IsNullOrWhiteSpace(item.LightPath) ? item.LightPath : item.DarkPath;
+            CustomIconLightPath = candidate;
+            CustomIconDarkPath = !string.IsNullOrWhiteSpace(item.DarkPath) ? item.DarkPath : candidate;
+            IsIconPickerOpen = false;
+            ValidationError = null;
+            return;
+        }
+
+        if (IsIconPickerTargetDark)
+        {
+            CustomIconDarkPath = !string.IsNullOrWhiteSpace(item.DarkPath) ? item.DarkPath : item.LightPath;
+        }
+        else
+        {
+            CustomIconLightPath = !string.IsNullOrWhiteSpace(item.LightPath) ? item.LightPath : item.DarkPath;
+        }
+
+        ValidationError = null;
+    }
+
+    private void RemoveCustomIcon()
+    {
+        ValidationError = null;
+        CustomIconLightPath = null;
+        CustomIconDarkPath = null;
+    }
+
+    private void SetIconPickerTargetLight() => IsIconPickerTargetDark = false;
+
+    private void SetIconPickerTargetDark() => IsIconPickerTargetDark = true;
+
+    private static string? PickIconFile(string title)
+    {
+        var dlg = new OpenFileDialog
+        {
+            Title = title,
+            Filter = "Image Files|*.png;*.jpg;*.jpeg;*.ico",
+            CheckFileExists = true,
+            CheckPathExists = true,
+            Multiselect = false
+        };
+
+        return dlg.ShowDialog() == true ? dlg.FileName : null;
+    }
+
+    private void LoadLibraryIcons()
+    {
+        LibraryIcons.Clear();
+        if (_presetIconService == null) return;
+
+        foreach (var item in _presetIconService.GetLibraryIcons())
+        {
+            LibraryIcons.Add(item);
+        }
     }
 
     private void Cancel()
@@ -555,13 +802,34 @@ public sealed class CreateProcessViewModel : ObservableObject
 
             if (folders.Count > 0)
             {
+                var looksLikeVersions = LooksLikeVersionFolders(folders);
+                IsRemoteFolderNavigationMode = !looksLikeVersions;
+
                 RemoteInstallerVersions.Clear();
-                RemoteInstallerVersions.Add(LatestVersionLabel);
+                if (!IsRemoteFolderNavigationMode)
+                    RemoteInstallerVersions.Add(LatestVersionLabel);
                 foreach (var f in folders) RemoteInstallerVersions.Add(f);
 
                 _latestRemoteFolderName = folders.LastOrDefault() ?? string.Empty;
 
                 var selectedVersion = DownloadSelectedVersion;
+                if (IsRemoteFolderNavigationMode)
+                {
+                    if (string.IsNullOrWhiteSpace(selectedVersion) ||
+                        !folders.Any(v => string.Equals(v, selectedVersion, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        DownloadSelectedVersion = folders.FirstOrDefault() ?? string.Empty;
+                        selectedVersion = DownloadSelectedVersion;
+                    }
+
+                    RemoteInstallerFiles.Clear();
+                    DownloadSelectedFileName = string.Empty;
+                    ValidationError = null;
+                    OpenSelectedRemoteFolderCommand.NotifyCanExecuteChanged();
+                    NavigateUpRemoteFolderCommand.NotifyCanExecuteChanged();
+                    return;
+                }
+
                 if (string.IsNullOrWhiteSpace(selectedVersion) ||
                     (!string.Equals(selectedVersion, LatestVersionLabel, StringComparison.OrdinalIgnoreCase) &&
                      !folders.Any(v => string.Equals(v, selectedVersion, StringComparison.OrdinalIgnoreCase))))
@@ -574,13 +842,20 @@ public sealed class CreateProcessViewModel : ObservableObject
                     ? _latestRemoteFolderName
                     : selectedVersion;
 
-                var folderUrl = url.TrimEnd('/') + "/" + versionToList.Trim('/') + "/";
-                listing = await _downloadDirectoryListingService.GetFolderExeListingAsync(folderUrl);
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var baseUri))
+                {
+                    ValidationError = "URL non valido.";
+                    return;
+                }
+
+                var folderUri = new Uri(baseUri, versionToList.Trim('/').Trim() + "/");
+                listing = await _downloadDirectoryListingService.GetFolderExeListingAsync(folderUri.ToString());
                 _latestRemoteFolderName = versionToList;
             }
             else
             {
                 RemoteInstallerVersions.Clear();
+                IsRemoteFolderNavigationMode = false;
                 listing = await _downloadDirectoryListingService.GetFolderExeListingAsync(url);
                 _latestRemoteFolderName = listing?.FolderName ?? string.Empty;
             }
@@ -607,6 +882,63 @@ public sealed class CreateProcessViewModel : ObservableObject
             _log?.Error("Failed to load remote installers list", ex);
             ValidationError = "Errore durante il caricamento elenco installer.";
         }
+    }
+
+    private bool CanOpenSelectedRemoteFolder() =>
+        InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
+        IsRemoteFolderNavigationMode &&
+        !string.IsNullOrWhiteSpace(DownloadBaseFolderUrl) &&
+        !string.IsNullOrWhiteSpace(DownloadSelectedVersion);
+
+    private async Task OpenSelectedRemoteFolderAsync()
+    {
+        if (!CanOpenSelectedRemoteFolder()) return;
+        if (!Uri.TryCreate(DownloadBaseFolderUrl.Trim(), UriKind.Absolute, out var baseUri)) return;
+
+        var nextUri = new Uri(baseUri, DownloadSelectedVersion.Trim('/').Trim() + "/");
+        DownloadBaseFolderUrl = nextUri.ToString();
+        DownloadSelectedVersion = string.Empty;
+        await RefreshRemoteInstallerFilesAsync();
+    }
+
+    private bool CanNavigateUpRemoteFolderAsync() =>
+        InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
+        IsRemoteFolderNavigationMode &&
+        TryGetParentFolderUrl(DownloadBaseFolderUrl) is not null;
+
+    private async Task NavigateUpRemoteFolderAsync()
+    {
+        var parent = TryGetParentFolderUrl(DownloadBaseFolderUrl);
+        if (parent is null) return;
+        DownloadBaseFolderUrl = parent;
+        DownloadSelectedVersion = string.Empty;
+        await RefreshRemoteInstallerFilesAsync();
+    }
+
+    private static bool LooksLikeVersionFolders(IReadOnlyList<string> folders)
+    {
+        if (folders.Count < 3) return false;
+        var matches = folders.Count(f => VersionFolderRegex.IsMatch((f ?? string.Empty).Trim()));
+        return matches >= Math.Max(3, (int)Math.Ceiling(folders.Count * 0.6));
+    }
+
+    private static string? TryGetParentFolderUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return null;
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri)) return null;
+
+        var path = uri.AbsolutePath;
+        if (path.EndsWith("/./", StringComparison.OrdinalIgnoreCase)) path = path[..^3] + "/";
+        if (path.EndsWith("/.", StringComparison.OrdinalIgnoreCase)) path = path[..^2] + "/";
+        path = path.TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(path)) return null;
+
+        var idx = path.LastIndexOf('/');
+        if (idx <= 0) return null;
+        var parentPath = path[..idx] + "/";
+
+        var builder = new UriBuilder(uri) { Path = parentPath, Query = string.Empty, Fragment = string.Empty };
+        return builder.Uri.ToString();
     }
 
     private string BuildDownloadTemplate(string selectedFileName)

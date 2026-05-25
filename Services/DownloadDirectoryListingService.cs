@@ -97,6 +97,11 @@ public sealed class DownloadDirectoryListingService : IDownloadDirectoryListingS
             ? Comparer<string>.Create(CompareVersionFolderNames)
             : StringComparer.OrdinalIgnoreCase);
 
+        debug.Note($"ListSubfoldersAsync baseFolderUrl='{baseFolderUrl}', requestUri='{requestUri}', directoryPath='{directoryPath}', folders={folderLinks.Count}");
+        debug.SaveText("listing-links.txt", SummarizeLinks(allLinks));
+        debug.SaveText("subfolders.txt", string.Join(Environment.NewLine, folderLinks));
+        debug.FlushToLast();
+
         return folderLinks;
     }
 
@@ -273,7 +278,15 @@ public sealed class DownloadDirectoryListingService : IDownloadDirectoryListingS
         }
 
         debug.Note($"latestFolderUrl='{latest.Url}', latestFolderName='{latest.Name}'");
+        debug.FlushToLast();
         return latest.Url;
+    }
+
+    private static bool IsDownloadDebugEnabled()
+    {
+        var v = Environment.GetEnvironmentVariable("KLEVADEPLOY_DOWNLOAD_DEBUG");
+        return string.Equals(v, "1", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(v, "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<string?> GetStringWithRedirectsAsync(Uri url, CancellationToken ct, DownloadDebug debug)
@@ -350,7 +363,13 @@ public sealed class DownloadDirectoryListingService : IDownloadDirectoryListingS
             if (href.StartsWith("javascript:", StringComparison.OrdinalIgnoreCase)) continue;
 
             var hrefWithoutQuery = href.Split('?', '#').FirstOrDefault() ?? href;
-            var nameFromHref = hrefWithoutQuery.TrimEnd('/').Split('/').LastOrDefault() ?? string.Empty;
+            var hrefForName = hrefWithoutQuery;
+            if (hrefForName.EndsWith("/.", StringComparison.OrdinalIgnoreCase))
+                hrefForName = hrefForName[..^2] + "/";
+            if (hrefForName.EndsWith("/./", StringComparison.OrdinalIgnoreCase))
+                hrefForName = hrefForName[..^3] + "/";
+
+            var nameFromHref = hrefForName.TrimEnd('/').Split('/').LastOrDefault() ?? string.Empty;
 
             var name = nameFromHref;
             if (string.IsNullOrWhiteSpace(name))
@@ -362,7 +381,11 @@ public sealed class DownloadDirectoryListingService : IDownloadDirectoryListingS
             if (url is null) continue;
 
             var isFolder = hrefWithoutQuery.EndsWith("/", StringComparison.OrdinalIgnoreCase) ||
-                           (url.AbsolutePath.EndsWith("/", StringComparison.OrdinalIgnoreCase) && !url.AbsolutePath.EndsWith("/.", StringComparison.OrdinalIgnoreCase));
+                           hrefWithoutQuery.EndsWith("/.", StringComparison.OrdinalIgnoreCase) ||
+                           hrefWithoutQuery.EndsWith("/./", StringComparison.OrdinalIgnoreCase) ||
+                           url.AbsolutePath.EndsWith("/", StringComparison.OrdinalIgnoreCase) ||
+                           url.AbsolutePath.EndsWith("/.", StringComparison.OrdinalIgnoreCase) ||
+                           url.AbsolutePath.EndsWith("/./", StringComparison.OrdinalIgnoreCase);
 
             result.Add(new LinkInfo(name.TrimEnd('/'), url, isFolder));
         }
@@ -499,6 +522,8 @@ public sealed class DownloadDirectoryListingService : IDownloadDirectoryListingS
     private static string GetDirectoryPath(Uri url)
     {
         var path = url.AbsolutePath;
+        if (path.EndsWith("/./", StringComparison.OrdinalIgnoreCase))
+            path = path[..^3];
         if (path.EndsWith("/.", StringComparison.OrdinalIgnoreCase))
             path = path[..^2];
         if (!path.EndsWith("/", StringComparison.OrdinalIgnoreCase))

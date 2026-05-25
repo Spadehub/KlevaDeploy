@@ -9,7 +9,7 @@
         AllowsTransparency="False"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
-        Background="{DynamicResource AppBackgroundBrush}"
+        Background="Transparent"
         FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True">
@@ -69,6 +69,7 @@
                             Style="{StaticResource Win11CloseButton}"
                             VerticalAlignment="Center"
                             Command="{Binding CancelCommand}"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True"
                             IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
                 </Grid>
             </Border>

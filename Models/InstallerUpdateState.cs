@@ -42,5 +42,6 @@ public sealed class InstallerUpdateStateEntry
     public DateTimeOffset? LastDownloadedUtc { get; set; }
     public long? LastDownloadedBytes { get; set; }
     public string LastResolvedDownloadUrl { get; set; } = string.Empty;
+    public string LastDownloadedFromUrl { get; set; } = string.Empty;
 }
 

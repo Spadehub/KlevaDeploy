@@ -45,6 +45,9 @@ public class DeploymentProcess
     public string ScriptContent { get; set; } = string.Empty;
     /// <summary>Icon key from Icons.xaml (e.g., "IconPackage", "IconScript").</summary>
     public string IconKey { get; set; } = "IconPackage";
+    public string Icon { get; set; } = "📦";
+    public string? CustomIconLightPath { get; set; }
+    public string? CustomIconDarkPath { get; set; }
     /// <summary>If true, this process was created by the user (not from presets).</summary>
     public bool IsUserCreated { get; set; }
 }

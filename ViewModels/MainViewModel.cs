@@ -265,7 +265,7 @@ public sealed class MainViewModel : ObservableObject
         CreatePresetViewModel.CloseRequested += OnCreatePresetCloseRequested;
         CreatePresetViewModel.DeleteRequested += OnCreatePresetDeleteRequested;
 
-        CreateProcessViewModel = new CreateProcessViewModel(_authService, _downloadDirectoryListingService, _log);
+        CreateProcessViewModel = new CreateProcessViewModel(_authService, _downloadDirectoryListingService, _log, _presetIconService);
         CreateProcessViewModel.DeleteRequested += OnCreateProcessDeleteRequested;
         CreateProcessViewModel.PropertyChanged += (_, e) =>
         {
@@ -487,6 +487,7 @@ public sealed class MainViewModel : ObservableObject
         step.Process.Kind == ProcessKind.Installer &&
         step.Process.InstallerSourceMode == InstallerSourceMode.StaticWeb &&
         !string.IsNullOrWhiteSpace(step.Process.DownloadUrl) &&
+        _updateService.IsStaticWebInstallerCachedForUrl(step.Process) &&
         !IsInitializing;
 
     private async Task RedownloadInstallerAsync(ProcessStepViewModel? step)

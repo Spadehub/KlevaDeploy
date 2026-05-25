@@ -36,6 +36,8 @@
     <sys:Double x:Key="IconSizeSm">12</sys:Double>
     <sys:Double x:Key="IconSizeMd">16</sys:Double>
     <sys:Double x:Key="IconSizeLg">20</sys:Double>
+
+    <GridLength x:Key="MenuIconColumnWidth">36</GridLength>
     <CornerRadius x:Key="CornerRadiusSmall">4</CornerRadius>
     <CornerRadius x:Key="CornerRadiusMedium">8</CornerRadius>
     <CornerRadius x:Key="CornerRadiusLarge">12</CornerRadius>
@@ -358,6 +360,25 @@
         </Setter>
     </Style>
 
+    <Style x:Key="Win11ContextMenuSeparatorItem" TargetType="MenuItem">
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="IsEnabled" Value="False"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Height" Value="10"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Border Padding="6,4">
+                        <Border Height="1"
+                                Background="{DynamicResource BorderBrush}"
+                                Opacity="0.7"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="Win11ContextMenuItem" TargetType="MenuItem">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
@@ -372,7 +393,7 @@
                             Padding="{TemplateBinding Padding}">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="{StaticResource ControlHeightMd}"/>
+                                <ColumnDefinition Width="{StaticResource MenuIconColumnWidth}"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="18"/>
@@ -1121,8 +1142,9 @@
                                         BorderBrush="{DynamicResource BorderBrush}"
                                         BorderThickness="1"
                                         CornerRadius="{StaticResource CornerRadiusSmall}">
-                                    <ScrollViewer>
-                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <StackPanel IsItemsHost="True"
+                                                    KeyboardNavigation.DirectionalNavigation="Contained"/>
                                     </ScrollViewer>
                                 </Border>
                             </Grid>
