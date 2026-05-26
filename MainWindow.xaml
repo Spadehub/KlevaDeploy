@@ -859,9 +859,17 @@
                                                                 CornerRadius="{StaticResource CornerRadiusSmall}"
                                                             Padding="6,2"
                                                                 Visibility="{Binding IsSelected, Converter={StaticResource InverseBoolToVisibility}}">
-                                                            <TextBlock Text="{Binding StepCount, StringFormat='{}{0} step', Mode=OneWay}"
-                                                                       Foreground="{DynamicResource TextSecondaryBrush}"
-                                                                   FontSize="10"/>
+                                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                                <TextBlock Text="{Binding StepCount, Mode=OneWay}"
+                                                                           TextAlignment="Center"
+                                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                           FontSize="12"
+                                                                           FontWeight="SemiBold"/>
+                                                                <TextBlock Text="step"
+                                                                           TextAlignment="Center"
+                                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                           FontSize="10"/>
+                                                            </StackPanel>
                                                         </Border>
                                                         <Border Width="22" Height="22"
                                                                 Background="White"
@@ -1412,6 +1420,8 @@
                                                            VerticalAlignment="Center"
                                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
 
+                                                
+
                                                 <!-- Action icons (Internet + Edit + Kind) -->
                                                 <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                                                     <!-- Internet Badge -->
@@ -1424,6 +1434,16 @@
                                                                    Foreground="{DynamicResource AccentBrush}"/>
                                                     </Border>
 
+                                                    <!-- Kind label badge -->
+                                                    <Border Background="{DynamicResource SurfaceElevatedBrush}"
+                                                            Style="{StaticResource Win11Badge}"
+                                                            Margin="6,0,0,0">
+                                                        <TextBlock Text="{Binding KindLabel}"
+                                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                   FontSize="9"
+                                                                   VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    
                                                     <Button Style="{StaticResource Win11IconButton}"
                                                             Margin="6,0,0,0"
                                                             ToolTip="Azioni"
@@ -1528,16 +1548,6 @@
                                                             </ContextMenu>
                                                         </Button.ContextMenu>
                                                     </Button>
-
-                                                    <!-- Kind label badge -->
-                                                    <Border Background="{DynamicResource SurfaceElevatedBrush}"
-                                                            Style="{StaticResource Win11Badge}"
-                                                            Margin="6,0,0,0">
-                                                        <TextBlock Text="{Binding KindLabel}"
-                                                                   Foreground="{DynamicResource TextSecondaryBrush}"
-                                                                   FontSize="9"
-                                                                   VerticalAlignment="Center"/>
-                                                    </Border>
                                                 </StackPanel>
 
                                                 <!-- Description + required badge + status text -->
@@ -3092,49 +3102,54 @@
                                                         Visibility="{Binding IsRemoteFolderNavigationMode, Converter={StaticResource BoolToVisibility}}"/>
                                             </Grid>
 
-                                            <StackPanel Visibility="{Binding RemoteInstallerVersions, Converter={StaticResource CollectionNotEmptyToVisibilityConverter}}">
-                                                <TextBlock Text="{Binding RemoteFolderPickerLabel}"
-                                                           Style="{StaticResource Win11TextBody}"
-                                                           FontWeight="SemiBold"
-                                                           Margin="0,0,0,6"/>
-                                                <Grid Margin="0,0,0,8">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*"/>
-                                                        <ColumnDefinition Width="Auto"/>
-                                                    </Grid.ColumnDefinitions>
-                                                    <ComboBox Grid.Column="0"
-                                                              ItemsSource="{Binding RemoteInstallerVersions}"
-                                                              SelectedItem="{Binding DownloadSelectedVersion, Mode=TwoWay}"
-                                                              Style="{StaticResource Win11ComboBox}"
-                                                              Margin="0,0,8,0"/>
-                                                    <Button Grid.Column="1"
-                                                            Content="Apri"
-                                                            Command="{Binding OpenSelectedRemoteFolderCommand}"
-                                                            Style="{StaticResource Win11Button}"
-                                                            Padding="12,6"
-                                                            Visibility="{Binding IsRemoteFolderNavigationMode, Converter={StaticResource BoolToVisibility}}"/>
-                                                </Grid>
-                                            </StackPanel>
-
-                                            <TextBlock Text="Installer da Scaricare"
-                                                       Style="{StaticResource Win11TextBody}"
-                                                       FontWeight="SemiBold"
-                                                       Margin="0,0,0,6"/>
                                             <Grid Margin="0,0,0,16">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="12"/>
+                                                    <ColumnDefinition Width="3*"/>
                                                 </Grid.ColumnDefinitions>
-                                                <ComboBox Grid.Column="0"
-                                                          ItemsSource="{Binding RemoteInstallerFiles}"
-                                                          SelectedItem="{Binding DownloadSelectedFileName, Mode=TwoWay}"
-                                                          Style="{StaticResource Win11ComboBox}"
-                                                          Margin="0,0,8,0"/>
-                                                <Button Grid.Column="1"
-                                                        Content="Aggiorna elenco"
-                                                        Command="{Binding RefreshRemoteInstallerFilesCommand}"
-                                                        Style="{StaticResource Win11Button}"
-                                                        Padding="12,6"/>
+
+                                                <StackPanel Grid.Column="0"
+                                                            Visibility="{Binding HasRemoteInstallerVersions, Converter={StaticResource BoolToVisibility}}">
+                                                    <TextBlock Text="{Binding RemoteFolderPickerLabel}"
+                                                               Style="{StaticResource Win11TextBody}"
+                                                               FontWeight="SemiBold"
+                                                               Margin="0,0,0,6"/>
+                                                    <ComboBox ItemsSource="{Binding RemoteInstallerVersions}"
+                                                              SelectedItem="{Binding DownloadSelectedVersion, Mode=TwoWay}"
+                                                              Style="{StaticResource Win11ComboBox}"
+                                                              MaxDropDownHeight="260"/>
+
+                                                    <Button Content="Apri"
+                                                            Command="{Binding OpenSelectedRemoteFolderCommand}"
+                                                            Style="{StaticResource Win11Button}"
+                                                            Height="36"
+                                                            Margin="0,8,0,0"
+                                                            Visibility="{Binding IsRemoteFolderNavigationMode, Converter={StaticResource BoolToVisibility}}"/>
+                                                </StackPanel>
+
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock Text="Installer da Scaricare"
+                                                               Style="{StaticResource Win11TextBody}"
+                                                               FontWeight="SemiBold"
+                                                               Margin="0,0,0,6"/>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <ComboBox Grid.Column="0"
+                                                                  ItemsSource="{Binding RemoteInstallerFiles}"
+                                                                  SelectedItem="{Binding DownloadSelectedFileName, Mode=TwoWay}"
+                                                                  Style="{StaticResource Win11ComboBox}"
+                                                                  Margin="0,0,8,0"/>
+                                                        <Button Grid.Column="1"
+                                                                Content="Aggiorna elenco"
+                                                                Command="{Binding RefreshRemoteInstallerFilesCommand}"
+                                                                Style="{StaticResource Win11Button}"
+                                                                Padding="12,6"/>
+                                                    </Grid>
+                                                </StackPanel>
                                             </Grid>
                                         </StackPanel>
 
