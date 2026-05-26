@@ -471,6 +471,13 @@ public sealed class CreateProcessViewModel : ObservableObject
         {
             RequiresInternet = true;
         }
+
+        if (InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
+            !string.IsNullOrWhiteSpace(DownloadBaseFolderUrl) &&
+            _authService?.IsAuthenticated == true)
+        {
+            _ = RefreshRemoteInstallerFilesAsync();
+        }
     }
 
     private void BrowseFile()
@@ -892,7 +899,7 @@ public sealed class CreateProcessViewModel : ObservableObject
             if (!string.IsNullOrWhiteSpace(DownloadSelectedFileName) &&
                 !RemoteInstallerFiles.Any(f => string.Equals(f, DownloadSelectedFileName, StringComparison.OrdinalIgnoreCase)))
             {
-                DownloadSelectedFileName = string.Empty;
+                DownloadSelectedFileName = RemoteInstallerFiles.FirstOrDefault() ?? string.Empty;
             }
         }
         catch (Exception ex)
@@ -942,7 +949,7 @@ public sealed class CreateProcessViewModel : ObservableObject
             if (!string.IsNullOrWhiteSpace(DownloadSelectedFileName) &&
                 !RemoteInstallerFiles.Any(f => string.Equals(f, DownloadSelectedFileName, StringComparison.OrdinalIgnoreCase)))
             {
-                DownloadSelectedFileName = string.Empty;
+                DownloadSelectedFileName = RemoteInstallerFiles.FirstOrDefault() ?? string.Empty;
             }
         }
         catch (OperationCanceledException)
