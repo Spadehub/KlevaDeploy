@@ -900,6 +900,39 @@ public sealed class MainViewModel : ObservableObject
                     throw new InvalidOperationException($"Installer path missing for process: {process.Name}");
 
                 var installerPath = Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+
+                if (!File.Exists(installerPath) && process.InstallerSourceMode != InstallerSourceMode.StaticLocal)
+                {
+                    await _updateService.UpdateSingleInstallerAsync(process);
+                }
+
+                if (!File.Exists(installerPath))
+                    throw new FileNotFoundException($"Installer file not found: {installerPath}");
+
+                var ext = Path.GetExtension(installerPath).ToLowerInvariant();
+                if (ext == ".msi")
+                {
+                    var msiArgs = $"/i \"{installerPath}\" {arguments}".Trim();
+                    return await _processExecutionService.RunAsync("msiexec.exe", msiArgs, process.RunAsAdmin);
+                }
+
+                if (ext == ".zip")
+                {
+                    var extractedDir = await _processExecutionService.ExtractZipToTempAsync(installerPath);
+                    var resolved = ResolveInstallerFromExtractedDir(extractedDir);
+                    if (resolved is null)
+                        throw new InvalidOperationException($"No installer (.exe/.msi) found inside ZIP: {installerPath}");
+
+                    var innerExt = Path.GetExtension(resolved).ToLowerInvariant();
+                    if (innerExt == ".msi")
+                    {
+                        var innerArgs = $"/i \"{resolved}\" {arguments}".Trim();
+                        return await _processExecutionService.RunAsync("msiexec.exe", innerArgs, process.RunAsAdmin);
+                    }
+
+                    return await _processExecutionService.RunAsync(resolved, arguments, process.RunAsAdmin);
+                }
+
                 return await _processExecutionService.RunAsync(installerPath, arguments, process.RunAsAdmin);
             }
             case ProcessKind.PowerShellScript:
@@ -957,6 +990,44 @@ public sealed class MainViewModel : ObservableObject
                 return new ProcessResult(0, string.Empty, string.Empty);
             }
         }
+    }
+
+    private static string? ResolveInstallerFromExtractedDir(string extractedDir)
+    {
+        if (string.IsNullOrWhiteSpace(extractedDir) || !Directory.Exists(extractedDir))
+            return null;
+
+        static bool IsCandidate(string path)
+        {
+            var name = Path.GetFileName(path);
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            if (name.Contains("uninstall", StringComparison.OrdinalIgnoreCase)) return false;
+            return true;
+        }
+
+        var exeFiles = Directory.EnumerateFiles(extractedDir, "*.exe", SearchOption.AllDirectories)
+            .Where(IsCandidate)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        string? pickExe(string contains)
+        {
+            return exeFiles.FirstOrDefault(p =>
+                Path.GetFileName(p).Contains(contains, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var preferredExe = pickExe("setup") ?? pickExe("install") ?? pickExe("installer");
+        if (!string.IsNullOrWhiteSpace(preferredExe)) return preferredExe;
+
+        var msiFiles = Directory.EnumerateFiles(extractedDir, "*.msi", SearchOption.AllDirectories)
+            .Where(IsCandidate)
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (msiFiles.Count > 0) return msiFiles[0];
+        if (exeFiles.Count > 0) return exeFiles[0];
+
+        return null;
     }
 
     private bool CanRunQueue() => ExecutionQueue.Count > 0 && !IsRunning && !IsInitializing;
