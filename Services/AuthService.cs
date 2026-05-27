@@ -1,9 +1,11 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Linq;
 using System.Text.Json;
+using System.Collections.Generic;
 using HtmlAgilityPack;
 using KlevaDeploy.Services.Interfaces;
 
@@ -14,6 +16,8 @@ public sealed class AuthService : IAuthService
     private readonly HttpClient _httpClient;
     private readonly CookieContainer _cookieContainer;
     private readonly ILogService _log;
+    private string _lastPortalHomeUrl = DownloadsHomeUrl;
+    private readonly Dictionary<string, bool> _authByHost = new(StringComparer.OrdinalIgnoreCase);
 
     // Passepartout portal endpoints — update these to the real URLs
     private const string LoginPageUrl = "https://www.passepartout.net/area-riservata/login";
@@ -21,6 +25,9 @@ public sealed class AuthService : IAuthService
     private const string DownloadsHomeUrl = "https://download.passepartout.cloud/.";
 
     public bool IsAuthenticated { get; private set; }
+    public int AuthenticatedPortalCount => _authByHost.Count(kvp => kvp.Value);
+
+    public event EventHandler? AuthStateChanged;
 
     public AuthService(HttpClient httpClient, CookieContainer cookieContainer, ILogService log)
     {
@@ -29,35 +36,81 @@ public sealed class AuthService : IAuthService
         _log = log;
     }
 
+    public bool IsAuthenticatedForUrl(string url)
+    {
+        if (!Uri.TryCreate((url ?? string.Empty).Trim(), UriKind.Absolute, out var uri))
+            return false;
+
+        lock (_authByHost)
+        {
+            if (_authByHost.TryGetValue(uri.Host, out var authed))
+                return authed;
+        }
+
+        try
+        {
+            var cookies = _cookieContainer.GetCookies(uri);
+            return cookies is not null && cookies.Count > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public bool IsAuthenticatedForPortalHomeUrl(string portalHomeUrl)
+    {
+        var normalized = NormalizePortalHomeUrl(portalHomeUrl);
+        return IsAuthenticatedForUrl(normalized);
+    }
+
     public async Task<bool> LoginAsync(string username, string password, CancellationToken ct = default)
+    {
+        return await LoginAsync(username, password, DownloadsHomeUrl, ct);
+    }
+
+    public async Task<bool> LoginAsync(string username, string password, string portalHomeUrl, CancellationToken ct = default)
     {
         try
         {
             EnsureDefaultHeaders();
 
-            _log.Info("Attempting Passepartout login...");
+            var normalizedPortalHomeUrl = NormalizePortalHomeUrl(portalHomeUrl);
+            _lastPortalHomeUrl = normalizedPortalHomeUrl;
+            _log.Info($"Attempting portal login: {normalizedPortalHomeUrl}");
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(25));
 
             var netOk = await TryLoginPassepartoutNetAsync(username, password, timeoutCts.Token);
-            var downloadsOk = await TryLoginPassepartoutDownloadsAsync(username, password, timeoutCts.Token);
+            var downloadsOk = await TryLoginPassepartoutDownloadsAsync(username, password, normalizedPortalHomeUrl, timeoutCts.Token);
 
-            IsAuthenticated = downloadsOk || netOk;
+            var portalHost = TryGetHost(normalizedPortalHomeUrl);
+            if (!string.IsNullOrWhiteSpace(portalHost))
+            {
+                lock (_authByHost)
+                {
+                    if (downloadsOk)
+                        _authByHost[portalHost] = true;
+                }
+            }
+
+            IsAuthenticated = (downloadsOk || netOk) || AuthenticatedPortalCount > 0;
 
             if (IsAuthenticated)
             {
-                _log.Info("Passepartout login successful.");
+                _log.Info("Portal login successful.");
                 SaveSessionIfEnabled();
+                AuthStateChanged?.Invoke(this, EventArgs.Empty);
             }
             else
-                _log.Warning("Passepartout login failed.");
+                _log.Warning("Portal login failed.");
 
             return IsAuthenticated;
         }
         catch (OperationCanceledException)
         {
-            _log.Warning("Passepartout login timed out.");
+            _log.Warning("Portal login timed out.");
             IsAuthenticated = false;
             return false;
         }
@@ -71,9 +124,33 @@ public sealed class AuthService : IAuthService
 
     public void Logout()
     {
+        lock (_authByHost)
+        {
+            _authByHost.Clear();
+        }
+
         IsAuthenticated = false;
+        TryClearInMemoryCookies();
         TryClearPersistedSession();
         _log.Info("Session logged out.");
+        AuthStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void LogoutPortal(string portalHomeUrl)
+    {
+        var normalized = NormalizePortalHomeUrl(portalHomeUrl);
+        var host = TryGetHost(normalized);
+        if (string.IsNullOrWhiteSpace(host)) return;
+
+        TryClearCookiesForHost(host);
+
+        lock (_authByHost)
+        {
+            _authByHost[host] = false;
+        }
+
+        IsAuthenticated = AuthenticatedPortalCount > 0;
+        AuthStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public async Task<bool> TryRestoreSessionAsync(CancellationToken ct = default)
@@ -91,18 +168,42 @@ public sealed class AuthService : IAuthService
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(10));
 
-            using var verify = await GetWithRedirectsAsync(new Uri(DownloadsHomeUrl), timeoutCts.Token, debug: null);
-            if (verify is null || !verify.IsSuccessStatusCode)
+            string? html = null;
+            try
+            {
+                using var verify = await GetWithRedirectsAsync(new Uri(_lastPortalHomeUrl), timeoutCts.Token, debug: null);
+                if (verify is not null && verify.IsSuccessStatusCode)
+                    html = await verify.Content.ReadAsStringAsync(timeoutCts.Token);
+            }
+            catch { }
+
+            if (string.IsNullOrWhiteSpace(html))
+            {
+                using var verify = await GetWithRedirectsAsync(new Uri(DownloadsHomeUrl), timeoutCts.Token, debug: null);
+                if (verify is not null && verify.IsSuccessStatusCode)
+                    html = await verify.Content.ReadAsStringAsync(timeoutCts.Token);
+            }
+
+            if (string.IsNullOrWhiteSpace(html))
             {
                 IsAuthenticated = false;
                 return false;
             }
-
-            var html = await verify.Content.ReadAsStringAsync(timeoutCts.Token);
             var ok = html.Contains("Folder Path", StringComparison.OrdinalIgnoreCase) ||
                      html.Contains("Log out", StringComparison.OrdinalIgnoreCase);
 
             IsAuthenticated = ok;
+            if (ok)
+            {
+                var host = TryGetHost(_lastPortalHomeUrl);
+                if (!string.IsNullOrWhiteSpace(host))
+                {
+                    lock (_authByHost)
+                    {
+                        _authByHost[host] = true;
+                    }
+                }
+            }
             return ok;
         }
         catch
@@ -152,7 +253,7 @@ public sealed class AuthService : IAuthService
             var path = Path.Combine(storageDir, "auth_session.json");
 
             var list = new List<PersistedCookie>();
-            foreach (var uri in GetKnownAuthUris())
+            foreach (var uri in GetKnownAuthUris(_lastPortalHomeUrl))
             {
                 foreach (Cookie c in _cookieContainer.GetCookies(uri))
                 {
@@ -161,7 +262,12 @@ public sealed class AuthService : IAuthService
                 }
             }
 
-            var json = JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true });
+            var session = new PersistedAuthSession
+            {
+                PortalHomeUrl = _lastPortalHomeUrl,
+                Cookies = list
+            };
+            var json = JsonSerializer.Serialize(session, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(path, json);
             _log.Info($"Auth session persisted: {path}");
         }
@@ -181,7 +287,18 @@ public sealed class AuthService : IAuthService
                 return false;
 
             var json = File.ReadAllText(path);
-            var list = JsonSerializer.Deserialize<List<PersistedCookie>>(json) ?? new List<PersistedCookie>();
+            var session = JsonSerializer.Deserialize<PersistedAuthSession>(json);
+            List<PersistedCookie> list;
+
+            if (session is not null && session.Cookies.Count > 0)
+            {
+                _lastPortalHomeUrl = NormalizePortalHomeUrl(session.PortalHomeUrl);
+                list = session.Cookies;
+            }
+            else
+            {
+                list = JsonSerializer.Deserialize<List<PersistedCookie>>(json) ?? new List<PersistedCookie>();
+            }
 
             foreach (var pc in list)
             {
@@ -213,8 +330,56 @@ public sealed class AuthService : IAuthService
         catch { }
     }
 
-    private static IEnumerable<Uri> GetKnownAuthUris()
+    private void TryClearInMemoryCookies()
     {
+        try
+        {
+            var domainTable = typeof(CookieContainer).GetField("m_domainTable", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(_cookieContainer);
+            if (domainTable is System.Collections.IDictionary dict)
+                dict.Clear();
+        }
+        catch { }
+    }
+
+    private void TryClearCookiesForHost(string host)
+    {
+        try
+        {
+            var domainTable = typeof(CookieContainer).GetField("m_domainTable", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(_cookieContainer);
+            if (domainTable is not System.Collections.IDictionary dict) return;
+
+            var keysToRemove = new List<object>();
+            foreach (var key in dict.Keys)
+            {
+                if (key is null) continue;
+                var s = key?.ToString() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(s)) continue;
+
+                var normalized = s.TrimStart('.');
+                if (string.Equals(normalized, host, StringComparison.OrdinalIgnoreCase))
+                    keysToRemove.Add(key!);
+            }
+
+            foreach (var k in keysToRemove)
+                dict.Remove(k);
+        }
+        catch { }
+    }
+
+    private static string? TryGetHost(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
+        return uri.Host;
+    }
+
+    private static IEnumerable<Uri> GetKnownAuthUris(string portalHomeUrl)
+    {
+        if (Uri.TryCreate(portalHomeUrl, UriKind.Absolute, out var portal))
+        {
+            yield return portal;
+            yield return new Uri(portal.GetLeftPart(UriPartial.Authority) + "/");
+        }
+
         yield return new Uri("https://download.passepartout.cloud/");
         yield return new Uri("https://idp.passepartout.cloud/");
         yield return new Uri("https://www.passepartout.net/");
@@ -262,6 +427,12 @@ public sealed class AuthService : IAuthService
         }
     }
 
+    private sealed class PersistedAuthSession
+    {
+        public string PortalHomeUrl { get; set; } = DownloadsHomeUrl;
+        public List<PersistedCookie> Cookies { get; set; } = new();
+    }
+
     private async Task<bool> TryLoginPassepartoutNetAsync(string username, string password, CancellationToken ct)
     {
         try
@@ -286,12 +457,13 @@ public sealed class AuthService : IAuthService
         }
     }
 
-    private async Task<bool> TryLoginPassepartoutDownloadsAsync(string username, string password, CancellationToken ct)
+    private async Task<bool> TryLoginPassepartoutDownloadsAsync(string username, string password, string portalHomeUrl, CancellationToken ct)
     {
         using var debug = new AuthDebug(_log);
         try
         {
-            using var landing = await GetWithRedirectsAsync(new Uri(DownloadsHomeUrl), ct, debug);
+            var portalUri = new Uri(NormalizePortalHomeUrl(portalHomeUrl));
+            using var landing = await GetWithRedirectsAsync(portalUri, ct, debug);
             if (landing is null)
             {
                 debug.FlushToLast();
@@ -325,7 +497,7 @@ public sealed class AuthService : IAuthService
                 return false;
             }
 
-            var baseUri = landing.RequestMessage?.RequestUri ?? new Uri(DownloadsHomeUrl);
+            var baseUri = landing.RequestMessage?.RequestUri ?? portalUri;
             var actionUri = new Uri(baseUri, actionAttr);
 
             var inputNodes = formNode.SelectNodes(".//input[@name]") ?? new HtmlNodeCollection(formNode);
@@ -419,7 +591,7 @@ public sealed class AuthService : IAuthService
             var postHtml = await postResponse.Content.ReadAsStringAsync(ct);
             debug.SaveHtml("downloads-after-post.html", postHtml);
 
-            using var verify = await GetWithRedirectsAsync(new Uri(DownloadsHomeUrl), ct, debug);
+            using var verify = await GetWithRedirectsAsync(portalUri, ct, debug);
             if (verify is null || !verify.IsSuccessStatusCode)
             {
                 debug.FlushToLast();
@@ -493,7 +665,7 @@ public sealed class AuthService : IAuthService
 
             var nextUri = location.IsAbsoluteUri
                 ? location
-                : new Uri(currentRequest.RequestUri ?? new Uri(DownloadsHomeUrl), location);
+                : new Uri(currentRequest.RequestUri ?? new Uri(_lastPortalHomeUrl), location);
 
             currentRequest.Dispose();
             currentRequest = new HttpRequestMessage(HttpMethod.Get, nextUri);
@@ -504,6 +676,42 @@ public sealed class AuthService : IAuthService
 
     private static bool IsRedirectStatusCode(HttpStatusCode code) =>
         code is HttpStatusCode.Moved or HttpStatusCode.Redirect or HttpStatusCode.RedirectMethod or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect;
+
+    private static string NormalizePortalHomeUrl(string? portalHomeUrl)
+    {
+        var raw = (portalHomeUrl ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+            return DownloadsHomeUrl;
+
+        if (!Uri.TryCreate(raw, UriKind.Absolute, out var uri))
+        {
+            if (!raw.Contains("://", StringComparison.OrdinalIgnoreCase) &&
+                Uri.TryCreate("https://" + raw, UriKind.Absolute, out var httpsUri))
+            {
+                uri = httpsUri;
+            }
+            else
+            {
+                return DownloadsHomeUrl;
+            }
+        }
+
+        if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
+        {
+            return DownloadsHomeUrl;
+        }
+
+        var builder = new UriBuilder(uri) { Query = string.Empty, Fragment = string.Empty };
+
+        if (string.Equals(builder.Host, "download.passepartout.cloud", StringComparison.OrdinalIgnoreCase))
+        {
+            var path = (builder.Path ?? string.Empty).TrimEnd('/');
+            builder.Path = string.IsNullOrWhiteSpace(path) ? "/." : path + "/.";
+        }
+
+        return builder.Uri.ToString();
+    }
 
     private sealed class AuthDebug : IDisposable
     {

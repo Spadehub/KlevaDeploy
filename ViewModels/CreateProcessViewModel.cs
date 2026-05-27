@@ -18,7 +18,12 @@ public sealed class CreateProcessViewModel : ObservableObject
     private readonly IDownloadDirectoryListingService? _downloadDirectoryListingService;
     private readonly IPresetIconService? _presetIconService;
     private readonly ILogService? _log;
+    private readonly IPreferencesService? _prefsService;
     private string _latestRemoteFolderName = string.Empty;
+    private string _existingDownloadSelectedFileTemplate = string.Empty;
+    private string _persistedVersionFolderName = string.Empty;
+    private string _loadedSavedVersionFolderName = string.Empty;
+    private bool _forceLatestVersionOnRefresh;
     private CancellationTokenSource? _remoteInstallerLoadCts;
     private bool _suppressVersionAutoLoad;
 
@@ -89,6 +94,35 @@ public sealed class CreateProcessViewModel : ObservableObject
         set => SetProperty(ref _requiresInternet, value);
     }
 
+    private bool _portalAccessEnabled;
+    public bool PortalAccessEnabled
+    {
+        get => _portalAccessEnabled;
+        set
+        {
+            if (!SetProperty(ref _portalAccessEnabled, value)) return;
+            OnPropertyChanged(nameof(IsPortalPickerVisible));
+            if (_portalAccessEnabled)
+            {
+                if (string.IsNullOrWhiteSpace(SelectedPortalId))
+                    SelectedPortalId = _prefsService?.Preferences.SelectedPortalId;
+            }
+            else
+                SelectedPortalId = null;
+        }
+    }
+
+    public bool IsPortalPickerVisible => PortalAccessEnabled;
+
+    private string? _selectedPortalId;
+    public string? SelectedPortalId
+    {
+        get => _selectedPortalId;
+        set => SetProperty(ref _selectedPortalId, value);
+    }
+
+    public ObservableCollection<PortalOption> AvailablePortals { get; } = new();
+
     private string _downloadBaseFolderUrl = string.Empty;
     public string DownloadBaseFolderUrl
     {
@@ -122,6 +156,7 @@ public sealed class CreateProcessViewModel : ObservableObject
     public ObservableCollection<string> RemoteInstallerVersions { get; } = new();
 
     public bool HasRemoteInstallerVersions => RemoteInstallerVersions.Count > 0;
+    public bool IsRemoteVersionPickerMode => HasRemoteInstallerVersions && !IsRemoteFolderNavigationMode;
 
     private string _downloadSelectedVersion = string.Empty;
     public string DownloadSelectedVersion
@@ -130,10 +165,37 @@ public sealed class CreateProcessViewModel : ObservableObject
         set
         {
             if (!SetProperty(ref _downloadSelectedVersion, value)) return;
+            if (!_suppressVersionAutoLoad && !IsRemoteFolderNavigationMode)
+                _persistedVersionFolderName = (_downloadSelectedVersion ?? string.Empty).Trim();
             if (!_suppressVersionAutoLoad)
                 _ = OnDownloadSelectedVersionChangedAsync();
             OpenSelectedRemoteFolderCommand.NotifyCanExecuteChanged();
         }
+    }
+
+    private bool _isInstallerAutoUpdateEnabled = true;
+    public bool IsInstallerAutoUpdateEnabled
+    {
+        get => _isInstallerAutoUpdateEnabled;
+        set
+        {
+            if (!SetProperty(ref _isInstallerAutoUpdateEnabled, value)) return;
+
+            if (_isInstallerAutoUpdateEnabled &&
+                InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
+                !IsRemoteFolderNavigationMode &&
+                !string.IsNullOrWhiteSpace(_latestRemoteFolderName))
+            {
+                _forceLatestVersionOnRefresh = true;
+                DownloadSelectedVersion = _latestRemoteFolderName;
+                _persistedVersionFolderName = _latestRemoteFolderName;
+            }
+        }
+    }
+
+    public void PrepareAutoUpdateCheck()
+    {
+        _forceLatestVersionOnRefresh = true;
     }
 
     private bool _isRemoteFolderNavigationMode;
@@ -144,6 +206,7 @@ public sealed class CreateProcessViewModel : ObservableObject
         {
             if (!SetProperty(ref _isRemoteFolderNavigationMode, value)) return;
             OnPropertyChanged(nameof(RemoteFolderPickerLabel));
+            OnPropertyChanged(nameof(IsRemoteVersionPickerMode));
             OpenSelectedRemoteFolderCommand.NotifyCanExecuteChanged();
             NavigateUpRemoteFolderCommand.NotifyCanExecuteChanged();
         }
@@ -363,16 +426,20 @@ public sealed class CreateProcessViewModel : ObservableObject
 
     public event EventHandler? DeleteRequested;
 
-    public CreateProcessViewModel(IAuthService? authService = null, IDownloadDirectoryListingService? downloadDirectoryListingService = null, ILogService? log = null, IPresetIconService? presetIconService = null)
+    public CreateProcessViewModel(IAuthService? authService = null, IDownloadDirectoryListingService? downloadDirectoryListingService = null, IPreferencesService? prefsService = null, ILogService? log = null, IPresetIconService? presetIconService = null)
     {
         _authService = authService;
         _downloadDirectoryListingService = downloadDirectoryListingService;
+        _prefsService = prefsService;
         _log = log;
         _presetIconService = presetIconService;
+
+        LoadPortalsFromPreferences();
 
         RemoteInstallerVersions.CollectionChanged += (_, __) =>
         {
             OnPropertyChanged(nameof(HasRemoteInstallerVersions));
+            OnPropertyChanged(nameof(IsRemoteVersionPickerMode));
         };
 
         BrowseFileCommand = new RelayCommand(BrowseFile);
@@ -404,15 +471,21 @@ public sealed class CreateProcessViewModel : ObservableObject
         ScriptContent = string.Empty;
         RunAsAdmin = false;
         RequiresInternet = false;
+        PortalAccessEnabled = false;
+        SelectedPortalId = _prefsService?.Preferences.SelectedPortalId;
         DownloadBaseFolderUrl = string.Empty;
         DownloadUrl = string.Empty;
         DownloadSelectedFileName = string.Empty;
         DownloadSelectedVersion = string.Empty;
+        IsInstallerAutoUpdateEnabled = true;
         RemoteInstallerFiles.Clear();
         RemoteInstallerVersions.Clear();
         IsRemoteFolderNavigationMode = false;
         OnPropertyChanged(nameof(HasRemoteInstallerVersions));
         _latestRemoteFolderName = string.Empty;
+        _existingDownloadSelectedFileTemplate = string.Empty;
+        _persistedVersionFolderName = string.Empty;
+        _loadedSavedVersionFolderName = string.Empty;
         SelectedIconKey = "IconPackage";
         Icon = "📦";
         CustomIconLightPath = null;
@@ -426,6 +499,8 @@ public sealed class CreateProcessViewModel : ObservableObject
         CreatedProcess = null;
         ValidationError = null;
         DialogResult = null;
+
+        LoadPortalsFromPreferences();
     }
 
     public void InitializeForEdit(DeploymentProcess process)
@@ -440,14 +515,20 @@ public sealed class CreateProcessViewModel : ObservableObject
         ScriptContent = process.ScriptContent;
         RunAsAdmin = process.RunAsAdmin;
         RequiresInternet = process.RequiresInternet;
+        PortalAccessEnabled = process.RequiresAuth;
+        SelectedPortalId = !string.IsNullOrWhiteSpace(process.PortalId)
+            ? process.PortalId
+            : GuessPortalIdFromProcess(process);
         DownloadBaseFolderUrl = process.DownloadBaseFolderUrl;
         DownloadUrl = process.DownloadUrl;
         DownloadSelectedFileName = !string.IsNullOrWhiteSpace(process.DownloadSelectedFileName)
             ? process.DownloadSelectedFileName
             : process.DownloadSelectedFileTemplate;
-        DownloadSelectedVersion = !string.IsNullOrWhiteSpace(process.DownloadVersionFolderName)
-            ? process.DownloadVersionFolderName
-            : string.Empty;
+        _existingDownloadSelectedFileTemplate = process.DownloadSelectedFileTemplate ?? string.Empty;
+        IsInstallerAutoUpdateEnabled = process.DownloadUseLatestVersion;
+        _loadedSavedVersionFolderName = NormalizeVersionFolderName(process.DownloadVersionFolderName);
+        _persistedVersionFolderName = _loadedSavedVersionFolderName;
+        DownloadSelectedVersion = _loadedSavedVersionFolderName;
         RemoteInstallerFiles.Clear();
         RemoteInstallerVersions.Clear();
         IsRemoteFolderNavigationMode = false;
@@ -474,10 +555,20 @@ public sealed class CreateProcessViewModel : ObservableObject
 
         if (InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
             !string.IsNullOrWhiteSpace(DownloadBaseFolderUrl) &&
-            _authService?.IsAuthenticated == true)
+            _authService?.IsAuthenticatedForUrl(DownloadBaseFolderUrl) == true)
         {
             _ = RefreshRemoteInstallerFilesAsync();
         }
+
+        if (InstallerSourceMode == InstallerSourceMode.DynamicWeb)
+        {
+            if (!string.IsNullOrWhiteSpace(DownloadSelectedVersion))
+                RemoteInstallerVersions.Add(DownloadSelectedVersion);
+            if (!string.IsNullOrWhiteSpace(DownloadSelectedFileName))
+                RemoteInstallerFiles.Add(DownloadSelectedFileName);
+        }
+
+        LoadPortalsFromPreferences();
     }
 
     private void BrowseFile()
@@ -536,12 +627,19 @@ public sealed class CreateProcessViewModel : ObservableObject
             EnabledByDefault = true
         };
 
+        process.RequiresAuth = PortalAccessEnabled;
+        process.PortalId = PortalAccessEnabled ? SelectedPortalId : null;
+
         if (IsInstallerMode)
         {
             process.InstallerSourceMode = InstallerSourceMode;
-            process.RelativePath = InstallerSourceMode == InstallerSourceMode.StaticLocal
-                ? FilePath
-                : BuildDefaultInstallerCacheRelativePath(process.Id);
+            process.RelativePath = InstallerSourceMode switch
+            {
+                InstallerSourceMode.StaticLocal => FilePath,
+                InstallerSourceMode.StaticWeb => BuildDefaultInstallerCacheRelativePath(process.Id, TryGetFileNameFromUrl(DownloadUrl)),
+                InstallerSourceMode.DynamicWeb => BuildDefaultInstallerCacheRelativePath(process.Id, DownloadSelectedFileName),
+                _ => BuildDefaultInstallerCacheRelativePath(process.Id, "installer.exe")
+            };
 
             process.DownloadUrl = InstallerSourceMode == InstallerSourceMode.StaticWeb
                 ? DownloadUrl.Trim()
@@ -562,12 +660,19 @@ public sealed class CreateProcessViewModel : ObservableObject
             process.DownloadPickLatestFolderByName = InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
                                                     !string.IsNullOrWhiteSpace(process.DownloadBaseFolderUrl);
 
+            process.DownloadUseLatestVersion = IsInstallerAutoUpdateEnabled;
             var selectedVersion = DownloadSelectedVersion?.Trim() ?? string.Empty;
-            process.DownloadUseLatestVersion = false;
+            if (string.IsNullOrWhiteSpace(selectedVersion))
+                selectedVersion = (_persistedVersionFolderName ?? string.Empty).Trim();
+            selectedVersion = NormalizeVersionFolderName(selectedVersion);
+            if (string.IsNullOrWhiteSpace(selectedVersion) &&
+                process.DownloadUseLatestVersion &&
+                !string.IsNullOrWhiteSpace(_latestRemoteFolderName))
+            {
+                selectedVersion = _latestRemoteFolderName;
+            }
             process.DownloadVersionFolderName = selectedVersion;
-
-            process.RequiresAuth = InstallerSourceMode != InstallerSourceMode.StaticLocal &&
-                                   RequiresAuthForUrl(InstallerSourceMode == InstallerSourceMode.DynamicWeb ? process.DownloadBaseFolderUrl : process.DownloadUrl);
+            _persistedVersionFolderName = selectedVersion;
         }
         else if (IsScriptMode)
         {
@@ -715,6 +820,20 @@ public sealed class CreateProcessViewModel : ObservableObject
             return false;
         }
 
+        if (PortalAccessEnabled)
+        {
+            if (string.IsNullOrWhiteSpace(SelectedPortalId))
+            {
+                ValidationError = "Select a portal.";
+                return false;
+            }
+            if (AvailablePortals.Count > 0 && !AvailablePortals.Any(p => string.Equals(p.Id, SelectedPortalId, StringComparison.OrdinalIgnoreCase)))
+            {
+                ValidationError = "Select a valid portal.";
+                return false;
+            }
+        }
+
         if (IsInstallerMode)
         {
             if (InstallerSourceMode == InstallerSourceMode.StaticLocal)
@@ -766,6 +885,15 @@ public sealed class CreateProcessViewModel : ObservableObject
                     return false;
                 }
 
+                if (!IsRemoteFolderNavigationMode &&
+                    !IsInstallerAutoUpdateEnabled &&
+                    HasRemoteInstallerVersions &&
+                    string.IsNullOrWhiteSpace(DownloadSelectedVersion))
+                {
+                    ValidationError = "Seleziona una versione.";
+                    return false;
+                }
+
                 if (string.IsNullOrWhiteSpace(DownloadSelectedFileName))
                 {
                     ValidationError = "Seleziona l'installer remoto da scaricare.";
@@ -805,13 +933,13 @@ public sealed class CreateProcessViewModel : ObservableObject
 
         if (_downloadDirectoryListingService is null || _authService is null)
         {
-            ValidationError = "Funzione download non disponibile.";
+            ValidationError = "Download feature is not available.";
             return;
         }
 
-        if (!_authService.IsAuthenticated)
+        if (!_authService.IsAuthenticatedForUrl(DownloadBaseFolderUrl))
         {
-            ValidationError = "Effettua il login prima di caricare gli installer dal portale.";
+            ValidationError = "Please login to this portal before loading installers.";
             return;
         }
 
@@ -840,7 +968,7 @@ public sealed class CreateProcessViewModel : ObservableObject
 
                 _latestRemoteFolderName = folders.LastOrDefault() ?? string.Empty;
 
-                var selectedVersion = DownloadSelectedVersion;
+                var selectedVersion = (DownloadSelectedVersion ?? string.Empty).Trim();
                 if (IsRemoteFolderNavigationMode)
                 {
                     if (string.IsNullOrWhiteSpace(selectedVersion) ||
@@ -859,14 +987,55 @@ public sealed class CreateProcessViewModel : ObservableObject
                     return;
                 }
 
+                if (IsInstallerAutoUpdateEnabled &&
+                    _forceLatestVersionOnRefresh &&
+                    !string.IsNullOrWhiteSpace(_latestRemoteFolderName))
+                {
+                    selectedVersion = _latestRemoteFolderName;
+                    _persistedVersionFolderName = _latestRemoteFolderName;
+                }
+                else
+                {
+                    var saved = (_loadedSavedVersionFolderName ?? string.Empty).Trim();
+                    if (!string.IsNullOrWhiteSpace(saved))
+                        selectedVersion = saved;
+                    else
+                    {
+                        var persisted = (_persistedVersionFolderName ?? string.Empty).Trim();
+                        if (!string.IsNullOrWhiteSpace(persisted))
+                            selectedVersion = persisted;
+                    }
+                }
+
                 if (string.IsNullOrWhiteSpace(selectedVersion) ||
                     !folders.Any(v => string.Equals(v, selectedVersion, StringComparison.OrdinalIgnoreCase)))
                 {
+                    var hadSaved = !string.IsNullOrWhiteSpace(selectedVersion);
                     selectedVersion = _latestRemoteFolderName;
+
+                    if (hadSaved)
+                    {
+                        _log?.Warning($"Saved version '{_loadedSavedVersionFolderName}' not found in folder list for '{ProcessName}'. Falling back to latest '{_latestRemoteFolderName}'.");
+                    }
+
                     _suppressVersionAutoLoad = true;
                     DownloadSelectedVersion = selectedVersion;
                     _suppressVersionAutoLoad = false;
                 }
+                else
+                {
+                    var exact = folders.FirstOrDefault(v => string.Equals(v, selectedVersion, StringComparison.OrdinalIgnoreCase));
+                    if (!string.IsNullOrWhiteSpace(exact) && !string.Equals(exact, DownloadSelectedVersion, StringComparison.Ordinal))
+                    {
+                        _suppressVersionAutoLoad = true;
+                        DownloadSelectedVersion = exact;
+                        _suppressVersionAutoLoad = false;
+                    }
+                    selectedVersion = exact ?? selectedVersion;
+                }
+
+                if (!string.IsNullOrWhiteSpace(selectedVersion) && !IsRemoteFolderNavigationMode)
+                    _persistedVersionFolderName = selectedVersion;
 
                 if (!Uri.TryCreate(url, UriKind.Absolute, out var baseUri))
                 {
@@ -896,8 +1065,31 @@ public sealed class CreateProcessViewModel : ObservableObject
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(DownloadSelectedFileName) &&
-                !RemoteInstallerFiles.Any(f => string.Equals(f, DownloadSelectedFileName, StringComparison.OrdinalIgnoreCase)))
+            var desiredFile = (DownloadSelectedFileName ?? string.Empty).Trim();
+            if (desiredFile.Contains("{VERSION}", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(DownloadSelectedVersion))
+            {
+                desiredFile = desiredFile.Replace("{VERSION}", DownloadSelectedVersion.Trim(), StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (string.IsNullOrWhiteSpace(desiredFile) && !string.IsNullOrWhiteSpace(_existingDownloadSelectedFileTemplate))
+            {
+                var candidate = _existingDownloadSelectedFileTemplate.Trim();
+                if (candidate.Contains("{VERSION}", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(DownloadSelectedVersion))
+                {
+                    candidate = candidate.Replace("{VERSION}", DownloadSelectedVersion.Trim(), StringComparison.OrdinalIgnoreCase);
+                }
+                desiredFile = candidate;
+            }
+
+            if (!string.IsNullOrWhiteSpace(desiredFile) &&
+                RemoteInstallerFiles.Any(f => string.Equals(f, desiredFile, StringComparison.OrdinalIgnoreCase)))
+            {
+                DownloadSelectedFileName = desiredFile;
+            }
+            else if (!string.IsNullOrWhiteSpace(DownloadSelectedFileName) &&
+                     !RemoteInstallerFiles.Any(f => string.Equals(f, DownloadSelectedFileName, StringComparison.OrdinalIgnoreCase)))
             {
                 DownloadSelectedFileName = RemoteInstallerFiles.FirstOrDefault() ?? string.Empty;
             }
@@ -907,12 +1099,16 @@ public sealed class CreateProcessViewModel : ObservableObject
             _log?.Error("Failed to load remote installers list", ex);
             ValidationError = "Errore durante il caricamento elenco installer.";
         }
+        finally
+        {
+            _forceLatestVersionOnRefresh = false;
+        }
     }
 
     private async Task OnDownloadSelectedVersionChangedAsync()
     {
         if (_downloadDirectoryListingService is null) return;
-        if (_authService is null || !_authService.IsAuthenticated) return;
+        if (_authService is null || !_authService.IsAuthenticatedForUrl(DownloadBaseFolderUrl)) return;
         if (InstallerSourceMode != InstallerSourceMode.DynamicWeb) return;
         if (IsRemoteFolderNavigationMode) return;
         if (RemoteInstallerVersions.Count == 0) return;
@@ -946,8 +1142,31 @@ public sealed class CreateProcessViewModel : ObservableObject
             }
 
             ValidationError = null;
-            if (!string.IsNullOrWhiteSpace(DownloadSelectedFileName) &&
-                !RemoteInstallerFiles.Any(f => string.Equals(f, DownloadSelectedFileName, StringComparison.OrdinalIgnoreCase)))
+            var desiredFile = (DownloadSelectedFileName ?? string.Empty).Trim();
+            if (desiredFile.Contains("{VERSION}", StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(DownloadSelectedVersion))
+            {
+                desiredFile = desiredFile.Replace("{VERSION}", DownloadSelectedVersion.Trim(), StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (string.IsNullOrWhiteSpace(desiredFile) && !string.IsNullOrWhiteSpace(_existingDownloadSelectedFileTemplate))
+            {
+                var candidate = _existingDownloadSelectedFileTemplate.Trim();
+                if (candidate.Contains("{VERSION}", StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(DownloadSelectedVersion))
+                {
+                    candidate = candidate.Replace("{VERSION}", DownloadSelectedVersion.Trim(), StringComparison.OrdinalIgnoreCase);
+                }
+                desiredFile = candidate;
+            }
+
+            if (!string.IsNullOrWhiteSpace(desiredFile) &&
+                RemoteInstallerFiles.Any(f => string.Equals(f, desiredFile, StringComparison.OrdinalIgnoreCase)))
+            {
+                DownloadSelectedFileName = desiredFile;
+            }
+            else if (!string.IsNullOrWhiteSpace(DownloadSelectedFileName) &&
+                     !RemoteInstallerFiles.Any(f => string.Equals(f, DownloadSelectedFileName, StringComparison.OrdinalIgnoreCase)))
             {
                 DownloadSelectedFileName = RemoteInstallerFiles.FirstOrDefault() ?? string.Empty;
             }
@@ -1022,10 +1241,13 @@ public sealed class CreateProcessViewModel : ObservableObject
     private string BuildDownloadTemplate(string selectedFileName)
     {
         if (string.IsNullOrWhiteSpace(selectedFileName)) return string.Empty;
-        if (string.IsNullOrWhiteSpace(_latestRemoteFolderName)) return selectedFileName;
+        var versionToken = (DownloadSelectedVersion ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(versionToken))
+            versionToken = _latestRemoteFolderName;
+        if (string.IsNullOrWhiteSpace(versionToken)) return selectedFileName;
 
-        return selectedFileName.Contains(_latestRemoteFolderName, StringComparison.OrdinalIgnoreCase)
-            ? selectedFileName.Replace(_latestRemoteFolderName, "{VERSION}", StringComparison.OrdinalIgnoreCase)
+        return selectedFileName.Contains(versionToken, StringComparison.OrdinalIgnoreCase)
+            ? selectedFileName.Replace(versionToken, "{VERSION}", StringComparison.OrdinalIgnoreCase)
             : selectedFileName;
     }
 
@@ -1037,8 +1259,92 @@ public sealed class CreateProcessViewModel : ObservableObject
         return process.InstallerSourceMode;
     }
 
-    private static string BuildDefaultInstallerCacheRelativePath(string processId) =>
-        Path.Combine("Data", "installers", processId, "installer.exe");
+    private static string BuildDefaultInstallerCacheRelativePath(string processId, string? fileName)
+    {
+        var safe = SanitizeFileName(fileName);
+        if (string.IsNullOrWhiteSpace(safe))
+            safe = "installer.exe";
+
+        return Path.Combine("Data", "installers", processId, safe);
+    }
+
+    private static string SanitizeFileName(string? fileName)
+    {
+        var name = (fileName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(name)) return string.Empty;
+        name = Path.GetFileName(name);
+        if (string.IsNullOrWhiteSpace(name)) return string.Empty;
+
+        foreach (var c in Path.GetInvalidFileNameChars())
+            name = name.Replace(c, '_');
+
+        return name.Trim();
+    }
+
+    private static string TryGetFileNameFromUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return string.Empty;
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri)) return string.Empty;
+        var name = Path.GetFileName(uri.AbsolutePath);
+        return name ?? string.Empty;
+    }
+
+    private static string NormalizeVersionFolderName(string? value)
+    {
+        var v = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(v)) return string.Empty;
+
+        v = v.TrimEnd('/', '\\');
+        var slash = v.LastIndexOf('/');
+        var backslash = v.LastIndexOf('\\');
+        var idx = Math.Max(slash, backslash);
+        if (idx >= 0 && idx + 1 < v.Length)
+            v = v[(idx + 1)..];
+
+        return v.Trim();
+    }
+
+    private void LoadPortalsFromPreferences()
+    {
+        AvailablePortals.Clear();
+        var portals = _prefsService?.Preferences.Portals;
+        if (portals is null) return;
+
+        foreach (var p in portals.Where(p => p is not null))
+        {
+            AvailablePortals.Add(new PortalOption(p!.Id, p!.Name));
+        }
+
+        if (string.IsNullOrWhiteSpace(SelectedPortalId))
+            SelectedPortalId = _prefsService?.Preferences.SelectedPortalId;
+    }
+
+    private string? GuessPortalIdFromProcess(DeploymentProcess process)
+    {
+        var prefs = _prefsService?.Preferences;
+        if (prefs?.Portals is null || prefs.Portals.Count == 0) return null;
+
+        if (!string.IsNullOrWhiteSpace(process.PortalId))
+            return process.PortalId;
+
+        var url = process.InstallerSourceMode == InstallerSourceMode.DynamicWeb
+            ? process.DownloadBaseFolderUrl
+            : process.DownloadUrl;
+
+        if (Uri.TryCreate((url ?? string.Empty).Trim(), UriKind.Absolute, out var processUri))
+        {
+            foreach (var p in prefs.Portals.Where(p => p is not null))
+            {
+                if (Uri.TryCreate((p!.HomeUrl ?? string.Empty).Trim(), UriKind.Absolute, out var portalUri) &&
+                    string.Equals(portalUri.Host, processUri.Host, StringComparison.OrdinalIgnoreCase))
+                {
+                    return p.Id;
+                }
+            }
+        }
+
+        return prefs.SelectedPortalId;
+    }
 
     private static bool RequiresAuthForUrl(string url)
     {
@@ -1048,3 +1354,4 @@ public sealed class CreateProcessViewModel : ObservableObject
 }
 
 public record IconOption(string Key, string DisplayName);
+public record PortalOption(string Id, string Name);

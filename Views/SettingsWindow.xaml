@@ -1,0 +1,788 @@
+<Window x:Class="KlevaDeploy.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="Impostazioni"
+        Width="900" Height="620"
+        MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        ResizeMode="CanResize"
+        ShowInTaskbar="False"
+        Background="Transparent"
+        FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+
+    <Window.Resources>
+        <Style x:Key="SettingsNavButton" TargetType="Button" BasedOn="{StaticResource Win11Button}">
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+
+        <Style x:Key="SettingsCardListBoxItem" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Card"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="{StaticResource CornerRadiusLarge}"
+                                TextElement.Foreground="{DynamicResource TextPrimaryBrush}"
+                                Padding="12,10">
+                            <Grid>
+                                <ContentPresenter/>
+                                <Border x:Name="HoverOverlay"
+                                        Background="{DynamicResource HoverBrush}"
+                                        CornerRadius="{StaticResource CornerRadiusLarge}"
+                                        Opacity="0"
+                                        IsHitTestVisible="False"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="HoverOverlay"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0.18"
+                                                             Duration="0:0:0.12"
+                                                             EasingFunction="{StaticResource EaseOut}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="HoverOverlay"
+                                                             Storyboard.TargetProperty="Opacity"
+                                                             To="0"
+                                                             Duration="0:0:0.16"
+                                                             EasingFunction="{StaticResource EaseOut}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="Card" Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource FocusRingBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="40"
+                            ResizeBorderThickness="6"
+                            GlassFrameThickness="0,0,0,1"
+                            UseAeroCaptionButtons="False"
+                            CornerRadius="12"/>
+    </shell:WindowChrome.WindowChrome>
+
+    <Border Background="{DynamicResource AppBackgroundBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="12"
+            TextElement.Foreground="{DynamicResource TextPrimaryBrush}"
+            ClipToBounds="True">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="40"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Border x:Name="TitleBar"
+                    Grid.Row="0"
+                    Background="{DynamicResource SurfaceElevatedBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    CornerRadius="12,12,0,0"
+                    Padding="14,0,6,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Source="{DynamicResource IconSettings}"
+                               Width="16" Height="16"
+                               Margin="0,0,10,0"
+                               VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="Impostazioni"
+                                   Style="{StaticResource Win11TextBody}"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <Button Grid.Column="1"
+                            Content="✕"
+                            Width="38"
+                            Height="28"
+                            Padding="0"
+                            Style="{StaticResource Win11CloseButton}"
+                            VerticalAlignment="Center"
+                            Command="{Binding CloseCommand}"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True"/>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="240"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0"
+                        Background="{DynamicResource SurfaceElevatedBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="0,0,1,0"
+                        Padding="14">
+                    <StackPanel>
+                        <Button Command="{Binding SelectInfoEAggiornamentiCommand}"
+                                Content="Info e aggiornamenti">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SettingsNavButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedSection}" Value="InfoEAggiornamenti">
+                                            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Command="{Binding SelectPortaliCommand}"
+                                Content="Portali">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SettingsNavButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedSection}" Value="Portali">
+                                            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Command="{Binding SelectInstallerCommand}"
+                                Content="Installer">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SettingsNavButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedSection}" Value="Installer">
+                                            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Column="1" Padding="18">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid>
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedSection}" Value="InfoEAggiornamenti">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel>
+                                    <TextBlock Text="Info e aggiornamenti" Style="{StaticResource Win11TextTitle}"/>
+
+                                    <Border Style="{StaticResource Win11Card}" Margin="0,14,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Applicazione"
+                                                       Style="{StaticResource Win11TextSubtitle}"/>
+                                            <TextBlock Text="{Binding AppVersion, StringFormat=Versione app: {0}}"
+                                                       Margin="0,10,0,0"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            <TextBlock Text="{Binding StorageDirectory, StringFormat=Percorso dati: {0}}"
+                                                       Margin="0,6,0,0"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Style="{StaticResource Win11Card}" Margin="0,12,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Aggiornamenti"
+                                                       Style="{StaticResource Win11TextSubtitle}"/>
+                                            <Button Content="{Binding IsCheckingForUpdate, Converter={StaticResource BusyToTextConverter}, ConverterParameter='Controlla aggiornamenti|Controllo in corso…'}"
+                                                    Command="{Binding CheckForUpdateCommand}"
+                                                    Style="{StaticResource Win11AccentButton}"
+                                                    Height="40"
+                                                    Padding="14,0"
+                                                    Margin="0,12,0,0"
+                                                    HorizontalAlignment="Left"/>
+                                            <TextBlock Text="{Binding UpdateStatusText}"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"
+                                                       Margin="0,10,0,0"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedSection}" Value="Portali">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="12"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Portali" Style="{StaticResource Win11TextTitle}"/>
+                                <Button Grid.Column="1"
+                                        Command="{Binding AddPortalCommand}"
+                                        Style="{StaticResource Win11Button}"
+                                        Width="32"
+                                        Height="32"
+                                        Padding="0"
+                                        Margin="10,0,0,0"
+                                        ToolTip="Aggiungi portale">
+                                    <Image Source="{StaticResource IconPlus}"
+                                           Width="16"
+                                           Height="16"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                </Button>
+                            </Grid>
+
+                            <Grid Grid.Row="2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="14"/>
+                                    <ColumnDefinition Width="300"/>
+                                </Grid.ColumnDefinitions>
+
+                                <ListBox Grid.Column="0"
+                                         ItemsSource="{Binding Portals}"
+                                         SelectedItem="{Binding SelectedPortal, Mode=TwoWay}"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         HorizontalContentAlignment="Stretch">
+                                    <ListBox.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <VirtualizingStackPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ListBox.ItemsPanel>
+                                    <ListBox.Resources>
+                                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource SettingsCardListBoxItem}"/>
+                                    </ListBox.Resources>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="{Binding Name}"
+                                                               FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                </Grid>
+
+                                                <TextBlock Grid.Row="1"
+                                                           Text="{Binding HomeUrl}"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                           TextTrimming="CharacterEllipsis"/>
+
+                                                <TextBlock Grid.Row="2"
+                                                           Text="Apri per modificare"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource TextDisabledBrush}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <Border Grid.Column="2"
+                                        Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource CornerRadiusLarge}"
+                                        Padding="16"
+                                        Visibility="{Binding IsPortalEditorVisible, Converter={StaticResource BoolToVisibility}}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="12"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="12"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="18"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Grid Grid.Row="0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="12"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Border Width="56"
+                                                    Height="56"
+                                                    CornerRadius="{StaticResource CornerRadiusMedium}"
+                                                    Background="{DynamicResource SurfaceElevatedBrush}"
+                                                    BorderBrush="{DynamicResource BorderBrush}"
+                                                    BorderThickness="1"
+                                                    VerticalAlignment="Center">
+                                                <Image Stretch="Uniform"
+                                                       RenderOptions.BitmapScalingMode="HighQuality">
+                                                    <Image.Source>
+                                                        <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                            <Binding Path="PortalEditLogoLightPath"/>
+                                                            <Binding Path="PortalEditLogoDarkPath"/>
+                                                            <Binding Source="False"/>
+                                                        </MultiBinding>
+                                                    </Image.Source>
+                                                </Image>
+                                            </Border>
+
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                                <TextBlock Text="Dettagli portale"
+                                                           FontWeight="SemiBold"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                    <Button Content="Logo"
+                                                            Command="{Binding OpenLogoPickerCommand}"
+                                                            Style="{StaticResource Win11Button}"
+                                                            Height="32"
+                                                            MinWidth="120"/>
+                                                    <Button Content="Rimuovi"
+                                                            Command="{Binding RemoveLogoCommand}"
+                                                            Style="{StaticResource Win11Button}"
+                                                            Height="32"
+                                                            MinWidth="120"
+                                                            Margin="8,0,0,0"
+                                                            Visibility="{Binding HasPortalLogo, Converter={StaticResource BoolToVisibility}}"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <TextBlock Grid.Row="2"
+                                                   Text="Nome"
+                                                   Style="{StaticResource Win11TextSecondary}"
+                                                   Margin="0,0,0,4"/>
+                                        <TextBox Grid.Row="3"
+                                                 Text="{Binding PortalEditName, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource Win11TextBox}"
+                                                 Height="40"/>
+
+                                        <TextBlock Grid.Row="5"
+                                                   Text="URL"
+                                                   Style="{StaticResource Win11TextSecondary}"
+                                                   Margin="0,0,0,4"/>
+                                        <TextBox Grid.Row="6"
+                                                 Text="{Binding PortalEditHomeUrl, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource Win11TextBox}"
+                                                 Height="40"/>
+
+                                        <Grid Grid.Row="8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="10"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="10"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Button Grid.Column="0"
+                                                    Content="Elimina"
+                                                    Command="{Binding DeleteSelectedPortalCommand}"
+                                                    Style="{StaticResource Win11DangerButton}"
+                                                    Height="36"
+                                                    Padding="12,0"/>
+                                            <Button Grid.Column="2"
+                                                    Content="Salva"
+                                                    Command="{Binding SaveSelectedPortalCommand}"
+                                                    Style="{StaticResource Win11AccentButton}"
+                                                    Height="36"
+                                                    Padding="14,0"/>
+                                        </Grid>
+                                    </Grid>
+                                </Border>
+
+                                <Border Grid.Column="2"
+                                        Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource CornerRadiusLarge}"
+                                        Padding="16"
+                                        >
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsPortalEditorVisible}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel>
+                                        <TextBlock Text="Seleziona un portale"
+                                                   FontWeight="SemiBold"/>
+                                        <TextBlock Text="Per modificare il portale."
+                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                   Margin="0,6,0,0"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Grid Grid.ColumnSpan="3"
+                                      Panel.ZIndex="200"
+                                      Background="#80000000"
+                                      Visibility="{Binding IsLogoPickerOpen, Converter={StaticResource BoolToVisibility}}">
+                                    <Border Style="{StaticResource Win11Card}"
+                                            Padding="16"
+                                            Width="620"
+                                            MaxHeight="680"
+                                            VerticalAlignment="Center"
+                                            HorizontalAlignment="Center">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+
+                                            <Grid Grid.Row="0" Margin="0,0,0,12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBlock Text="Seleziona logo"
+                                                           Style="{StaticResource Win11TextSubtitle}"
+                                                           FontWeight="SemiBold"/>
+
+                                                <Button Grid.Column="1"
+                                                        Command="{Binding CloseLogoPickerCommand}"
+                                                        Style="{StaticResource Win11CloseButton}"
+                                                        Width="32"
+                                                        Height="32"
+                                                        Padding="0">
+                                                    <TextBlock Text="✕" FontSize="14"/>
+                                                </Button>
+                                            </Grid>
+
+                                            <ScrollViewer Grid.Row="1"
+                                                          VerticalScrollBarVisibility="Auto">
+                                                <StackPanel>
+                                                    <Border Background="{DynamicResource SurfaceElevatedBrush}"
+                                                            BorderBrush="{DynamicResource BorderBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="{StaticResource CornerRadiusSmall}"
+                                                            Padding="12"
+                                                            Margin="0,0,0,12">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                                                                <CheckBox Content="Scegli logo diverso per tema"
+                                                                          IsChecked="{Binding UseSeparateThemeLogos}"
+                                                                          Style="{StaticResource Win11ToggleSwitch}"/>
+                                                                <TextBlock Text="Se attivo, puoi scegliere un logo per tema chiaro e uno per tema scuro."
+                                                                           Style="{StaticResource Win11TextSecondary}"
+                                                                           FontSize="11"
+                                                                           Margin="0,4,0,0"/>
+                                                            </StackPanel>
+
+                                                            <Button Grid.Column="1"
+                                                                    Content="Importa"
+                                                                    Command="{Binding ImportLogoCommand}"
+                                                                    Style="{StaticResource Win11Button}"
+                                                                    Height="36"
+                                                                    MinWidth="120"
+                                                                    VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </Border>
+
+                                                    <StackPanel Orientation="Horizontal"
+                                                                Margin="0,0,0,12"
+                                                                Visibility="{Binding UseSeparateThemeLogos, Converter={StaticResource BoolToVisibility}}">
+                                                        <Button Content="Chiaro"
+                                                                Command="{Binding SetLogoPickerTargetLightCommand}"
+                                                                Height="32"
+                                                                MinWidth="120">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button" BasedOn="{StaticResource Win11Button}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsLogoPickerTargetDark}" Value="False">
+                                                                            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                                            <Setter Property="Foreground" Value="White"/>
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                        </Button>
+                                                        <Button Content="Scuro"
+                                                                Command="{Binding SetLogoPickerTargetDarkCommand}"
+                                                                Height="32"
+                                                                MinWidth="120"
+                                                                Margin="8,0,0,0">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button" BasedOn="{StaticResource Win11Button}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsLogoPickerTargetDark}" Value="True">
+                                                                            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                                            <Setter Property="Foreground" Value="White"/>
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                        </Button>
+                                                    </StackPanel>
+
+                                                    <ItemsControl ItemsSource="{Binding LogoLibraryIcons}"
+                                                                  Margin="0,0,0,16">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <WrapPanel/>
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Button Command="{Binding DataContext.SelectLibraryLogoCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                        CommandParameter="{Binding}"
+                                                                        Style="{StaticResource Win11Button}"
+                                                                        Width="72"
+                                                                        Height="72"
+                                                                        Padding="0"
+                                                                        Margin="0,0,8,8">
+                                                                    <Image Stretch="Uniform"
+                                                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                                                           Width="44"
+                                                                           Height="44">
+                                                                        <Image.Source>
+                                                                            <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                                <Binding Path="LightPath"/>
+                                                                                <Binding Path="DarkPath"/>
+                                                                                <Binding Source="False"/>
+                                                                            </MultiBinding>
+                                                                        </Image.Source>
+                                                                    </Image>
+                                                                </Button>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+
+                                                    <Grid Visibility="{Binding UseSeparateThemeLogos, Converter={StaticResource BoolToVisibility}}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="12"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+
+                                                        <StackPanel Grid.Column="0">
+                                                            <TextBlock Text="Chiaro"
+                                                                       Style="{StaticResource Win11TextSecondary}"
+                                                                       Margin="0,0,0,6"/>
+                                                            <Border Background="{DynamicResource SurfaceElevatedBrush}"
+                                                                    BorderBrush="{DynamicResource BorderBrush}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="{StaticResource CornerRadiusSmall}"
+                                                                    Width="96"
+                                                                    Height="96"
+                                                                    HorizontalAlignment="Left">
+                                                                <Image Stretch="Uniform"
+                                                                       RenderOptions.BitmapScalingMode="HighQuality">
+                                                                    <Image.Source>
+                                                                        <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                            <Binding Path="PortalEditLogoLightPath"/>
+                                                                            <Binding Path="PortalEditLogoDarkPath"/>
+                                                                            <Binding Source="False"/>
+                                                                        </MultiBinding>
+                                                                    </Image.Source>
+                                                                </Image>
+                                                            </Border>
+                                                        </StackPanel>
+
+                                                        <StackPanel Grid.Column="2">
+                                                            <TextBlock Text="Scuro"
+                                                                       Style="{StaticResource Win11TextSecondary}"
+                                                                       Margin="0,0,0,6"/>
+                                                            <Border Background="{DynamicResource SurfaceElevatedBrush}"
+                                                                    BorderBrush="{DynamicResource BorderBrush}"
+                                                                    BorderThickness="1"
+                                                                    CornerRadius="{StaticResource CornerRadiusSmall}"
+                                                                    Width="96"
+                                                                    Height="96"
+                                                                    HorizontalAlignment="Left">
+                                                                <Image Stretch="Uniform"
+                                                                       RenderOptions.BitmapScalingMode="HighQuality">
+                                                                    <Image.Source>
+                                                                        <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                            <Binding Path="PortalEditLogoLightPath"/>
+                                                                            <Binding Path="PortalEditLogoDarkPath"/>
+                                                                            <Binding Source="True"/>
+                                                                        </MultiBinding>
+                                                                    </Image.Source>
+                                                                </Image>
+                                                            </Border>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </StackPanel>
+                                            </ScrollViewer>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+                        </Grid>
+
+                        <Grid>
+                            <Grid.Style>
+                                <Style TargetType="Grid">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedSection}" Value="Installer">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Grid.Style>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="12"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Text="Installer" Style="{StaticResource Win11TextTitle}"/>
+
+                            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding InstallerCacheDirectory, StringFormat=Cartella cache: {0}}"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"
+                                               TextWrapping="Wrap"/>
+
+                                    <ItemsControl ItemsSource="{Binding Installers}"
+                                                  Margin="0,12,0,0">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Style="{StaticResource Win11Card}"
+                                                        Width="260"
+                                                        Margin="0,0,12,12">
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="6"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="4"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                            <RowDefinition Height="12"/>
+                                                            <RowDefinition Height="Auto"/>
+                                                        </Grid.RowDefinitions>
+
+                                                        <TextBlock Grid.Row="0"
+                                                                   Text="{Binding Name}"
+                                                                   FontWeight="SemiBold"
+                                                                   TextTrimming="CharacterEllipsis"/>
+
+                                                        <TextBlock Grid.Row="2"
+                                                                   Text="{Binding SourceMode, StringFormat=Sorgente: {0}}"
+                                                                   FontSize="11"
+                                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                   TextTrimming="CharacterEllipsis"/>
+
+                                                        <TextBlock Grid.Row="4"
+                                                                   Text="{Binding CacheFileName, StringFormat=File cache: {0}}"
+                                                                   FontSize="11"
+                                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                   TextTrimming="CharacterEllipsis"/>
+
+                                                        <Grid Grid.Row="6">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="10"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <Button Content="Pulisci cache"
+                                                                    Command="{Binding ClearCacheCommand}"
+                                                                    Style="{StaticResource Win11Button}"
+                                                                    Height="34"
+                                                                    Padding="12,0"/>
+                                                            <Button Grid.Column="2"
+                                                                    Content="Apri cartella"
+                                                                    Command="{Binding OpenCacheFolderCommand}"
+                                                                    Style="{StaticResource Win11AccentButton}"
+                                                                    Height="34"
+                                                                    Padding="12,0"/>
+                                                        </Grid>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

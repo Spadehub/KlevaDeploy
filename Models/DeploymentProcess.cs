@@ -29,6 +29,7 @@ public class DeploymentProcess
     public bool DownloadUseLatestVersion { get; set; } = true;
     public string DownloadVersionFolderName { get; set; } = string.Empty;
     public bool RequiresAuth { get; set; }
+    public string? PortalId { get; set; }
     public bool RequiresLicense { get; set; }
     public string LicenseExcelColumn { get; set; } = string.Empty;
     /// <summary>If true, the process is selected/enabled by default when a preset is chosen.</summary>

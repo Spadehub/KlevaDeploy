@@ -65,7 +65,7 @@ public sealed class PresetViewToggleTests
             dialog,
             presetIcon,
             prefsService,
-            loginVmFactory: () => new LoginViewModel(auth),
+            loginVmFactory: () => new LoginViewModel(auth, prefsService),
             logViewModel: logVm);
     }
 
@@ -140,8 +140,14 @@ public sealed class PresetViewToggleTests
     private sealed class FakeAuthService : IAuthService
     {
         public bool IsAuthenticated => false;
+        public int AuthenticatedPortalCount => 0;
+        public event EventHandler? AuthStateChanged { add { } remove { } }
+        public bool IsAuthenticatedForUrl(string url) => false;
+        public bool IsAuthenticatedForPortalHomeUrl(string portalHomeUrl) => false;
         public Task<bool> LoginAsync(string username, string password, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<bool> LoginAsync(string username, string password, string portalHomeUrl, CancellationToken ct = default) => Task.FromResult(false);
         public Task<bool> TryRestoreSessionAsync(CancellationToken ct = default) => Task.FromResult(false);
+        public void LogoutPortal(string portalHomeUrl) { }
         public void Logout() { }
     }
 

@@ -634,6 +634,41 @@ public sealed class InstallerService : IInstallerService
                 p.DownloadVersionFolderName ??= string.Empty;
                 p.DownloadUseLatestVersion = true;
             }
+
+            if (p.InstallerSourceMode is InstallerSourceMode.StaticWeb or InstallerSourceMode.DynamicWeb)
+            {
+                var legacy = Path.Combine("Data", "installers", p.Id, "installer.exe");
+                if (string.Equals((p.RelativePath ?? string.Empty).Trim(), legacy, StringComparison.OrdinalIgnoreCase))
+                {
+                    var desiredName = p.InstallerSourceMode == InstallerSourceMode.DynamicWeb
+                        ? (string.IsNullOrWhiteSpace(p.DownloadSelectedFileName) ? p.DownloadSelectedFileTemplate : p.DownloadSelectedFileName)
+                        : TryGetFileNameFromUrl(p.DownloadUrl);
+
+                    desiredName = SanitizeFileName(desiredName);
+                    if (!string.IsNullOrWhiteSpace(desiredName))
+                        p.RelativePath = Path.Combine("Data", "installers", p.Id, desiredName);
+                }
+            }
         }
+    }
+
+    private static string SanitizeFileName(string? fileName)
+    {
+        var name = (fileName ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(name)) return string.Empty;
+        name = Path.GetFileName(name);
+        if (string.IsNullOrWhiteSpace(name)) return string.Empty;
+
+        foreach (var c in Path.GetInvalidFileNameChars())
+            name = name.Replace(c, '_');
+
+        return name.Trim();
+    }
+
+    private static string TryGetFileNameFromUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return string.Empty;
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri)) return string.Empty;
+        return Path.GetFileName(uri.AbsolutePath) ?? string.Empty;
     }
 }

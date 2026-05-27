@@ -256,6 +256,26 @@
                             <TextBlock Text="Richiede Connessione Internet"
                                        Style="{StaticResource Win11TextBody}"/>
                         </CheckBox>
+
+                        <CheckBox IsChecked="{Binding PortalAccessEnabled}"
+                                  Style="{StaticResource Win11CheckBox}"
+                                  Margin="0,8,0,0">
+                            <TextBlock Text="Portal login"
+                                       Style="{StaticResource Win11TextBody}"/>
+                        </CheckBox>
+
+                        <StackPanel Margin="24,8,0,0"
+                                    Visibility="{Binding IsPortalPickerVisible, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="Portal"
+                                       Style="{StaticResource Win11TextBody}"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,6"/>
+                            <ComboBox ItemsSource="{Binding AvailablePortals}"
+                                      SelectedValue="{Binding SelectedPortalId}"
+                                      SelectedValuePath="Id"
+                                      DisplayMemberPath="Name"
+                                      Style="{StaticResource Win11ComboBox}"/>
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- Warning for Edit Mode -->

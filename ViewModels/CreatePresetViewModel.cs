@@ -1,6 +1,5 @@
 using System;
 using System.Collections.ObjectModel;
-using System.IO;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -32,54 +31,92 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     [ObservableProperty] private string? _validationError;
 
     private DeploymentPreset? _editingPreset;
+
+    /// <summary>
+    /// Gets a value indicating whether the view model is editing an existing preset.
+    /// </summary>
     public bool IsEditMode => _editingPreset != null;
 
-    // Two columns logic
+    /// <summary>
+    /// Gets the full list of processes that can be selected for the preset.
+    /// </summary>
     public ObservableCollection<ProcessSelectionItem> AvailableProcesses { get; } = new();
+
+    /// <summary>
+    /// Gets the filtered view of <see cref="AvailableProcesses"/>, based on <see cref="AvailableSearchText"/>.
+    /// </summary>
     public ObservableCollection<ProcessSelectionItem> FilteredAvailableProcesses { get; } = new();
     
+    /// <summary>
+    /// Gets the processes selected for the preset (and their order).
+    /// </summary>
     public ObservableCollection<ProcessSelectionItem> SelectedProcesses { get; } = new();
+
+    /// <summary>
+    /// Gets the filtered view of <see cref="SelectedProcesses"/>, based on <see cref="SelectedSearchText"/>.
+    /// </summary>
     public ObservableCollection<ProcessSelectionItem> FilteredSelectedProcesses { get; } = new();
 
-    // Available icons from Icons.xaml
+    /// <summary>
+    /// Gets the list of emoji icons available for presets.
+    /// </summary>
     public ObservableCollection<string> AvailableIcons { get; } = new()
     {
         "📦", "🖥️", "📊", "💻", "🏢", "🖧", "⚙️", "🔧", 
         "📁", "📂", "🗂️", "💾", "🔒", "🔓", "✅", "⚠️"
     };
 
+    /// <summary>
+    /// Gets the icon library items available for selection/import.
+    /// </summary>
     public ObservableCollection<PresetIconLibraryItem> LibraryIcons { get; } = new();
 
+    /// <summary>
+    /// Raised when the view model requests the panel/dialog to close.
+    /// </summary>
     public event EventHandler? CloseRequested;
+
+    /// <summary>
+    /// Raised when the view model requests deletion of the currently edited preset.
+    /// </summary>
     public event EventHandler? DeleteRequested;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CreatePresetViewModel"/> class.
+    /// </summary>
+    /// <param name="presetIconService">Optional icon service used for importing and listing icons.</param>
     public CreatePresetViewModel(IPresetIconService? presetIconService = null)
     {
         _presetIconService = presetIconService;
     }
 
+    /// <summary>
+    /// Gets the preset created or updated after a successful save.
+    /// </summary>
     public DeploymentPreset? CreatedPreset { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether a custom icon is set for either theme variant.
+    /// </summary>
     public bool HasCustomIcon => !string.IsNullOrWhiteSpace(CustomIconLightPath) || !string.IsNullOrWhiteSpace(CustomIconDarkPath);
+
+    /// <summary>
+    /// Gets a value indicating whether reordering is enabled for the selected list.
+    /// Reordering is disabled while a search filter is active.
+    /// </summary>
     public bool IsSelectedReorderEnabled => string.IsNullOrWhiteSpace(SelectedSearchText);
 
     /// <summary>
     /// Initialize the ViewModel with available processes for creating a new preset.
     /// </summary>
+    /// <param name="availableProcesses">The processes that can be selected into the preset.</param>
     public void Initialize(IEnumerable<DeploymentProcess> availableProcesses)
     {
         try
         {
             _editingPreset = null;
-            PresetId = Guid.NewGuid().ToString("N");
-            Name = string.Empty;
-            Icon = "📦";
-            CustomIconLightPath = null;
-            CustomIconDarkPath = null;
-            IsIconPickerOpen = false;
-            UseSeparateThemeIcons = false;
-            IsIconPickerTargetDark = false;
-            Description = string.Empty;
-            Category = string.Empty;
+            ResetPresetMetadataForNew();
+            ResetIconState();
             
             AvailableProcesses.Clear();
             SelectedProcesses.Clear();
@@ -101,13 +138,14 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         catch (Exception)
         {
             ValidationError = "Errore durante l'inizializzazione del pannello.";
-            // Nota: qui potremmo iniettare ILogService se volessimo loggare anche qui
         }
     }
 
     /// <summary>
     /// Initialize the ViewModel for editing an existing preset.
     /// </summary>
+    /// <param name="preset">The preset to edit.</param>
+    /// <param name="availableProcesses">The full list of processes available in the application.</param>
     public void InitializeForEdit(DeploymentPreset preset, IEnumerable<DeploymentProcess> availableProcesses)
     {
         try
@@ -120,19 +158,16 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             Icon = preset.Icon;
             CustomIconLightPath = preset.CustomIconLightPath;
             CustomIconDarkPath = preset.CustomIconDarkPath;
-            IsIconPickerOpen = false;
-            UseSeparateThemeIcons = false;
-            IsIconPickerTargetDark = false;
+            ResetIconState();
             Description = preset.Description;
             Category = preset.Category;
             
             AvailableProcesses.Clear();
             SelectedProcesses.Clear();
             
-            var stepDict = preset.Steps?.ToDictionary(s => s.ProcessId) ?? new();
+            var stepsByProcessId = preset.Steps?.ToDictionary(s => s.ProcessId) ?? new();
             var orderedSteps = preset.Steps?.OrderBy(s => s.Order).ToList() ?? new();
             
-            // Add to selected in order
             foreach (var step in orderedSteps)
             {
                 var process = availableProcesses?.FirstOrDefault(p => p.Id == step.ProcessId);
@@ -148,12 +183,11 @@ public sealed partial class CreatePresetViewModel : ObservableObject
                 }
             }
 
-            // Add remaining to available
             if (availableProcesses != null)
             {
                 foreach (var process in availableProcesses)
                 {
-                    if (!stepDict.ContainsKey(process.Id))
+                    if (!stepsByProcessId.ContainsKey(process.Id))
                     {
                         var item = new ProcessSelectionItem(process);
                         AvailableProcesses.Add(item);
@@ -205,11 +239,10 @@ public sealed partial class CreatePresetViewModel : ObservableObject
 
         var filtered = string.IsNullOrWhiteSpace(searchLower)
             ? AvailableProcesses
-            : AvailableProcesses.Where(p =>
-                p.Name.ToLowerInvariant().Contains(searchLower) ||
-                p.Description.ToLowerInvariant().Contains(searchLower));
+            : AvailableProcesses.Where(p => MatchesSearch(p, searchLower));
 
-        foreach (var process in filtered) FilteredAvailableProcesses.Add(process);
+        foreach (var item in filtered)
+            FilteredAvailableProcesses.Add(item);
     }
 
     private void ApplySelectedFilter()
@@ -219,12 +252,22 @@ public sealed partial class CreatePresetViewModel : ObservableObject
 
         var filtered = string.IsNullOrWhiteSpace(searchLower)
             ? SelectedProcesses.OrderBy(p => p.Order)
-            : SelectedProcesses.Where(p =>
-                p.Name.ToLowerInvariant().Contains(searchLower) ||
-                p.Description.ToLowerInvariant().Contains(searchLower))
+            : SelectedProcesses.Where(p => MatchesSearch(p, searchLower))
                 .OrderBy(p => p.Order);
 
-        foreach (var process in filtered) FilteredSelectedProcesses.Add(process);
+        foreach (var item in filtered)
+            FilteredSelectedProcesses.Add(item);
+    }
+
+    private static bool MatchesSearch(ProcessSelectionItem item, string searchLower)
+    {
+        if (string.IsNullOrWhiteSpace(searchLower)) return true;
+
+        var nameLower = (item.Name ?? string.Empty).ToLowerInvariant();
+        if (nameLower.Contains(searchLower)) return true;
+
+        var descLower = (item.Description ?? string.Empty).ToLowerInvariant();
+        return descLower.Contains(searchLower);
     }
 
     [RelayCommand]
@@ -239,8 +282,7 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         AvailableProcesses.Remove(item);
         item.IsSelected = true;
         
-        // Find max order and add 10
-        int maxOrder = SelectedProcesses.Any() ? SelectedProcesses.Max(p => p.Order) : 0;
+        var maxOrder = SelectedProcesses.Count > 0 ? SelectedProcesses.Max(p => p.Order) : 0;
         item.Order = maxOrder + 10;
         
         SelectedProcesses.Add(item);
@@ -266,7 +308,6 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         
         AvailableProcesses.Add(item);
         
-        // Re-order remaining selected
         UpdateProcessOrdering();
         
         ApplyAvailableFilter();
@@ -315,25 +356,16 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     [RelayCommand]
     private void ReorderSelectedProcess(ProcessReorderRequest? request)
     {
-        if (request is null)
-        {
-            return;
-        }
+        if (request is null) return;
 
         var source = request.Source;
         var target = request.Target;
 
-        if (target is not null && ReferenceEquals(source, target))
-        {
-            return;
-        }
+        if (target is not null && ReferenceEquals(source, target)) return;
 
         var ordered = SelectedProcesses.OrderBy(p => p.Order).ToList();
         var sourceIndex = ordered.IndexOf(source);
-        if (sourceIndex < 0)
-        {
-            return;
-        }
+        if (sourceIndex < 0) return;
 
         ordered.RemoveAt(sourceIndex);
 
@@ -533,30 +565,35 @@ public sealed partial class CreatePresetViewModel : ObservableObject
                 Order = p.Order,
                 EnabledOverride = null,
                 IsRequired = p.IsRequired
-            }).ToList();
+            })
+            .ToList();
 
-        if (IsEditMode && _editingPreset != null)
-        {
-            _editingPreset.Name = Name.Trim();
-            _editingPreset.Icon = Icon;
-            _editingPreset.CustomIconLightPath = CustomIconLightPath;
-            _editingPreset.CustomIconDarkPath = CustomIconDarkPath;
-            _editingPreset.Description = Description.Trim();
-            _editingPreset.Category = string.IsNullOrWhiteSpace(Category) ? "Personalizzato" : Category.Trim();
-            _editingPreset.Steps = steps;
-            return _editingPreset;
-        }
-        
-        return new DeploymentPreset
-        {
-            Id = PresetId,
-            Name = Name.Trim(),
-            Icon = Icon,
-            CustomIconLightPath = CustomIconLightPath,
-            CustomIconDarkPath = CustomIconDarkPath,
-            Description = Description.Trim(),
-            Category = string.IsNullOrWhiteSpace(Category) ? "Personalizzato" : Category.Trim(),
-            Steps = steps
-        };
+        var preset = _editingPreset ?? new DeploymentPreset { Id = PresetId };
+        preset.Name = Name.Trim();
+        preset.Icon = Icon;
+        preset.CustomIconLightPath = CustomIconLightPath;
+        preset.CustomIconDarkPath = CustomIconDarkPath;
+        preset.Description = Description.Trim();
+        preset.Category = string.IsNullOrWhiteSpace(Category) ? "Personalizzato" : Category.Trim();
+        preset.Steps = steps;
+        return preset;
+    }
+
+    private void ResetPresetMetadataForNew()
+    {
+        PresetId = Guid.NewGuid().ToString("N");
+        Name = string.Empty;
+        Icon = "📦";
+        Description = string.Empty;
+        Category = string.Empty;
+    }
+
+    private void ResetIconState()
+    {
+        CustomIconLightPath = null;
+        CustomIconDarkPath = null;
+        IsIconPickerOpen = false;
+        UseSeparateThemeIcons = false;
+        IsIconPickerTargetDark = false;
     }
 }

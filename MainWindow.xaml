@@ -358,50 +358,47 @@
                             Grid.Column="2"
                             Background="Transparent"/>
 
-                    <Border Grid.Column="3"
-                            CornerRadius="{StaticResource CornerRadiusSmall}"
-                            Padding="10,4" Margin="0,0,8,0"
+                    <Button Grid.Column="3"
+                            Command="{Binding OpenLoginCommand}"
+                            Style="{StaticResource Win11Button}"
+                            Padding="10,6" Margin="0,0,8,0"
                             VerticalAlignment="Center"
                             WindowChrome.IsHitTestVisibleInChrome="True">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Background" Value="{DynamicResource SurfaceElevatedBrush}"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsAuthenticated}" Value="True">
-                                        <Setter Property="Background" Value="{DynamicResource SuccessSurfaceBrush}"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
                         <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,6,0">
-                                <Ellipse.Style>
-                                    <Style TargetType="Ellipse">
-                                        <Setter Property="Fill" Value="{DynamicResource TextDisabledBrush}"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsAuthenticated}" Value="True">
-                                                <Setter Property="Fill" Value="{DynamicResource SuccessBrush}"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Ellipse.Style>
-                            </Ellipse>
-                            <TextBlock VerticalAlignment="Center" FontSize="12"
-                                       Foreground="{DynamicResource TextSecondaryBrush}">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Text" Value="Non autenticato"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsAuthenticated}" Value="True">
-                                                <Setter Property="Text" Value="Autenticato"/>
-                                                <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
+                            <Grid Width="14" Height="14"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,8,0">
+                                <Image RenderOptions.BitmapScalingMode="HighQuality">
+                                    <Image.Style>
+                                        <Style TargetType="Image">
+                                            <Setter Property="Source" Value="{DynamicResource IconLock}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsAuthenticated}" Value="True">
+                                                    <Setter Property="Source" Value="{DynamicResource IconUnlock}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Image.Style>
+                                </Image>
+                                <Ellipse Width="7" Height="7"
+                                         Fill="{DynamicResource SuccessBrush}"
+                                         Stroke="{DynamicResource SurfaceBrush}"
+                                         StrokeThickness="1"
+                                         HorizontalAlignment="Right"
+                                         VerticalAlignment="Top"
+                                         Margin="0,-1,-1,0"
+                                         Visibility="{Binding IsAuthenticated, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}"/>
+                            </Grid>
+                            <TextBlock Text="Accedi"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Visibility="{Binding IsAuthenticated, Converter={StaticResource InverseBoolToVisibility}, FallbackValue=Visible}"/>
+                            <TextBlock Text="{Binding AuthenticatedPortalsCount}"
+                                       VerticalAlignment="Center"
+                                       FontWeight="SemiBold"
+                                       Visibility="{Binding IsAuthenticated, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}"/>
                         </StackPanel>
-                    </Border>
+                    </Button>
 
                     <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0"
                                 WindowChrome.IsHitTestVisibleInChrome="True">
@@ -410,77 +407,31 @@
                                      Style="{StaticResource Win11ProgressBar}"
                                      Margin="0,0,12,0"
                                      Visibility="{Binding IsInitializing, Converter={StaticResource BoolToVisibility}}"/>
-
-                        <Button Command="{Binding CheckAppUpdateCommand}"
-                                Style="{StaticResource Win11Button}"
-                                Margin="0,0,6,0"
-                                Padding="10,6">
-                            <StackPanel Orientation="Horizontal">
-                                <Image Source="{DynamicResource IconRefresh}"
-                                       Width="14" Height="14"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0"
-                                       RenderOptions.BitmapScalingMode="HighQuality"/>
-                                <TextBlock Text="Update" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button Command="{Binding DownloadAndRestartForUpdateCommand}"
-                                Style="{StaticResource Win11AccentButton}"
-                                Margin="0,0,6,0"
-                                Padding="10,6"
-                                Visibility="{Binding IsAppUpdateAvailable, Converter={StaticResource BoolToVisibility}}">
-                            <StackPanel Orientation="Horizontal">
-                                <Image Source="{DynamicResource IconDownload}"
-                                       Width="14" Height="14"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0"
-                                       RenderOptions.BitmapScalingMode="HighQuality"/>
-                                <TextBlock Text="{Binding AvailableAppVersion, StringFormat=Aggiorna {0}}"
-                                           VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button Command="{Binding OpenLoginCommand}"
-                                Style="{StaticResource Win11Button}"
-                                Margin="0,0,6,0"
-                                Padding="10,6">
-                            <StackPanel Orientation="Horizontal">
-                                <Image Source="{DynamicResource IconLock}"
-                                       Width="14" Height="14"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0"
-                                       RenderOptions.BitmapScalingMode="HighQuality"/>
-                                <TextBlock Text="Accedi" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
-
-                        <Button Command="{Binding LogoutCommand}"
-                                Style="{StaticResource Win11Button}"
-                                Padding="10,6">
-                            <StackPanel Orientation="Horizontal">
-                                <Image Source="{DynamicResource IconUnlock}"
-                                       Width="14" Height="14"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0"
-                                       RenderOptions.BitmapScalingMode="HighQuality"/>
-                                <TextBlock Text="Esci" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Button>
                     </StackPanel>
 
-                    <Button Grid.Column="5"
-                            Command="{Binding ToggleThemeCommand}"
-                            ToolTip="{Binding ThemeToggleTooltip}"
-                            Style="{StaticResource Win11Button}"
-                            Width="36" Height="36" Padding="0"
-                            Margin="0,0,8,0"
-                            VerticalAlignment="Center"
-                            WindowChrome.IsHitTestVisibleInChrome="True">
-                        <Image Source="{DynamicResource ThemeToggleDrawingImage}"
-                               Width="16" Height="16"
-                               RenderOptions.BitmapScalingMode="HighQuality"/>
-                    </Button>
+                    <StackPanel Grid.Column="5"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="0,0,8,0"
+                                WindowChrome.IsHitTestVisibleInChrome="True">
+                        <Button Command="{Binding OpenSettingsCommand}"
+                                ToolTip="Impostazioni"
+                                Style="{StaticResource Win11Button}"
+                                Width="36" Height="36" Padding="0"
+                                Margin="0,0,6,0">
+                            <Image Source="{DynamicResource IconSettings}"
+                                   Width="16" Height="16"
+                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                        </Button>
+                        <Button Command="{Binding ToggleThemeCommand}"
+                                ToolTip="{Binding ThemeToggleTooltip}"
+                                Style="{StaticResource Win11Button}"
+                                Width="36" Height="36" Padding="0">
+                            <Image Source="{DynamicResource ThemeToggleDrawingImage}"
+                                   Width="16" Height="16"
+                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                        </Button>
+                    </StackPanel>
 
                     <StackPanel Grid.Column="6" Orientation="Horizontal" VerticalAlignment="Stretch">
                         <Button x:Name="BtnMinimize"
@@ -1432,6 +1383,18 @@
                                                         <TextBlock Text="🌐 WEB"
                                                                    Style="{StaticResource Win11BadgeText}"
                                                                    Foreground="{DynamicResource AccentBrush}"/>
+                                                    </Border>
+
+                                                    <Border Background="{DynamicResource WarningSurfaceBrush}"
+                                                            Margin="6,0,0,0">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border" BasedOn="{StaticResource Win11Badge}">
+                                                                <Setter Property="Visibility" Value="{Binding ShowLoginBadge, Converter={StaticResource BoolToVisibility}}"/>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <TextBlock Text="🔒 LOGIN"
+                                                                   Style="{StaticResource Win11BadgeText}"
+                                                                   Foreground="{DynamicResource WarningBrush}"/>
                                                     </Border>
 
                                                     <!-- Kind label badge -->
@@ -3118,7 +3081,23 @@
                                                     <ComboBox ItemsSource="{Binding RemoteInstallerVersions}"
                                                               SelectedItem="{Binding DownloadSelectedVersion, Mode=TwoWay}"
                                                               Style="{StaticResource Win11ComboBox}"
+                                                              IsEnabled="{Binding IsInstallerAutoUpdateEnabled, Converter={StaticResource InverseBoolConverter}}"
                                                               MaxDropDownHeight="260"/>
+
+                                                    <Grid Margin="0,8,0,0"
+                                                          Visibility="{Binding IsRemoteVersionPickerMode, Converter={StaticResource BoolToVisibility}}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="Aggiornamento Automatico Installer"
+                                                                   Style="{StaticResource Win11TextSecondary}"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,10,0"/>
+                                                        <CheckBox Grid.Column="1"
+                                                                  IsChecked="{Binding IsInstallerAutoUpdateEnabled, Mode=TwoWay}"
+                                                                  Style="{StaticResource Win11ToggleSwitch}"/>
+                                                    </Grid>
 
                                                     <Button Content="Apri"
                                                             Command="{Binding OpenSelectedRemoteFolderCommand}"
@@ -3216,6 +3195,26 @@
                                             <TextBlock Text="Richiede Connessione Internet"
                                                        Style="{StaticResource Win11TextBody}"/>
                                         </CheckBox>
+
+                                        <CheckBox IsChecked="{Binding PortalAccessEnabled}"
+                                                  Style="{StaticResource Win11CheckBox}"
+                                                  Margin="0,8,0,0">
+                                            <TextBlock Text="Portal login"
+                                                       Style="{StaticResource Win11TextBody}"/>
+                                        </CheckBox>
+
+                                        <StackPanel Margin="24,8,0,0"
+                                                    Visibility="{Binding IsPortalPickerVisible, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="Portal"
+                                                       Style="{StaticResource Win11TextBody}"
+                                                       FontWeight="SemiBold"
+                                                       Margin="0,0,0,6"/>
+                                            <ComboBox ItemsSource="{Binding AvailablePortals}"
+                                                      SelectedValue="{Binding SelectedPortalId}"
+                                                      SelectedValuePath="Id"
+                                                      DisplayMemberPath="Name"
+                                                      Style="{StaticResource Win11ComboBox}"/>
+                                        </StackPanel>
                                     </StackPanel>
 
                                     <Border Background="#1A0078D4"

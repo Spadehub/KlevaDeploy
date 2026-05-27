@@ -38,7 +38,7 @@ public sealed class UpdateService : IUpdateService
         {
             if (!HasAnyDownloadSource(process)) continue;
 
-            if (process.RequiresAuth && !_authService.IsAuthenticated)
+            if (process.RequiresAuth && !IsAuthenticatedForProcess(process))
             {
                 _log.Warning($"Skipping update for '{process.Name}': auth required but not logged in.");
                 continue;
@@ -59,6 +59,12 @@ public sealed class UpdateService : IUpdateService
 
     public async Task UpdateSingleInstallerAsync(DeploymentProcess process, CancellationToken ct = default)
     {
+        if (process.RequiresAuth && !IsAuthenticatedForProcess(process))
+        {
+            _log.Warning($"Skipping installer update for '{process.Name}': auth required but not logged in.");
+            return;
+        }
+
         var storageDir = GetStorageDir();
         var state = InstallerUpdateState.Load(storageDir);
         await UpdateSingleInstallerInternalAsync(process, state, storageDir, forceDownload: false, ct);
@@ -67,6 +73,12 @@ public sealed class UpdateService : IUpdateService
 
     public async Task RedownloadSingleInstallerAsync(DeploymentProcess process, CancellationToken ct = default)
     {
+        if (process.RequiresAuth && !IsAuthenticatedForProcess(process))
+        {
+            _log.Warning($"Skipping installer redownload for '{process.Name}': auth required but not logged in.");
+            return;
+        }
+
         var storageDir = GetStorageDir();
         var state = InstallerUpdateState.Load(storageDir);
         await UpdateSingleInstallerInternalAsync(process, state, storageDir, forceDownload: true, ct);
@@ -104,7 +116,24 @@ public sealed class UpdateService : IUpdateService
         var remoteUrl = await ResolveRemoteDownloadUrlAsync(process, ct);
         if (string.IsNullOrWhiteSpace(remoteUrl))
         {
-            _log.Warning($"Could not resolve download URL for '{process.Name}'.");
+            if (process.InstallerSourceMode == InstallerSourceMode.DynamicWeb)
+            {
+                var template = !string.IsNullOrWhiteSpace(process.DownloadSelectedFileTemplate)
+                    ? process.DownloadSelectedFileTemplate
+                    : process.DownloadSelectedFileName;
+
+                _log.Warning(
+                    $"Could not resolve download URL for '{process.Name}'. " +
+                    $"baseFolder='{process.DownloadBaseFolderUrl}' template='{template}' " +
+                    $"useLatest={process.DownloadUseLatestVersion} version='{process.DownloadVersionFolderName}' " +
+                    $"pickLatestByName={process.DownloadPickLatestFolderByName} requiresAuth={process.RequiresAuth} isAuthenticated={_authService.IsAuthenticated}");
+            }
+            else
+            {
+                _log.Warning(
+                    $"Could not resolve download URL for '{process.Name}'. " +
+                    $"downloadUrl='{process.DownloadUrl}' requiresAuth={process.RequiresAuth} isAuthenticated={_authService.IsAuthenticated}");
+            }
             return;
         }
 
@@ -118,34 +147,73 @@ public sealed class UpdateService : IUpdateService
             state.Entries[process.Id] = entry;
         }
 
+        var prevDownloadedFromUrl = entry.LastDownloadedFromUrl;
+        var prevResolvedUrl = entry.LastResolvedDownloadUrl;
+
         entry.LastCheckedUtc = DateTimeOffset.UtcNow;
         entry.LastResolvedDownloadUrl = remoteUrl;
 
         var fileExists = File.Exists(localPath);
+        var selectionChanged =
+            fileExists &&
+            !string.IsNullOrWhiteSpace(prevDownloadedFromUrl) &&
+            !string.Equals(prevDownloadedFromUrl, remoteUrl, StringComparison.OrdinalIgnoreCase);
+
+        var resolvedChangedWithoutHistory =
+            fileExists &&
+            string.IsNullOrWhiteSpace(prevDownloadedFromUrl) &&
+            !string.IsNullOrWhiteSpace(prevResolvedUrl) &&
+            !string.Equals(prevResolvedUrl, remoteUrl, StringComparison.OrdinalIgnoreCase);
+
         var isAssociatedFallback = fileExists &&
-                                  string.Equals(entry.LastDownloadedFromUrl, remoteUrl, StringComparison.OrdinalIgnoreCase);
+                                   string.Equals(prevDownloadedFromUrl, remoteUrl, StringComparison.OrdinalIgnoreCase);
 
-        var needDownload = forceDownload || !fileExists ||
-                           (process.InstallerSourceMode == InstallerSourceMode.StaticWeb && !isAssociatedFallback);
-        if (!needDownload) return;
+        var needDownload = forceDownload || !fileExists || selectionChanged || resolvedChangedWithoutHistory;
 
-        if (!forceDownload && process.InstallerSourceMode != InstallerSourceMode.StaticWeb)
+        if (!needDownload)
         {
-            var head = await TryHeadAsync(remoteUrl, entry, ct);
-            if (head == HeadCheckResult.NotModified)
+            if (process.InstallerSourceMode == InstallerSourceMode.DynamicWeb)
             {
-                _log.Info($"'{process.Name}' is up to date.");
-                return;
-            }
+                var head = await TryHeadAsync(remoteUrl, entry, ct);
+                if (head == HeadCheckResult.NotModified)
+                {
+                    _log.Info($"'{process.Name}' is up to date.");
+                    return;
+                }
 
-            needDownload = head == HeadCheckResult.Modified;
-            if (!needDownload) return;
+                needDownload = head == HeadCheckResult.Modified;
+                if (!needDownload) return;
+            }
+            else if (process.InstallerSourceMode == InstallerSourceMode.StaticWeb)
+            {
+                if (isAssociatedFallback) return;
+                needDownload = true;
+            }
         }
 
         _log.Info($"Downloading update for '{process.Name}'...");
 
         var tempPath = localPath + ".download";
         if (File.Exists(tempPath)) File.Delete(tempPath);
+
+        var installerDir = Path.GetDirectoryName(localPath);
+        if (!string.IsNullOrWhiteSpace(installerDir) && Directory.Exists(installerDir))
+        {
+            try
+            {
+                foreach (var path in Directory.EnumerateFiles(installerDir))
+                {
+                    if (string.Equals(path, localPath, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (string.Equals(path, tempPath, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!IsInstallerArtifact(path)) continue;
+                    File.Delete(path);
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.Warning($"Could not clean old cached installers for '{process.Name}': {ex.GetType().Name}: {ex.Message}");
+            }
+        }
 
         var downloadResult = await DownloadToFileAsync(remoteUrl, tempPath, entry, ct);
         if (!downloadResult.Success)
@@ -164,6 +232,21 @@ public sealed class UpdateService : IUpdateService
         _log.Info($"'{process.Name}' installer updated ({downloadResult.BytesWritten} bytes).");
     }
 
+    private static bool IsInstallerArtifact(string path)
+    {
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        return ext is ".exe" or ".msi" or ".zip" or ".download" or ".tmp";
+    }
+
+    private bool IsAuthenticatedForProcess(DeploymentProcess process)
+    {
+        var url = process.InstallerSourceMode == InstallerSourceMode.DynamicWeb
+            ? process.DownloadBaseFolderUrl
+            : process.DownloadUrl;
+
+        return !string.IsNullOrWhiteSpace(url) && _authService.IsAuthenticatedForUrl(url);
+    }
+
     private bool HasAnyDownloadSource(DeploymentProcess process) =>
         process.InstallerSourceMode switch
         {
@@ -176,26 +259,34 @@ public sealed class UpdateService : IUpdateService
 
     private async Task<string?> ResolveRemoteDownloadUrlAsync(DeploymentProcess process, CancellationToken ct)
     {
-        if (process.InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
-            !string.IsNullOrWhiteSpace(process.DownloadBaseFolderUrl))
+        try
         {
-            var template = !string.IsNullOrWhiteSpace(process.DownloadSelectedFileTemplate)
-                ? process.DownloadSelectedFileTemplate
-                : process.DownloadSelectedFileName;
+            if (process.InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
+                !string.IsNullOrWhiteSpace(process.DownloadBaseFolderUrl))
+            {
+                var template = !string.IsNullOrWhiteSpace(process.DownloadSelectedFileTemplate)
+                    ? process.DownloadSelectedFileTemplate
+                    : process.DownloadSelectedFileName;
 
-            var versionFolderName = (!process.DownloadUseLatestVersion && !string.IsNullOrWhiteSpace(process.DownloadVersionFolderName))
-                ? process.DownloadVersionFolderName
-                : null;
+                var versionFolderName = (!process.DownloadUseLatestVersion && !string.IsNullOrWhiteSpace(process.DownloadVersionFolderName))
+                    ? process.DownloadVersionFolderName
+                    : null;
 
-            return await _directoryListing.ResolveDownloadUrlAsync(
-                process.DownloadBaseFolderUrl,
-                pickLatestFolderByName: process.DownloadPickLatestFolderByName,
-                selectedFileTemplate: template,
-                versionFolderName: versionFolderName,
-                ct: ct);
+                return await _directoryListing.ResolveDownloadUrlAsync(
+                    process.DownloadBaseFolderUrl,
+                    pickLatestFolderByName: process.DownloadPickLatestFolderByName,
+                    selectedFileTemplate: template,
+                    versionFolderName: versionFolderName,
+                    ct: ct);
+            }
+
+            return process.DownloadUrl;
         }
-
-        return process.DownloadUrl;
+        catch (Exception ex)
+        {
+            _log.Error($"ResolveRemoteDownloadUrlAsync failed for '{process.Name}'", ex);
+            return null;
+        }
     }
 
     private enum HeadCheckResult { Unknown, NotModified, Modified }
@@ -211,13 +302,20 @@ public sealed class UpdateService : IUpdateService
             request.Headers.IfModifiedSince = entry.LastKnownLastModifiedUtc.Value.UtcDateTime;
 
         using var response = await SendWithRedirectsAsync(request, ct);
-        if (response is null) return HeadCheckResult.Unknown;
+        if (response is null)
+        {
+            _log.Warning($"HEAD failed for '{url}' (no response).");
+            return HeadCheckResult.Unknown;
+        }
 
         if (response.StatusCode == HttpStatusCode.NotModified)
             return HeadCheckResult.NotModified;
 
         if (!response.IsSuccessStatusCode)
+        {
+            _log.Warning($"HEAD failed for '{url}' (HTTP {(int)response.StatusCode} {response.StatusCode}).");
             return HeadCheckResult.Unknown;
+        }
 
         var prevEtag = entry.LastKnownEtag;
         var prevLastModified = entry.LastKnownLastModifiedUtc;
@@ -248,8 +346,17 @@ public sealed class UpdateService : IUpdateService
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         using var response = await SendWithRedirectsAsync(request, ct);
-        if (response is null || !response.IsSuccessStatusCode)
+        if (response is null)
+        {
+            _log.Warning($"GET failed for '{url}' (no response).");
             return new DownloadResult(false, 0);
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _log.Warning($"GET failed for '{url}' (HTTP {(int)response.StatusCode} {response.StatusCode}).");
+            return new DownloadResult(false, 0);
+        }
 
         var etag = response.Headers.ETag?.Tag;
         if (!string.IsNullOrWhiteSpace(etag))

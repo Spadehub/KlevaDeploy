@@ -17,7 +17,7 @@ public sealed class LogService : ILogService
     public void Info(string message) => AppendRaw("INFO", message);
     public void Warning(string message) => AppendRaw("WARN", message);
     public void Error(string message, Exception? ex = null) =>
-        AppendRaw("ERROR", ex is null ? message : $"{message} | {ex.Message}");
+        AppendRaw("ERROR", ex is null ? message : $"{message} | {ex.GetType().Name}: {ex.Message}");
 
     public void AppendRaw(string level, string message)
     {

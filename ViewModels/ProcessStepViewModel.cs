@@ -79,6 +79,13 @@ public sealed class ProcessStepViewModel : ObservableObject
         _                          => "Unknown"
     };
 
+    private bool _showLoginBadge;
+    public bool ShowLoginBadge
+    {
+        get => _showLoginBadge;
+        set => SetProperty(ref _showLoginBadge, value);
+    }
+
     public ProcessStepViewModel(DeploymentProcess process, int order, IDialogService dialogService, bool isInSelectedPreset = true, bool isRequired = false)
     {
         Process = process;

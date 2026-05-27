@@ -54,8 +54,14 @@ public sealed class MainViewModel : ObservableObject
     public bool IsAuthenticated
     {
         get => _isAuthenticated;
-        set => SetProperty(ref _isAuthenticated, value);
+        set
+        {
+            if (!SetProperty(ref _isAuthenticated, value)) return;
+            OnPropertyChanged(nameof(AuthenticatedPortalsCount));
+        }
     }
+
+    public int AuthenticatedPortalsCount => _authService.AuthenticatedPortalCount;
 
     private bool _isRunning;
     public bool IsRunning
@@ -216,6 +222,7 @@ public sealed class MainViewModel : ObservableObject
     public IAsyncRelayCommand DownloadAndRestartForUpdateCommand { get; }
     public IRelayCommand OpenLoginCommand { get; }
     public IRelayCommand LogoutCommand { get; }
+    public IRelayCommand OpenSettingsCommand { get; }
     public IRelayCommand ToggleThemeCommand { get; }
     public IRelayCommand SetPresetListViewCommand { get; }
     public IRelayCommand SetPresetGridViewCommand { get; }
@@ -265,13 +272,22 @@ public sealed class MainViewModel : ObservableObject
         CreatePresetViewModel.CloseRequested += OnCreatePresetCloseRequested;
         CreatePresetViewModel.DeleteRequested += OnCreatePresetDeleteRequested;
 
-        CreateProcessViewModel = new CreateProcessViewModel(_authService, _downloadDirectoryListingService, _log, _presetIconService);
+        CreateProcessViewModel = new CreateProcessViewModel(_authService, _downloadDirectoryListingService, _prefsService, _log, _presetIconService);
         CreateProcessViewModel.DeleteRequested += OnCreateProcessDeleteRequested;
         CreateProcessViewModel.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName != nameof(CreateProcessViewModel.DialogResult)) return;
             if (CreateProcessViewModel.DialogResult is null) return;
             OnCreateProcessCloseRequested();
+        };
+
+        _authService.AuthStateChanged += (_, _) =>
+        {
+            var dispatcher = App.Current?.Dispatcher;
+            if (dispatcher is null)
+                SyncAuthProperties();
+            else
+                dispatcher.BeginInvoke(SyncAuthProperties);
         };
 
         SyncThemeProperties();
@@ -296,6 +312,7 @@ public sealed class MainViewModel : ObservableObject
         DownloadAndRestartForUpdateCommand = new AsyncRelayCommand(DownloadAndRestartForUpdateAsync, CanDownloadAndRestartForUpdate);
         OpenLoginCommand = new RelayCommand(OpenLogin);
         LogoutCommand = new RelayCommand(Logout);
+        OpenSettingsCommand = new RelayCommand(OpenSettings);
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
         SetPresetListViewCommand = new RelayCommand(() => IsPresetGridView = false);
         SetPresetGridViewCommand = new RelayCommand(() => IsPresetGridView = true);
@@ -305,11 +322,49 @@ public sealed class MainViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
-        IsAuthenticated = await _authService.TryRestoreSessionAsync();
+        _ = await _authService.TryRestoreSessionAsync();
+        SyncAuthProperties();
         await LoadDataAsync();
         // ISSUE 3 FIX: Rebuild execution queue at startup to show all processes
         RebuildExecutionQueue();
         _ = CheckAppUpdateAsync();
+    }
+
+    private void SyncAuthProperties()
+    {
+        IsAuthenticated = _authService.IsAuthenticated;
+        OnPropertyChanged(nameof(AuthenticatedPortalsCount));
+        RefreshLoginBadges();
+    }
+
+    private void RefreshLoginBadges()
+    {
+        foreach (var step in ExecutionQueue)
+        {
+            step.ShowLoginBadge = step.Process.RequiresAuth && !IsAuthenticatedForProcess(step.Process);
+        }
+    }
+
+    private bool IsAuthenticatedForProcess(DeploymentProcess process)
+    {
+        if (process is null) return false;
+
+        var portalId = (process.PortalId ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(portalId))
+        {
+            var portal = _prefsService.Preferences.Portals
+                .FirstOrDefault(p => string.Equals(p.Id, portalId, StringComparison.OrdinalIgnoreCase));
+            if (portal is not null && !string.IsNullOrWhiteSpace(portal.HomeUrl))
+                return _authService.IsAuthenticatedForPortalHomeUrl(portal.HomeUrl);
+        }
+
+        var url = process.InstallerSourceMode == InstallerSourceMode.DynamicWeb
+            ? process.DownloadBaseFolderUrl
+            : process.DownloadUrl;
+        if (!string.IsNullOrWhiteSpace(url))
+            return _authService.IsAuthenticatedForUrl(url);
+
+        return _authService.IsAuthenticated;
     }
 
     private async Task LoadDataAsync()
@@ -430,6 +485,7 @@ public sealed class MainViewModel : ObservableObject
             int order = isInSelectedPreset ? processOrderInPreset[process.Id] : 9999;
             bool isRequired = isInSelectedPreset && processRequiredInPreset.GetValueOrDefault(process.Id, false);
             var stepVm = new ProcessStepViewModel(process, order, _dialogService, isInSelectedPreset, isRequired);
+            stepVm.ShowLoginBadge = stepVm.Process.RequiresAuth && !IsAuthenticatedForProcess(stepVm.Process);
             
             // Determine enabled state
             if (_userManualDeselections.TryGetValue(process.Id, out bool forcedOff))
@@ -823,11 +879,21 @@ public sealed class MainViewModel : ObservableObject
         var enabledSteps = ExecutionQueue.Where(s => s.IsEnabled).ToList();
         if (enabledSteps.Count == 0) return;
 
-        // Check if any step requires auth
-        if (enabledSteps.Any(s => s.Process.RequiresAuth) && !_authService.IsAuthenticated)
+        while (true)
         {
+            var missing = enabledSteps.FirstOrDefault(s => s.Process.RequiresAuth && !IsAuthenticatedForProcess(s.Process));
+            if (missing is null) break;
+
+            var preferredPortalId = (missing.Process.PortalId ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(preferredPortalId) &&
+                !string.Equals(_prefsService.Preferences.SelectedPortalId, preferredPortalId, StringComparison.OrdinalIgnoreCase))
+            {
+                _prefsService.Preferences.SelectedPortalId = preferredPortalId;
+                _prefsService.Save();
+            }
+
             OpenLogin();
-            if (!_authService.IsAuthenticated) return;
+            if (!IsAuthenticatedForProcess(missing.Process)) return;
         }
 
         IsRunning = true;
@@ -901,7 +967,12 @@ public sealed class MainViewModel : ObservableObject
 
                 var installerPath = Path.Combine(AppContext.BaseDirectory, process.RelativePath);
 
-                if (!File.Exists(installerPath) && process.InstallerSourceMode != InstallerSourceMode.StaticLocal)
+                var shouldAutoUpdateBeforeRun =
+                    process.InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
+                    process.DownloadUseLatestVersion;
+
+                if ((shouldAutoUpdateBeforeRun || !File.Exists(installerPath)) &&
+                    process.InstallerSourceMode != InstallerSourceMode.StaticLocal)
                 {
                     await _updateService.UpdateSingleInstallerAsync(process);
                 }
@@ -1034,7 +1105,7 @@ public sealed class MainViewModel : ObservableObject
 
     private void OpenLogin()
     {
-        if (_authService.IsAuthenticated) { IsAuthenticated = true; return; }
+        var beforeCount = _authService.AuthenticatedPortalCount;
         var vm = _loginVmFactory();
         var win = new LoginWindow(vm);
         var owner = System.Windows.Application.Current?.Windows.OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive)
@@ -1047,13 +1118,98 @@ public sealed class MainViewModel : ObservableObject
             win.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner;
         }
         win.ShowDialog();
-        IsAuthenticated = _authService.IsAuthenticated;
+        SyncAuthProperties();
+
+        if (vm.RequestedSettingsSection is not null)
+        {
+            OpenSettings(vm.RequestedSettingsSection.Value, vm.RequestedPortalId);
+            return;
+        }
+
+        if (vm.LoginSucceeded && IsAuthenticated)
+        {
+            Uri? portalUri = null;
+            var portalHomeUrl = vm.SelectedPortal?.HomeUrl;
+            var selectedPortalId = vm.SelectedPortal?.Id;
+            if (Uri.TryCreate(portalHomeUrl?.Trim(), UriKind.Absolute, out var parsedPortal))
+                portalUri = parsedPortal;
+
+            if (IsCreateProcessPanelOpen &&
+                CreateProcessViewModel.SelectedProcessKind == ProcessKind.Installer &&
+                CreateProcessViewModel.InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
+                !string.IsNullOrWhiteSpace(CreateProcessViewModel.DownloadBaseFolderUrl) &&
+                CreateProcessViewModel.RefreshRemoteInstallerFilesCommand.CanExecute(null))
+            {
+                CreateProcessViewModel.PrepareAutoUpdateCheck();
+                CreateProcessViewModel.RefreshRemoteInstallerFilesCommand.Execute(null);
+            }
+
+            List<DeploymentProcess> autoUpdateProcesses;
+            if (portalUri is null)
+            {
+                autoUpdateProcesses = new();
+            }
+            else
+            {
+                autoUpdateProcesses = _allProcesses
+                    .Where(p => p.Kind == ProcessKind.Installer &&
+                                p.InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
+                                p.DownloadUseLatestVersion &&
+                                p.RequiresAuth &&
+                                MatchesPortal(p, portalUri, selectedPortalId))
+                    .ToList();
+            }
+
+            if (autoUpdateProcesses.Count > 0)
+            {
+                _ = Task.Run(() => _updateService.CheckAndUpdateInstallersAsync(autoUpdateProcesses));
+            }
+
+            if (_authService.AuthenticatedPortalCount != beforeCount)
+                RefreshLoginBadges();
+        }
+
+        static bool MatchesPortal(DeploymentProcess p, Uri portalUri, string? selectedPortalId)
+        {
+            if (!string.IsNullOrWhiteSpace(p.PortalId) && !string.IsNullOrWhiteSpace(selectedPortalId))
+                return string.Equals(p.PortalId, selectedPortalId, StringComparison.OrdinalIgnoreCase);
+
+            var url = p.InstallerSourceMode == InstallerSourceMode.DynamicWeb ? p.DownloadBaseFolderUrl : p.DownloadUrl;
+            if (!Uri.TryCreate(url?.Trim(), UriKind.Absolute, out var processUri))
+                return false;
+            return string.Equals(processUri.Host, portalUri.Host, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private void Logout()
     {
         _authService.Logout();
         IsAuthenticated = false;
+    }
+
+    private void OpenSettings()
+    {
+        OpenSettings(SettingsSection.InfoEAggiornamenti, null);
+    }
+
+    private void OpenSettings(SettingsSection initialSection, string? initialPortalId)
+    {
+        var vm = new SettingsViewModel(_appUpdateService, _prefsService, _log, _dialogService, _presetIconService);
+        vm.SelectedSection = initialSection;
+        if (!string.IsNullOrWhiteSpace(initialPortalId))
+            vm.SelectedPortal = vm.Portals.FirstOrDefault(p => string.Equals(p.Id, initialPortalId, StringComparison.OrdinalIgnoreCase));
+        vm.LoadInstallers(_allProcesses);
+        var win = new SettingsWindow(vm);
+        var owner = System.Windows.Application.Current?.Windows.OfType<System.Windows.Window>().FirstOrDefault(w => w.IsActive)
+                    ?? System.Windows.Application.Current?.MainWindow;
+        if (owner is null)
+            win.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterScreen;
+        else
+        {
+            win.Owner = owner;
+            win.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner;
+        }
+        win.ShowDialog();
     }
 
     private async Task CheckAppUpdateAsync()
