@@ -26,4 +26,9 @@ Thumbs.db
 # Local config / secrets
 appsettings.Local.json
 
+# Defaults (local import/export profiles)
+Defaults/*.json
+Defaults/*.kac.json
+Defaults/**/*.kac.json
+
 .trae/

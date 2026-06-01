@@ -32,4 +32,16 @@
     <Page Remove="KlevaDeploy.Tests\**\*" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Defaults\portals.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Defaults\Imports\*.kdp.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\Brand\*.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
