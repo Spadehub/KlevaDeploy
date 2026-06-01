@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:models="clr-namespace:KlevaDeploy.Models"
+        xmlns:conv="clr-namespace:KlevaDeploy.Converters"
         xmlns:behaviors="clr-namespace:KlevaDeploy.Behaviors"
         mc:Ignorable="d"
         Title="{Binding Title}"
@@ -20,8 +21,8 @@
         FontFamily="Segoe UI Variable, Segoe UI, sans-serif">
 
     <Window.Resources>
-        <!-- Converter for conditional visibility -->
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <conv:IconVariantToImageSourceConverter x:Key="IconVariantToImageSourceConverter"/>
     </Window.Resources>
 
     <Border Background="{DynamicResource AppBackgroundBrush}"
