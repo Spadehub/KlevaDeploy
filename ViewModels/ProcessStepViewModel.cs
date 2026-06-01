@@ -66,6 +66,34 @@ public sealed class ProcessStepViewModel : ObservableObject
         set => SetProperty(ref _statusText, value);
     }
 
+    private bool _isRunningStep;
+    public bool IsRunningStep
+    {
+        get => _isRunningStep;
+        set => SetProperty(ref _isRunningStep, value);
+    }
+
+    private bool _wasSkippedThisRun;
+    public bool WasSkippedThisRun
+    {
+        get => _wasSkippedThisRun;
+        set => SetProperty(ref _wasSkippedThisRun, value);
+    }
+
+    private double _progressValue;
+    public double ProgressValue
+    {
+        get => _progressValue;
+        set => SetProperty(ref _progressValue, value);
+    }
+
+    private bool _isProgressIndeterminate;
+    public bool IsProgressIndeterminate
+    {
+        get => _isProgressIndeterminate;
+        set => SetProperty(ref _isProgressIndeterminate, value);
+    }
+
     public string Name => Process.Name;
     public string Description => Process.Description;
     public string KindLabel => Process.Kind switch
@@ -100,5 +128,13 @@ public sealed class ProcessStepViewModel : ObservableObject
     {
         StatusIcon = icon;
         StatusText = text;
+    }
+
+    public void ResetProgress()
+    {
+        IsRunningStep = false;
+        WasSkippedThisRun = false;
+        ProgressValue = 0;
+        IsProgressIndeterminate = false;
     }
 }

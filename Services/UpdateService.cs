@@ -99,7 +99,9 @@ public sealed class UpdateService : IUpdateService
         var state = InstallerUpdateState.Load(storageDir);
         if (!state.Entries.TryGetValue(process.Id, out var entry)) return false;
 
-        return string.Equals(entry.LastDownloadedFromUrl, process.DownloadUrl, StringComparison.OrdinalIgnoreCase);
+        var expected = NormalizeAbsoluteUrl(process.DownloadUrl);
+        var actual = NormalizeAbsoluteUrl(entry.LastDownloadedFromUrl);
+        return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task UpdateSingleInstallerInternalAsync(
@@ -154,19 +156,23 @@ public sealed class UpdateService : IUpdateService
         entry.LastResolvedDownloadUrl = remoteUrl;
 
         var fileExists = File.Exists(localPath);
+        var normalizedPrevDownloadedFromUrl = NormalizeAbsoluteUrl(prevDownloadedFromUrl);
+        var normalizedRemoteUrl = NormalizeAbsoluteUrl(remoteUrl);
+
         var selectionChanged =
             fileExists &&
-            !string.IsNullOrWhiteSpace(prevDownloadedFromUrl) &&
-            !string.Equals(prevDownloadedFromUrl, remoteUrl, StringComparison.OrdinalIgnoreCase);
+            !string.IsNullOrWhiteSpace(normalizedPrevDownloadedFromUrl) &&
+            !string.Equals(normalizedPrevDownloadedFromUrl, normalizedRemoteUrl, StringComparison.OrdinalIgnoreCase);
 
         var resolvedChangedWithoutHistory =
             fileExists &&
-            string.IsNullOrWhiteSpace(prevDownloadedFromUrl) &&
+            string.IsNullOrWhiteSpace(normalizedPrevDownloadedFromUrl) &&
             !string.IsNullOrWhiteSpace(prevResolvedUrl) &&
-            !string.Equals(prevResolvedUrl, remoteUrl, StringComparison.OrdinalIgnoreCase);
+            !string.Equals(NormalizeAbsoluteUrl(prevResolvedUrl), normalizedRemoteUrl, StringComparison.OrdinalIgnoreCase);
 
         var isAssociatedFallback = fileExists &&
-                                   string.Equals(prevDownloadedFromUrl, remoteUrl, StringComparison.OrdinalIgnoreCase);
+                                   !string.IsNullOrWhiteSpace(normalizedPrevDownloadedFromUrl) &&
+                                   string.Equals(normalizedPrevDownloadedFromUrl, normalizedRemoteUrl, StringComparison.OrdinalIgnoreCase);
 
         var needDownload = forceDownload || !fileExists || selectionChanged || resolvedChangedWithoutHistory;
 
@@ -186,8 +192,13 @@ public sealed class UpdateService : IUpdateService
             }
             else if (process.InstallerSourceMode == InstallerSourceMode.StaticWeb)
             {
-                if (isAssociatedFallback) return;
-                needDownload = true;
+                // StaticWeb behavior:
+                // - If the cached file exists and it is already associated with the same URL, do nothing.
+                // - Otherwise, download to (re)associate the cache with the current URL.
+                if (fileExists && !forceDownload && isAssociatedFallback)
+                    return;
+
+                needDownload = forceDownload || !fileExists || selectionChanged || string.IsNullOrWhiteSpace(normalizedPrevDownloadedFromUrl);
             }
         }
 
@@ -280,13 +291,28 @@ public sealed class UpdateService : IUpdateService
                     ct: ct);
             }
 
-            return process.DownloadUrl;
+            return NormalizeAbsoluteUrl(process.DownloadUrl);
         }
         catch (Exception ex)
         {
             _log.Error($"ResolveRemoteDownloadUrlAsync failed for '{process.Name}'", ex);
             return null;
         }
+    }
+
+    private static string NormalizeAbsoluteUrl(string? value)
+    {
+        var raw = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+
+        if (Uri.TryCreate(raw, UriKind.Absolute, out _)) return raw;
+        if (!raw.Contains("://", StringComparison.Ordinal) &&
+            Uri.TryCreate("https://" + raw, UriKind.Absolute, out _))
+        {
+            return "https://" + raw;
+        }
+
+        return raw;
     }
 
     private enum HeadCheckResult { Unknown, NotModified, Modified }

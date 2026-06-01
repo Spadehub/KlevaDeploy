@@ -142,6 +142,12 @@ public sealed partial class LogViewModel : ObservableObject
 
     private static bool TryFormatTerminalLine(LogEntry entry, out string line)
     {
+        if (entry.Level == "CMD")
+        {
+            line = entry.Message;
+            return true;
+        }
+
         if (entry.Level == "STDOUT")
         {
             line = entry.Message;
@@ -151,24 +157,6 @@ public sealed partial class LogViewModel : ObservableObject
         if (entry.Level == "STDERR")
         {
             line = $"[stderr] {entry.Message}";
-            return true;
-        }
-
-        if (entry.Level == "WARN")
-        {
-            line = $"> [warn] {entry.Message}";
-            return true;
-        }
-
-        if (entry.Level == "ERROR")
-        {
-            line = $"> [error] {entry.Message}";
-            return true;
-        }
-
-        if (entry.Level == "INFO" && entry.Message.StartsWith("Starting process:", StringComparison.OrdinalIgnoreCase))
-        {
-            line = $"> {entry.Message}";
             return true;
         }
 
