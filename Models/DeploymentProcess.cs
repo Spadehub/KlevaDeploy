@@ -44,6 +44,7 @@ public class DeploymentProcess
     public bool RequiresInternet { get; set; }
     /// <summary>For PowerShell/Batch scripts: inline script content (alternative to RelativePath).</summary>
     public string ScriptContent { get; set; } = string.Empty;
+    public string InstallDirectory { get; set; } = string.Empty;
     /// <summary>Icon key from Icons.xaml (e.g., "IconPackage", "IconScript").</summary>
     public string IconKey { get; set; } = "IconPackage";
     public string Icon { get; set; } = "📦";
@@ -51,4 +52,15 @@ public class DeploymentProcess
     public string? CustomIconDarkPath { get; set; }
     /// <summary>If true, this process was created by the user (not from presets).</summary>
     public bool IsUserCreated { get; set; }
+
+    public List<DeploymentSubProcess> SubProcesses { get; set; } = new();
+}
+
+public sealed class DeploymentSubProcess
+{
+    public string Name { get; set; } = string.Empty;
+    public DeploymentProcess? Process { get; set; }
+    public string RelativePath { get; set; } = string.Empty;
+    public string Arguments { get; set; } = string.Empty;
+    public bool? RunAsAdmin { get; set; }
 }

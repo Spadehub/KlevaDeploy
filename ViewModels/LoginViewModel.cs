@@ -234,15 +234,6 @@ public sealed class LoginViewModel : ObservableObject
     {
         var prefs = _preferencesService.Preferences;
         prefs.Portals ??= new();
-        if (prefs.Portals.Count == 0)
-        {
-            prefs.Portals.Add(new PortalPreference
-            {
-                Id = "passepartout",
-                Name = "Passepartout",
-                HomeUrl = "https://download.passepartout.cloud/."
-            });
-        }
 
         Portals.Clear();
         foreach (var portal in prefs.Portals.Where(p => p is not null))

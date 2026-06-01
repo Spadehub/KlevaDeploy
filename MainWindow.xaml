@@ -7,6 +7,7 @@
         xmlns:behaviors="clr-namespace:KlevaDeploy.Behaviors"
         xmlns:conv="clr-namespace:KlevaDeploy.Converters"
         xmlns:models="clr-namespace:KlevaDeploy.Models"
+        xmlns:vm="clr-namespace:KlevaDeploy.ViewModels"
         mc:Ignorable="d"
         Title="KlevaDeploy"
         Width="1200" Height="760"
@@ -19,6 +20,14 @@
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         FontFamily="Segoe UI Variable, Segoe UI, sans-serif">
+
+    <Window.Icon>
+        <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+            <Binding Source="Assets\Brand\KlevaDeploy Icon.png"/>
+            <Binding Source="Assets\Brand\KlevaDeploy Icon.png"/>
+            <Binding RelativeSource="{RelativeSource Self}" Path="DataContext.IsDarkTheme"/>
+        </MultiBinding>
+    </Window.Icon>
 
     <!-- ── WindowChrome: integrates with DWM compositor, eliminates 1px white border artifact ── -->
     <WindowChrome.WindowChrome>
@@ -293,16 +302,26 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center"
+                    <StackPanel Grid.Column="0"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
                                 IsHitTestVisible="False">
-                        <Image Source="{DynamicResource IconPackage}"
-                               Width="18" Height="18"
+                        <Image x:Name="AppLogoImage"
+                               Height="28"
                                VerticalAlignment="Center"
-                               Margin="0,0,8,0"
-                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                               RenderOptions.BitmapScalingMode="HighQuality">
+                            <Image.Source>
+                                <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                    <Binding Source="Assets\Brand\KlevaDeploy logo light.png"/>
+                                    <Binding Source="Assets\Brand\KlevaDeploy logo dark.png"/>
+                                    <Binding Path="IsDarkTheme"/>
+                                </MultiBinding>
+                            </Image.Source>
+                        </Image>
                         <TextBlock Text="KlevaDeploy"
                                    Style="{StaticResource Win11TextSubtitle}"
-                                   VerticalAlignment="Center"/>
+                                   VerticalAlignment="Center"
+                                   Visibility="{Binding ElementName=AppLogoImage, Path=Source, Converter={StaticResource NullToVisibilityConverter}, ConverterParameter=Inverse}"/>
                     </StackPanel>
 
                     <Border Grid.Column="1"
@@ -1072,14 +1091,23 @@
                                            Foreground="{DynamicResource TextSecondaryBrush}"
                                            FontSize="12"/>
 
-                                <!-- Run queue button -->
-                                <Button Grid.Row="1" Grid.Column="1"
-                                        Content="{Binding IsRunning, Converter={StaticResource BusyToTextConverter},
-                                                  ConverterParameter='▶  Esegui Coda|⏳  Esecuzione…'}"
-                                        Command="{Binding RunQueueCommand}"
-                                        Style="{StaticResource Win11AccentButton}"
-                                        Height="36" MinWidth="160"
-                                        IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
+                                <StackPanel Grid.Row="1" Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            VerticalAlignment="Center">
+                                    <Button Content="{Binding IsRunning, Converter={StaticResource BusyToTextConverter},
+                                                      ConverterParameter='▶  Esegui Coda|⏳  Esecuzione…'}"
+                                            Command="{Binding RunQueueCommand}"
+                                            Style="{StaticResource Win11AccentButton}"
+                                            Height="36" MinWidth="160"
+                                            IsEnabled="{Binding IsRunning, Converter={StaticResource InverseBoolConverter}, FallbackValue=True}"/>
+                                    <Button Content="⛔  Annulla"
+                                            Command="{Binding CancelQueueCommand}"
+                                            Style="{StaticResource Win11Button}"
+                                            Height="36"
+                                            MinWidth="120"
+                                            Margin="8,0,0,0"
+                                            Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}"/>
+                                </StackPanel>
                             </Grid>
                         </Border>
                     </Grid>
@@ -1205,9 +1233,9 @@
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollBarVisibility="Disabled"
                                       Padding="8,8,8,8">
-                            <ItemsControl ItemsSource="{Binding FilteredExecutionQueue}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
+                            <ItemsControl ItemsSource="{Binding FilteredExecutionQueueDisplayItems}">
+                                <ItemsControl.Resources>
+                                    <DataTemplate DataType="{x:Type vm:ProcessStepViewModel}">
                                         <ToggleButton IsChecked="{Binding IsEnabled, Mode=TwoWay}"
                                                       Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
                                             <ToggleButton.ContextMenu>
@@ -1308,6 +1336,7 @@
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="Auto"/>
                                                     <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
                                                 </Grid.RowDefinitions>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto"/>  <!-- Checkbox indicator -->
@@ -1406,6 +1435,24 @@
                                                                    FontSize="9"
                                                                    VerticalAlignment="Center"/>
                                                     </Border>
+
+                                                    <Button Content="Annulla"
+                                                            Command="{Binding DataContext.CancelStepCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"
+                                                            Height="24"
+                                                            Padding="10,3"
+                                                            Margin="6,0,0,0">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button" BasedOn="{StaticResource Win11Button}">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ToggleButton}}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
+                                                    </Button>
                                                     
                                                     <Button Style="{StaticResource Win11IconButton}"
                                                             Margin="6,0,0,0"
@@ -1540,10 +1587,36 @@
                                                                FontSize="10"
                                                                Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
                                                 </StackPanel>
+
+                                                <ProgressBar Grid.Row="2"
+                                                             Grid.Column="1"
+                                                             Grid.ColumnSpan="3"
+                                                             Height="3"
+                                                             Maximum="100"
+                                                             Value="{Binding ProgressValue}"
+                                                             IsIndeterminate="{Binding IsProgressIndeterminate}"
+                                                             Margin="0,6,0,0"
+                                                             IsHitTestVisible="False">
+                                                    <ProgressBar.Style>
+                                                        <Style TargetType="ProgressBar" BasedOn="{StaticResource Win11ProgressBar}">
+                                                            <Setter Property="Opacity" Value="0.25"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsRunningStep}" Value="True">
+                                                                    <Setter Property="Opacity" Value="1"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </ProgressBar.Style>
+                                                </ProgressBar>
                                             </Grid>
                                         </ToggleButton>
                                     </DataTemplate>
-                                </ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:ListSeparatorItem}">
+                                        <Border Height="1"
+                                                Background="{DynamicResource BorderBrush}"
+                                                Margin="0,8,0,10"/>
+                                    </DataTemplate>
+                                </ItemsControl.Resources>
                             </ItemsControl>
                         </ScrollViewer>
                     </Grid>
@@ -2595,7 +2668,7 @@
                                     <Button Content="Elimina"
                                             Command="{Binding DeleteCommand}"
                                             Height="40"
-                                            MinWidth="120"
+                                            MinWidth="100"
                                             Margin="0,0,8,0"
                                             Visibility="{Binding IsEditMode, Converter={StaticResource BoolToVisibility}}">
                                         <Button.Style>
@@ -2609,7 +2682,7 @@
                                             Command="{Binding CancelCommand}"
                                             Style="{StaticResource Win11Button}"
                                             Height="40"
-                                            MinWidth="120"/>
+                                            MinWidth="100"/>
                                 </StackPanel>
 
                                 <Button Grid.Column="1"
@@ -3139,6 +3212,14 @@
                                         <TextBox Text="{Binding Arguments, UpdateSourceTrigger=PropertyChanged}"
                                                  Style="{StaticResource Win11TextBox}"
                                                  Margin="0,0,0,16"/>
+
+                                        <TextBlock Text="Cartella Installazione (opzionale)"
+                                                   Style="{StaticResource Win11TextBody}"
+                                                   FontWeight="SemiBold"
+                                                   Margin="0,0,0,6"/>
+                                        <TextBox Text="{Binding InstallDirectory, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource Win11TextBox}"
+                                                 Margin="0,0,0,16"/>
                                     </StackPanel>
 
                                     <StackPanel Visibility="{Binding IsScriptMode, Converter={StaticResource BoolToVisibility}}">
@@ -3180,6 +3261,191 @@
                                                     Padding="12,6"/>
                                         </Grid>
                                     </StackPanel>
+
+                                    <Border Style="{StaticResource Win11Card}"
+                                            Padding="0"
+                                            Margin="0,0,0,16">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <Border Background="{DynamicResource SurfaceElevatedBrush}"
+                                                    Padding="10,8"
+                                                    CornerRadius="8,8,0,0">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Text="Sottoprocessi"
+                                                               FontWeight="SemiBold"
+                                                               FontSize="14"
+                                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                                               VerticalAlignment="Center"/>
+                                                    <Button Grid.Column="1"
+                                                            Content="Crea sottoprocesso..."
+                                                            Click="CreateSubProcessFromEditor_Click"
+                                                            Style="{StaticResource Win11Button}"
+                                                            Padding="12,6"/>
+                                                </Grid>
+                                            </Border>
+
+                                            <Border Grid.Row="1"
+                                                    Padding="12">
+                                                <StackPanel>
+                                                    <TextBlock Text="Nessun sottoprocesso."
+                                                               Style="{StaticResource Win11TextSecondary}"
+                                                               Margin="0,0,0,8"
+                                                               Visibility="{Binding HasSubProcesses, Converter={StaticResource InverseBoolToVisibility}}"/>
+
+                                                    <ScrollViewer MaxHeight="260"
+                                                                  VerticalScrollBarVisibility="Auto"
+                                                                  Visibility="{Binding HasSubProcesses, Converter={StaticResource BoolToVisibility}}">
+                                                        <ItemsControl ItemsSource="{Binding SubProcesses}">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Button Style="{StaticResource ProcessCardButton}"
+                                                                            Click="EditSubProcessFromEditor_Click"
+                                                                            Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                                        <Grid>
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                            </Grid.ColumnDefinitions>
+
+                                                                            <Border Width="34"
+                                                                                    Height="34"
+                                                                                    CornerRadius="6"
+                                                                                    Background="{DynamicResource SurfaceElevatedBrush}"
+                                                                                    BorderBrush="{DynamicResource BorderBrush}"
+                                                                                    BorderThickness="1"
+                                                                                    VerticalAlignment="Center"
+                                                                                    Margin="0,0,10,0">
+                                                                                <Grid>
+                                                                                    <Image Width="18"
+                                                                                           Height="18"
+                                                                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                                                                           Visibility="{Binding HasCustomIcon, Converter={StaticResource BoolToVisibility}}">
+                                                                                        <Image.Source>
+                                                                                            <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                                                <Binding Path="CustomIconLightPath"/>
+                                                                                                <Binding Path="CustomIconDarkPath"/>
+                                                                                                <Binding Path="DataContext.IsDarkTheme"
+                                                                                                         RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                                            </MultiBinding>
+                                                                                        </Image.Source>
+                                                                                    </Image>
+                                                                                    <TextBlock Text="{Binding DisplayIcon}"
+                                                                                               FontSize="16"
+                                                                                               FontFamily="Segoe UI Emoji"
+                                                                                               HorizontalAlignment="Center"
+                                                                                               VerticalAlignment="Center"
+                                                                                               Visibility="{Binding HasCustomIcon, Converter={StaticResource InverseBoolToVisibility}}"/>
+                                                                                </Grid>
+                                                                            </Border>
+
+                                                                            <Grid Grid.Column="1">
+                                                                                <Grid.RowDefinitions>
+                                                                                    <RowDefinition Height="Auto"/>
+                                                                                    <RowDefinition Height="Auto"/>
+                                                                                    <RowDefinition Height="Auto"/>
+                                                                                </Grid.RowDefinitions>
+                                                                                <Grid Grid.Row="0">
+                                                                                    <Grid.ColumnDefinitions>
+                                                                                        <ColumnDefinition Width="*"/>
+                                                                                        <ColumnDefinition Width="Auto"/>
+                                                                                    </Grid.ColumnDefinitions>
+                                                                                    <TextBlock Text="{Binding Name}"
+                                                                                               Style="{StaticResource Win11TextBody}"
+                                                                                               FontWeight="SemiBold"
+                                                                                               TextTrimming="CharacterEllipsis"
+                                                                                               VerticalAlignment="Center"/>
+                                                                                    <Border Grid.Column="1"
+                                                                                            Background="{DynamicResource SurfaceElevatedBrush}"
+                                                                                            Style="{StaticResource Win11Badge}"
+                                                                                            Margin="8,0,0,0"
+                                                                                            VerticalAlignment="Center">
+                                                                                        <TextBlock Text="{Binding KindLabel}"
+                                                                                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                                                   FontSize="9"
+                                                                                                   VerticalAlignment="Center"/>
+                                                                                    </Border>
+                                                                                </Grid>
+
+                                                                                <TextBlock Grid.Row="1"
+                                                                                           Text="{Binding RelativePath}"
+                                                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                                           TextTrimming="CharacterEllipsis"
+                                                                                           Margin="0,4,0,0"/>
+
+                                                                                <TextBlock Grid.Row="2"
+                                                                                           Text="{Binding Arguments}"
+                                                                                           Foreground="{DynamicResource TextSecondaryBrush}"
+                                                                                           TextTrimming="CharacterEllipsis"
+                                                                                           Margin="0,2,0,0"
+                                                                                           Visibility="{Binding Arguments, Converter={StaticResource StringToVisibilityConverter}}"/>
+                                                                            </Grid>
+
+                                                                            <Button Grid.Column="2"
+                                                                                    Style="{StaticResource Win11IconButton}"
+                                                                                    Click="SubProcessMenuButton_Click"
+                                                                                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                                    Margin="8,0,0,0"
+                                                                                    VerticalAlignment="Center"
+                                                                                    ToolTip="Azioni">
+                                                                                <Button.Content>
+                                                                                    <Image Source="{DynamicResource IconMoreHorizontal}"
+                                                                                           Width="{StaticResource IconSizeMd}"
+                                                                                           Height="{StaticResource IconSizeMd}"
+                                                                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                                </Button.Content>
+                                                                                <Button.ContextMenu>
+                                                                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+                                                                                                 Style="{StaticResource Win11ContextMenu}"
+                                                                                                 ItemContainerStyle="{StaticResource Win11ContextMenuItem}">
+                                                                                        <MenuItem Header="Modifica..."
+                                                                                                  Click="EditSubProcessFromEditor_Click">
+                                                                                            <MenuItem.Icon>
+                                                                                                <Image Source="{DynamicResource IconEdit}"
+                                                                                                       Width="{StaticResource IconSizeMd}"
+                                                                                                       Height="{StaticResource IconSizeMd}"
+                                                                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                                            </MenuItem.Icon>
+                                                                                        </MenuItem>
+                                                                                        <MenuItem Style="{StaticResource Win11ContextMenuSeparatorItem}"/>
+                                                                                        <MenuItem Header="Sposta su"
+                                                                                                  Command="{Binding PlacementTarget.Tag.MoveSubProcessUpCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                                                  CommandParameter="{Binding}"/>
+                                                                                        <MenuItem Header="Sposta giù"
+                                                                                                  Command="{Binding PlacementTarget.Tag.MoveSubProcessDownCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                                                  CommandParameter="{Binding}"/>
+                                                                                        <MenuItem Style="{StaticResource Win11ContextMenuSeparatorItem}"/>
+                                                                                        <MenuItem Header="Elimina"
+                                                                                                  Command="{Binding PlacementTarget.Tag.RemoveSubProcessCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                                                  CommandParameter="{Binding}">
+                                                                                            <MenuItem.Icon>
+                                                                                                <Image Source="{DynamicResource IconDelete}"
+                                                                                                       Width="{StaticResource IconSizeMd}"
+                                                                                                       Height="{StaticResource IconSizeMd}"
+                                                                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                                                            </MenuItem.Icon>
+                                                                                        </MenuItem>
+                                                                                    </ContextMenu>
+                                                                                </Button.ContextMenu>
+                                                                            </Button>
+                                                                        </Grid>
+                                                                    </Button>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </ScrollViewer>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
 
                                     <StackPanel Margin="0,0,0,16">
                                         <CheckBox IsChecked="{Binding RunAsAdmin}"
@@ -3256,7 +3522,7 @@
                                     <Button Content="Elimina"
                                             Command="{Binding DeleteCommand}"
                                             Height="40"
-                                            MinWidth="120"
+                                            MinWidth="100"
                                             Margin="0,0,8,0"
                                             Visibility="{Binding IsEditMode, Converter={StaticResource BoolToVisibility}}">
                                         <Button.Style>
@@ -3270,7 +3536,23 @@
                                             Command="{Binding CancelCommand}"
                                             Style="{StaticResource Win11Button}"
                                             Height="40"
-                                            MinWidth="120"/>
+                                            MinWidth="100"/>
+
+                                    <Button Content="Importa"
+                                            Command="{Binding ImportProcessCommand}"
+                                            Style="{StaticResource Win11Button}"
+                                            Height="40"
+                                            MinWidth="100"
+                                            Margin="8,0,0,0"
+                                            Visibility="{Binding IsSubProcessEditor, Converter={StaticResource InverseBoolToVisibility}}"/>
+
+                                    <Button Content="Esporta"
+                                            Command="{Binding ExportProcessCommand}"
+                                            Style="{StaticResource Win11Button}"
+                                            Height="40"
+                                            MinWidth="100"
+                                            Margin="8,0,0,0"
+                                            Visibility="{Binding IsSubProcessEditor, Converter={StaticResource InverseBoolToVisibility}}"/>
                                 </StackPanel>
 
                                 <Button Grid.Column="1"
@@ -3290,6 +3572,60 @@
                                 </Button>
                             </Grid>
                         </Border>
+
+                        <Grid Grid.RowSpan="3"
+                              Panel.ZIndex="180"
+                              Background="#80000000"
+                              Visibility="{Binding IsSubProcessChangesPromptOpen, Converter={StaticResource BoolToVisibility}}">
+                            <Border Style="{StaticResource Win11Card}"
+                                    Padding="16"
+                                    Width="560"
+                                    VerticalAlignment="Center"
+                                    HorizontalAlignment="Center">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="12"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="16"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0"
+                                               Text="Modifiche non salvate"
+                                               Style="{StaticResource Win11TextSubtitle}"
+                                               FontWeight="SemiBold"/>
+
+                                    <TextBlock Grid.Row="2"
+                                               Text="{Binding SubProcessChangesPromptMessage}"
+                                               TextWrapping="Wrap"
+                                               Style="{StaticResource Win11TextBody}"
+                                               Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+                                    <StackPanel Grid.Row="4"
+                                                Orientation="Horizontal"
+                                                HorizontalAlignment="Right">
+                                        <Button Content="Chiudi"
+                                                Command="{Binding DiscardSubProcessChangesAndCloseCommand}"
+                                                Style="{StaticResource Win11DangerButton}"
+                                                Height="36"
+                                                MinWidth="110"
+                                                Margin="0,0,8,0"/>
+                                        <Button Content="Annulla"
+                                                Command="{Binding DismissSubProcessChangesPromptCommand}"
+                                                Style="{StaticResource Win11Button}"
+                                                Height="36"
+                                                MinWidth="110"
+                                                Margin="0,0,8,0"/>
+                                        <Button Content="Salva"
+                                                Command="{Binding SaveFromSubProcessChangesPromptCommand}"
+                                                Style="{StaticResource Win11AccentButton}"
+                                                Height="36"
+                                                MinWidth="110"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </Grid>
 
                         <Grid Grid.RowSpan="3"
                               Panel.ZIndex="200"

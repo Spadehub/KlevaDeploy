@@ -15,20 +15,13 @@ public class UserPreferences
     public bool SuppressRequiredProcessWarning { get; set; } = false;
     public PresetsViewMode PresetsViewMode { get; set; } = PresetsViewMode.List;
     public string? SelectedPortalId { get; set; }
-    public List<PortalPreference> Portals { get; set; } = new()
-    {
-        new PortalPreference
-        {
-            Id = "passepartout",
-            Name = "Passepartout",
-            HomeUrl = "https://download.passepartout.cloud/."
-        }
-    };
+    public List<PortalPreference> Portals { get; set; } = new();
 
-    public string SelectedPortalHomeUrl { get; set; } = "https://download.passepartout.cloud/.";
-    public List<string> RecentPortalHomeUrls { get; set; } = new() { "https://download.passepartout.cloud/." };
+    public string? SelectedPortalHomeUrl { get; set; }
+    public List<string> RecentPortalHomeUrls { get; set; } = new();
 
     private static readonly string StoragePath = Path.Combine(GetStorageDir(), "user_preferences.json");
+    private static readonly string DefaultPortalsPath = Path.Combine(AppContext.BaseDirectory, "Defaults", "portals.json");
 
     private static string GetStorageDir()
     {
@@ -47,35 +40,31 @@ public class UserPreferences
                 var json = File.ReadAllText(StoragePath);
                 var prefs = JsonSerializer.Deserialize<UserPreferences>(json) ?? new UserPreferences();
                 prefs.RecentPortalHomeUrls ??= new();
-                if (prefs.RecentPortalHomeUrls.Count == 0)
-                    prefs.RecentPortalHomeUrls.Add("https://download.passepartout.cloud/.");
-                if (string.IsNullOrWhiteSpace(prefs.SelectedPortalHomeUrl))
-                    prefs.SelectedPortalHomeUrl = prefs.RecentPortalHomeUrls[0];
 
                 prefs.Portals ??= new();
                 if (prefs.Portals.Count == 0)
                 {
-                    foreach (var url in prefs.RecentPortalHomeUrls)
-                    {
-                        var trimmed = (url ?? string.Empty).Trim();
-                        if (string.IsNullOrWhiteSpace(trimmed)) continue;
-                        prefs.Portals.Add(new PortalPreference
-                        {
-                            Id = Guid.NewGuid().ToString("N"),
-                            Name = GuessPortalName(trimmed),
-                            HomeUrl = trimmed
-                        });
-                    }
+                    prefs.Portals = LoadDefaultPortals().ToList();
                 }
 
-                if (prefs.Portals.Count == 0)
+                if (prefs.Portals.Count > 0)
                 {
-                    prefs.Portals.Add(new PortalPreference
+                    var fallbackHomeUrl = (prefs.Portals[0].HomeUrl ?? string.Empty).Trim();
+                    prefs.SelectedPortalHomeUrl = string.IsNullOrWhiteSpace(prefs.SelectedPortalHomeUrl)
+                        ? fallbackHomeUrl
+                        : prefs.SelectedPortalHomeUrl.Trim();
+
+                    prefs.RecentPortalHomeUrls = prefs.RecentPortalHomeUrls
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Select(x => x.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    if (!string.IsNullOrWhiteSpace(fallbackHomeUrl) &&
+                        !prefs.RecentPortalHomeUrls.Any(x => string.Equals(x, fallbackHomeUrl, StringComparison.OrdinalIgnoreCase)))
                     {
-                        Id = "passepartout",
-                        Name = "Passepartout",
-                        HomeUrl = "https://download.passepartout.cloud/."
-                    });
+                        prefs.RecentPortalHomeUrls.Insert(0, fallbackHomeUrl);
+                    }
                 }
 
                 foreach (var portal in prefs.Portals)
@@ -83,20 +72,20 @@ public class UserPreferences
                     if (portal is null) continue;
                     portal.Id = string.IsNullOrWhiteSpace(portal.Id) ? Guid.NewGuid().ToString("N") : portal.Id;
                     portal.Name = string.IsNullOrWhiteSpace(portal.Name) ? GuessPortalName(portal.HomeUrl) : portal.Name;
-                    portal.HomeUrl = string.IsNullOrWhiteSpace(portal.HomeUrl) ? "https://download.passepartout.cloud/." : portal.HomeUrl;
+                    portal.HomeUrl = (portal.HomeUrl ?? string.Empty).Trim();
                 }
 
                 if (string.IsNullOrWhiteSpace(prefs.SelectedPortalId))
                 {
                     var byHomeUrl = prefs.Portals.FirstOrDefault(p =>
-                        string.Equals((p.HomeUrl ?? string.Empty).Trim(), prefs.SelectedPortalHomeUrl.Trim(), StringComparison.OrdinalIgnoreCase));
+                        string.Equals((p.HomeUrl ?? string.Empty).Trim(), (prefs.SelectedPortalHomeUrl ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase));
                     prefs.SelectedPortalId = byHomeUrl?.Id ?? prefs.Portals[0].Id;
                 }
                 return prefs;
             }
         }
         catch { /* Fallback to defaults */ }
-        return new UserPreferences();
+        return CreateNewWithDefaults();
     }
 
     private static string GuessPortalName(string? homeUrl)
@@ -105,6 +94,46 @@ public class UserPreferences
         if (!Uri.TryCreate(homeUrl.Trim(), UriKind.Absolute, out var uri)) return "Portale";
         if (string.Equals(uri.Host, "download.passepartout.cloud", StringComparison.OrdinalIgnoreCase)) return "Passepartout";
         return uri.Host;
+    }
+
+    private static UserPreferences CreateNewWithDefaults()
+    {
+        var portals = LoadDefaultPortals().ToList();
+        var selected = portals.FirstOrDefault();
+        var selectedHomeUrl = (selected?.HomeUrl ?? string.Empty).Trim();
+
+        return new UserPreferences
+        {
+            Portals = portals,
+            SelectedPortalId = selected?.Id,
+            SelectedPortalHomeUrl = string.IsNullOrWhiteSpace(selectedHomeUrl) ? null : selectedHomeUrl,
+            RecentPortalHomeUrls = string.IsNullOrWhiteSpace(selectedHomeUrl) ? new List<string>() : new List<string> { selectedHomeUrl }
+        };
+    }
+
+    private static IReadOnlyList<PortalPreference> LoadDefaultPortals()
+    {
+        try
+        {
+            if (!File.Exists(DefaultPortalsPath))
+                return Array.Empty<PortalPreference>();
+
+            var json = File.ReadAllText(DefaultPortalsPath);
+            var portals = JsonSerializer.Deserialize<List<PortalPreference>>(json) ?? new();
+            foreach (var p in portals)
+            {
+                if (p is null) continue;
+                p.Id = string.IsNullOrWhiteSpace(p.Id) ? Guid.NewGuid().ToString("N") : p.Id.Trim();
+                p.Name = string.IsNullOrWhiteSpace(p.Name) ? GuessPortalName(p.HomeUrl) : p.Name.Trim();
+                p.HomeUrl = (p.HomeUrl ?? string.Empty).Trim();
+            }
+
+            return portals.Where(p => p is not null && !string.IsNullOrWhiteSpace(p.HomeUrl)).ToList();
+        }
+        catch
+        {
+            return Array.Empty<PortalPreference>();
+        }
     }
 
     public void Save()

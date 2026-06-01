@@ -57,6 +57,36 @@ public sealed class DialogService : IDialogService
         return dialog.ShowDialog() == true;
     }
 
+    public IDialogService.UnrarPromptResult ShowUnrarRequiredPrompt(string processName, string details)
+    {
+        var owner = Application.Current?.MainWindow;
+        if (owner is null)
+        {
+            var message =
+                $"Per completare \"{processName}\", serve UnRAR per estrarre l'installer.\n\n{details}\n\n" +
+                "Sì = Installa\nNo = Ferma coda\nAnnulla = Salta questo passaggio (non raccomandato)";
+
+            var result = MessageBox.Show(message, "UnRAR richiesto", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
+            if (result == MessageBoxResult.Yes) return IDialogService.UnrarPromptResult.Installa;
+            if (result == MessageBoxResult.No) return IDialogService.UnrarPromptResult.FermaCoda;
+
+            var confirmSkip = MessageBox.Show(
+                "Sei sicuro di voler saltare questo passaggio?\n\nNon è raccomandato: alcune funzionalità chiave non saranno disponibili.",
+                "Conferma",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning) == MessageBoxResult.Yes;
+
+            return confirmSkip ? IDialogService.UnrarPromptResult.SaltaPassaggio : IDialogService.UnrarPromptResult.FermaCoda;
+        }
+
+        var dialog = new UnrarRequiredDialog(processName, details)
+        {
+            Owner = owner
+        };
+        _ = dialog.ShowDialog();
+        return dialog.Result;
+    }
+
     public void ResetDisableRequiredWarningPreference()
     {
         _prefs.SuppressRequiredProcessWarning = false;

@@ -160,6 +160,58 @@
         </Setter>
     </Style>
 
+    <Style x:Key="Win11SegmentRadioButton" TargetType="RadioButton">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="HoverRoot"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="0"
+                            ClipToBounds="True"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Grid.Column" Value="0">
+                            <Setter TargetName="HoverRoot" Property="CornerRadius" Value="10,0,0,10"/>
+                        </Trigger>
+                        <Trigger Property="Grid.Column" Value="2">
+                            <Setter TargetName="HoverRoot" Property="CornerRadius" Value="0,10,10,0"/>
+                        </Trigger>
+
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsMouseOver" Value="True"/>
+                                <Condition Property="IsChecked" Value="False"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="HoverRoot" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            <Setter TargetName="HoverRoot" Property="Opacity" Value="0.7"/>
+                        </MultiTrigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="HoverRoot" Property="Opacity" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource SelectionForegroundBrush}"/>
+                            <Setter TargetName="HoverRoot" Property="Background" Value="Transparent"/>
+                            <Setter TargetName="HoverRoot" Property="Opacity" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="Win11DangerButton" TargetType="Button" BasedOn="{StaticResource Win11Button}">
         <Setter Property="Foreground" Value="{DynamicResource ErrorBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ErrorBrush}"/>
@@ -820,6 +872,49 @@
                             </MultiTrigger.Conditions>
                             <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
                         </MultiTrigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ProcessCardButton" TargetType="Button" BasedOn="{StaticResource Win11Button}">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="10,9"/>
+        <Setter Property="Margin" Value="0,0,0,5"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="CardBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource CornerRadiusSmall}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource FocusRingBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="CardBorder" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            <Setter TargetName="CardBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                        </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5"/>
                         </Trigger>

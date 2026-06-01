@@ -178,7 +178,10 @@ public sealed class PresetViewToggleTests
         public Task<ProcessResult> RunAsync(string executablePath, string arguments, bool runAsAdmin = false, CancellationToken ct = default) =>
             Task.FromResult(new ProcessResult(0, string.Empty, string.Empty));
 
-        public Task<string> ExtractZipToTempAsync(string zipPath, CancellationToken ct = default) =>
+        public Task<string> Ensure7ZipInstalledAsync(CancellationToken ct = default) =>
+            Task.FromResult(string.Empty);
+
+        public Task<string> EnsureUnrarInstalledAsync(CancellationToken ct = default) =>
             Task.FromResult(string.Empty);
 
         public Task<ProcessResult> RunPowerShellAsync(string scriptPathOrContent, bool isInlineScript, bool runAsAdmin = false, CancellationToken ct = default) =>
@@ -203,6 +206,7 @@ public sealed class PresetViewToggleTests
     {
         public bool ShowDisableRequiredWarning(string processName) => true;
         public bool Confirm(string title, string message) => true;
+        public IDialogService.UnrarPromptResult ShowUnrarRequiredPrompt(string processName, string details) => IDialogService.UnrarPromptResult.Installa;
         public void ResetDisableRequiredWarningPreference() { }
     }
 

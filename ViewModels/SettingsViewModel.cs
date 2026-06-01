@@ -373,15 +373,6 @@ public sealed class SettingsViewModel : ObservableObject
     {
         var prefs = _prefsService.Preferences;
         prefs.Portals ??= new();
-        if (prefs.Portals.Count == 0)
-        {
-            prefs.Portals.Add(new PortalPreference
-            {
-                Id = "passepartout",
-                Name = "Passepartout",
-                HomeUrl = "https://download.passepartout.cloud/."
-            });
-        }
 
         Portals.Clear();
         foreach (var p in prefs.Portals.Where(p => p is not null))
@@ -686,6 +677,39 @@ public sealed class SettingsViewModel : ObservableObject
 
     private static string ResolveInstallerCacheFileName(DeploymentProcess process)
     {
+        try
+        {
+            var cacheDir = ResolveInstallerCacheDirectory(process);
+            if (Directory.Exists(cacheDir))
+            {
+                static bool IsCacheArtifact(string path)
+                {
+                    var ext = Path.GetExtension(path).ToLowerInvariant();
+                    return ext is ".exe" or ".msi" or ".zip";
+                }
+
+                var candidates = Directory.EnumerateFiles(cacheDir, "*.*", SearchOption.AllDirectories)
+                    .Where(IsCacheArtifact)
+                    .Select(p => new FileInfo(p))
+                    .OrderByDescending(f => f.LastWriteTimeUtc)
+                    .ToList();
+
+                var newest = candidates.FirstOrDefault();
+                if (newest is not null)
+                    return newest.Name;
+            }
+
+            var rel = (process.RelativePath ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(rel))
+            {
+                var expectedDir = Path.Combine("Data", "installers", process.Id);
+                var normalizedRel = rel.Replace('/', '\\').TrimStart('\\');
+                if (normalizedRel.StartsWith(expectedDir + "\\", StringComparison.OrdinalIgnoreCase))
+                    return Path.GetFileName(normalizedRel);
+            }
+        }
+        catch { }
+
         if (process.InstallerSourceMode == InstallerSourceMode.StaticWeb && !string.IsNullOrWhiteSpace(process.DownloadUrl))
         {
             if (Uri.TryCreate(process.DownloadUrl.Trim(), UriKind.Absolute, out var uri))
@@ -751,10 +775,30 @@ public sealed class InstallerCacheItemViewModel : ObservableObject
     public string Name => Process.Name;
     public string SourceMode => Process.InstallerSourceMode.ToString();
     public string CacheDirectory { get; }
-    public string CacheFileName { get; }
+    private readonly string _fallbackCacheFileName;
+    private string _cachedFileRelativePath = string.Empty;
+    public string CachedFileRelativePath
+    {
+        get => _cachedFileRelativePath;
+        private set
+        {
+            if (!SetProperty(ref _cachedFileRelativePath, value)) return;
+            OnPropertyChanged(nameof(CachedFilePath));
+            OnPropertyChanged(nameof(HasCachedFile));
+        }
+    }
+    private string _cacheFileName;
+    public string CacheFileName
+    {
+        get => _cacheFileName;
+        private set
+        {
+            if (!SetProperty(ref _cacheFileName, value)) return;
+        }
+    }
 
     public bool HasCachedFile => !string.IsNullOrWhiteSpace(CachedFilePath) && File.Exists(CachedFilePath);
-    public string CachedFilePath => string.IsNullOrWhiteSpace(CacheFileName) ? string.Empty : Path.Combine(CacheDirectory, CacheFileName);
+    public string CachedFilePath => string.IsNullOrWhiteSpace(CachedFileRelativePath) ? string.Empty : Path.Combine(CacheDirectory, CachedFileRelativePath);
 
     public IRelayCommand OpenCacheFolderCommand { get; }
     public IRelayCommand ClearCacheCommand { get; }
@@ -763,10 +807,13 @@ public sealed class InstallerCacheItemViewModel : ObservableObject
     {
         Process = process;
         CacheDirectory = cacheDirectory;
-        CacheFileName = cacheFileName;
+        _fallbackCacheFileName = cacheFileName ?? string.Empty;
+        _cachedFileRelativePath = string.Empty;
+        _cacheFileName = string.Empty;
 
         OpenCacheFolderCommand = new RelayCommand(OpenCacheFolder);
         ClearCacheCommand = new RelayCommand(ClearCache, CanClearCache);
+        RefreshCacheInfo();
     }
 
     private bool CanClearCache() => Directory.Exists(CacheDirectory);
@@ -790,8 +837,44 @@ public sealed class InstallerCacheItemViewModel : ObservableObject
         }
         finally
         {
-            OnPropertyChanged(nameof(HasCachedFile));
+            RefreshCacheInfo();
             (ClearCacheCommand as IRelayCommand)?.NotifyCanExecuteChanged();
         }
+    }
+
+    private void RefreshCacheInfo()
+    {
+        try
+        {
+            if (!Directory.Exists(CacheDirectory))
+            {
+                CacheFileName = string.Empty;
+                CachedFileRelativePath = string.Empty;
+                return;
+            }
+
+            static bool IsCacheArtifact(string path)
+            {
+                var ext = Path.GetExtension(path).ToLowerInvariant();
+                return ext is ".exe" or ".msi" or ".zip";
+            }
+
+            var file = Directory.EnumerateFiles(CacheDirectory, "*.*", SearchOption.AllDirectories)
+                .Where(IsCacheArtifact)
+                .Select(p => new FileInfo(p))
+                .OrderByDescending(f => f.LastWriteTimeUtc)
+                .FirstOrDefault();
+
+            if (file is not null)
+            {
+                CacheFileName = file.Name;
+                CachedFileRelativePath = Path.GetRelativePath(CacheDirectory, file.FullName);
+                return;
+            }
+        }
+        catch { }
+
+        CacheFileName = _fallbackCacheFileName;
+        CachedFileRelativePath = string.IsNullOrWhiteSpace(_fallbackCacheFileName) ? string.Empty : _fallbackCacheFileName;
     }
 }

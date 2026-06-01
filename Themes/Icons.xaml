@@ -30,6 +30,7 @@
         </DrawingImage.Drawing>
     </DrawingImage>
 
+
     <!-- Settings / Gear icon -->
     <DrawingImage x:Key="IconSettings" x:Shared="False">
         <DrawingImage.Drawing>
