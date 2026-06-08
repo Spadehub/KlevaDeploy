@@ -29,6 +29,7 @@ appsettings.Local.json
 
 # Defaults (local import/export profiles)
 Defaults/*.json
+!Defaults/portals.json
 Defaults/*.kac.json
 Defaults/**/*.kac.json
 
