@@ -11,31 +11,27 @@ namespace KlevaDeploy.Services;
 
 public sealed class AppUpdateService : IAppUpdateService
 {
-    private const string DefaultOwner = "Spadehub";
-    private const string DefaultRepo = "KlevaDeploy";
-    private const string LegacyRepo = "InstallerIT";
-    private const string DefaultAssetName = "KlevaDeploy.exe";
-    private const string TokenEnvVar = "KLEVADEPLOY_GITHUB_TOKEN";
-
     private readonly HttpClient _httpClient;
     private readonly ILogService _log;
+    private readonly AppUpdateServiceConfig _cfg;
 
-    public AppUpdateService(HttpClient httpClient, ILogService log)
+    public AppUpdateService(HttpClient httpClient, ILogService log, IAppConfigService config)
     {
         _httpClient = httpClient;
         _log = log;
+        _cfg = config.Config.AppUpdateService;
     }
 
     public async Task<AppUpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default)
     {
-        var owner = GetSetting("KLEVADEPLOY_GITHUB_OWNER", DefaultOwner);
+        var owner = GetSetting("KLEVADEPLOY_GITHUB_OWNER", _cfg.Owner);
         var repoFromEnv = Environment.GetEnvironmentVariable("KLEVADEPLOY_GITHUB_REPO");
         var reposToTry = string.IsNullOrWhiteSpace(repoFromEnv)
-            ? new[] { DefaultRepo, LegacyRepo }
+            ? new[] { _cfg.Repo, _cfg.LegacyRepo }.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToArray()
             : new[] { repoFromEnv.Trim() };
-        var assetName = GetSetting("KLEVADEPLOY_GITHUB_ASSET_NAME", DefaultAssetName);
+        var assetName = GetSetting("KLEVADEPLOY_GITHUB_ASSET_NAME", _cfg.AssetName);
         var includePrereleases = GetBoolSetting("KLEVADEPLOY_GITHUB_INCLUDE_PRERELEASES", false);
-        var token = Environment.GetEnvironmentVariable(TokenEnvVar);
+        var token = Environment.GetEnvironmentVariable(_cfg.TokenEnvVar);
 
         EnsureDefaultHeaders();
 
@@ -99,7 +95,7 @@ public sealed class AppUpdateService : IAppUpdateService
         if (lastStatus == HttpStatusCode.NotFound)
         {
             var hint = string.IsNullOrWhiteSpace(token)
-                ? $" If the repo is private, set {TokenEnvVar}."
+                ? $" If the repo is private, set {_cfg.TokenEnvVar}."
                 : string.Empty;
             _log.Warning($"App update check failed: HTTP 404 (owner={owner}, repo={string.Join("/", reposToTry)}). Repo missing/private or no GitHub Releases yet.{hint}");
         }
@@ -110,7 +106,7 @@ public sealed class AppUpdateService : IAppUpdateService
     public async Task<string?> DownloadUpdateAsync(AppUpdateInfo info, CancellationToken ct = default)
     {
         EnsureDefaultHeaders();
-        var token = Environment.GetEnvironmentVariable(TokenEnvVar);
+        var token = Environment.GetEnvironmentVariable(_cfg.TokenEnvVar);
 
         var storageDir = GetStorageDir();
         var dir = Path.Combine(storageDir, "app_updates");

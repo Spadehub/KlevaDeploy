@@ -16,24 +16,22 @@ public sealed class AuthService : IAuthService
     private readonly HttpClient _httpClient;
     private readonly CookieContainer _cookieContainer;
     private readonly ILogService _log;
-    private string _lastPortalHomeUrl = DownloadsHomeUrl;
+    private readonly AuthServiceConfig _cfg;
+    private string _lastPortalHomeUrl = string.Empty;
     private readonly Dictionary<string, bool> _authByHost = new(StringComparer.OrdinalIgnoreCase);
-
-    // Passepartout portal endpoints — update these to the real URLs
-    private const string LoginPageUrl = "https://www.passepartout.net/area-riservata/login";
-    private const string LoginPostUrl = "https://www.passepartout.net/area-riservata/login";
-    private const string DownloadsHomeUrl = "https://download.passepartout.cloud/.";
 
     public bool IsAuthenticated { get; private set; }
     public int AuthenticatedPortalCount => _authByHost.Count(kvp => kvp.Value);
 
     public event EventHandler? AuthStateChanged;
 
-    public AuthService(HttpClient httpClient, CookieContainer cookieContainer, ILogService log)
+    public AuthService(HttpClient httpClient, CookieContainer cookieContainer, ILogService log, IAppConfigService config)
     {
         _httpClient = httpClient;
         _cookieContainer = cookieContainer;
         _log = log;
+        _cfg = config.Config.AuthService;
+        _lastPortalHomeUrl = _cfg.DownloadsHomeUrl ?? string.Empty;
     }
 
     public bool IsAuthenticatedForUrl(string url)
@@ -66,7 +64,7 @@ public sealed class AuthService : IAuthService
 
     public async Task<bool> LoginAsync(string username, string password, CancellationToken ct = default)
     {
-        return await LoginAsync(username, password, DownloadsHomeUrl, ct);
+        return await LoginAsync(username, password, _cfg.DownloadsHomeUrl, ct);
     }
 
     public async Task<bool> LoginAsync(string username, string password, string portalHomeUrl, CancellationToken ct = default)
@@ -179,7 +177,7 @@ public sealed class AuthService : IAuthService
 
             if (string.IsNullOrWhiteSpace(html))
             {
-                using var verify = await GetWithRedirectsAsync(new Uri(DownloadsHomeUrl), timeoutCts.Token, debug: null);
+                using var verify = await GetWithRedirectsAsync(new Uri((_cfg.DownloadsHomeUrl ?? string.Empty).Trim()), timeoutCts.Token, debug: null);
                 if (verify is not null && verify.IsSuccessStatusCode)
                     html = await verify.Content.ReadAsStringAsync(timeoutCts.Token);
             }
@@ -429,7 +427,7 @@ public sealed class AuthService : IAuthService
 
     private sealed class PersistedAuthSession
     {
-        public string PortalHomeUrl { get; set; } = DownloadsHomeUrl;
+        public string PortalHomeUrl { get; set; } = string.Empty;
         public List<PersistedCookie> Cookies { get; set; } = new();
     }
 
@@ -437,8 +435,10 @@ public sealed class AuthService : IAuthService
     {
         try
         {
-            _httpClient.DefaultRequestHeaders.Referrer = new Uri(LoginPageUrl);
-            var getResponse = await _httpClient.GetAsync(LoginPageUrl, ct);
+            var loginPageUrl = (_cfg.LoginPageUrl ?? string.Empty).Trim();
+            var loginPostUrl = (_cfg.LoginPostUrl ?? string.Empty).Trim();
+            _httpClient.DefaultRequestHeaders.Referrer = new Uri(loginPageUrl);
+            var getResponse = await _httpClient.GetAsync(loginPageUrl, ct);
             if (!getResponse.IsSuccessStatusCode) return false;
 
             var formData = new FormUrlEncodedContent(new[]
@@ -447,7 +447,7 @@ public sealed class AuthService : IAuthService
                 new KeyValuePair<string, string>("password", password),
             });
 
-            var postResponse = await _httpClient.PostAsync(LoginPostUrl, formData, ct);
+            var postResponse = await _httpClient.PostAsync(loginPostUrl, formData, ct);
             return postResponse.IsSuccessStatusCode || (int)postResponse.StatusCode == 302;
         }
         catch (Exception ex)
@@ -677,11 +677,11 @@ public sealed class AuthService : IAuthService
     private static bool IsRedirectStatusCode(HttpStatusCode code) =>
         code is HttpStatusCode.Moved or HttpStatusCode.Redirect or HttpStatusCode.RedirectMethod or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect;
 
-    private static string NormalizePortalHomeUrl(string? portalHomeUrl)
+    private string NormalizePortalHomeUrl(string? portalHomeUrl)
     {
         var raw = (portalHomeUrl ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(raw))
-            return DownloadsHomeUrl;
+            return _cfg.DownloadsHomeUrl;
 
         if (!Uri.TryCreate(raw, UriKind.Absolute, out var uri))
         {
@@ -692,14 +692,14 @@ public sealed class AuthService : IAuthService
             }
             else
             {
-                return DownloadsHomeUrl;
+                return _cfg.DownloadsHomeUrl;
             }
         }
 
         if (!string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
         {
-            return DownloadsHomeUrl;
+            return _cfg.DownloadsHomeUrl;
         }
 
         var builder = new UriBuilder(uri) { Query = string.Empty, Fragment = string.Empty };

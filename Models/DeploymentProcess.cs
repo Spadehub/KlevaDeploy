@@ -19,6 +19,7 @@ public class DeploymentProcess
     public string RelativePath { get; set; } = string.Empty;
     /// <summary>Arguments passed to the process. Use {LICENSE_KEY} as placeholder.</summary>
     public string Arguments { get; set; } = string.Empty;
+    public List<ArgumentInputDefinition> ArgumentInputs { get; set; } = new();
     /// <summary>URL to download/update this process's file (requires auth if RequiresAuth=true).</summary>
     public string DownloadUrl { get; set; } = string.Empty;
     public string DownloadBaseFolderUrl { get; set; } = string.Empty;
@@ -54,6 +55,16 @@ public class DeploymentProcess
     public bool IsUserCreated { get; set; }
 
     public List<DeploymentSubProcess> SubProcesses { get; set; } = new();
+}
+
+public sealed class ArgumentInputDefinition
+{
+    public string Key { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string DefaultValue { get; set; } = string.Empty;
+    public bool IsSecret { get; set; }
+    public bool IsRequired { get; set; } = true;
 }
 
 public sealed class DeploymentSubProcess

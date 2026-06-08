@@ -549,8 +549,12 @@ public sealed class CreateProcessViewModel : ObservableObject
 
     public ObservableCollection<string> AvailableEmojiIcons { get; } = new()
     {
-        "📦", "🖥️", "📊", "💻", "🏢", "🖧", "⚙️", "🔧",
-        "📁", "📂", "🗂️", "💾", "🔒", "🔓", "✅", "⚠️"
+        "📦", "🧩", "🖥️", "💻", "🪟", "⚙️", "🧰", "🔧",
+        "⬇️", "⬆️", "🔄", "▶️", "⏸️", "⏳", "🔁", "🧪",
+        "🌐", "☁️", "🔌", "🖧", "📡", "🛡️", "🔐", "🔒", "🔓", "🔑",
+        "🗄️", "🧾", "🧱", "🧠", "📁", "📂", "🗂️", "💾",
+        "🧹", "🗑️", "📋", "🧷", "📝", "🧨",
+        "✅", "⚠️", "❌", "ℹ️"
     };
 
     public ObservableCollection<PresetIconLibraryItem> LibraryIcons { get; } = new();
@@ -1674,6 +1678,15 @@ public sealed class CreateProcessViewModel : ObservableObject
         Kind = p.Kind,
         RelativePath = p.RelativePath,
         Arguments = p.Arguments,
+        ArgumentInputs = p.ArgumentInputs?.Select(x => new ArgumentInputDefinition
+        {
+            Key = x.Key,
+            Label = x.Label,
+            Description = x.Description,
+            DefaultValue = x.DefaultValue,
+            IsSecret = x.IsSecret,
+            IsRequired = x.IsRequired
+        }).ToList() ?? new(),
         DownloadUrl = p.DownloadUrl,
         DownloadBaseFolderUrl = p.DownloadBaseFolderUrl,
         DownloadSelectedFileName = p.DownloadSelectedFileName,

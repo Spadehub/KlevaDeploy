@@ -5,10 +5,12 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.Win32;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KlevaDeploy.Models;
@@ -19,6 +21,13 @@ namespace KlevaDeploy.ViewModels;
 
 public sealed class MainViewModel : ObservableObject
 {
+    private enum ExeExtractionMode
+    {
+        None,
+        MainMsiOnly,
+        AllMsis
+    }
+
     private readonly IInstallerService _installerService;
     private readonly IUpdateService _updateService;
     private readonly IAuthService _authService;
@@ -40,6 +49,7 @@ public sealed class MainViewModel : ObservableObject
 
     private System.Threading.CancellationTokenSource? _queueCts;
     private ProcessStepViewModel? _currentRunningStep;
+    private readonly Dictionary<string, ArgumentPromptChoice> _argumentPromptChoiceThisRun = new(StringComparer.OrdinalIgnoreCase);
 
     public ObservableCollection<PresetViewModel> Presets { get; } = new();
     public ObservableCollection<PresetViewModel> FilteredPresets { get; } = new();
@@ -227,6 +237,8 @@ public sealed class MainViewModel : ObservableObject
     public IRelayCommand ClearPresetSearchCommand { get; }
     public IRelayCommand ClearProcessSearchCommand { get; }
     public IAsyncRelayCommand RunQueueCommand { get; }
+    public IRelayCommand<ProcessStepViewModel?> MoveQueueStepUpCommand { get; }
+    public IRelayCommand<ProcessStepViewModel?> MoveQueueStepDownCommand { get; }
     public IRelayCommand CancelQueueCommand { get; }
     public IRelayCommand<ProcessStepViewModel?> CancelStepCommand { get; }
     public IAsyncRelayCommand<ProcessStepViewModel?> UpdateInstallerCommand { get; }
@@ -272,16 +284,6 @@ public sealed class MainViewModel : ObservableObject
         _loginVmFactory = loginVmFactory;
         LogViewModel = logViewModel;
 
-        // Auto-switch output view to Terminal whenever a process emits output.
-        // This makes the live stdout/stderr stream visible even if the user is on the "Log" tab.
-        _log.LogAdded += (_, entry) =>
-        {
-            if (entry.Level is not ("STDOUT" or "STDERR")) return;
-            var dispatcher = App.Current?.Dispatcher;
-            if (dispatcher is null) { IsTerminalTabSelected = true; return; } // unit tests / non-WPF contexts
-            dispatcher.BeginInvoke(() => IsTerminalTabSelected = true);
-        };
-
         CreatePresetViewModel = new CreatePresetViewModel(_presetIconService);
         CreatePresetViewModel.CloseRequested += OnCreatePresetCloseRequested;
         CreatePresetViewModel.DeleteRequested += OnCreatePresetDeleteRequested;
@@ -323,6 +325,8 @@ public sealed class MainViewModel : ObservableObject
         ClearPresetSearchCommand = new RelayCommand(ClearPresetSearch);
         ClearProcessSearchCommand = new RelayCommand(ClearProcessSearch);
         RunQueueCommand = new AsyncRelayCommand(RunQueueAsync, CanRunQueue);
+        MoveQueueStepUpCommand = new RelayCommand<ProcessStepViewModel?>(MoveQueueStepUp, CanMoveQueueStepUp);
+        MoveQueueStepDownCommand = new RelayCommand<ProcessStepViewModel?>(MoveQueueStepDown, CanMoveQueueStepDown);
         CancelQueueCommand = new RelayCommand(CancelQueue, CanCancelQueue);
         CancelStepCommand = new RelayCommand<ProcessStepViewModel?>(CancelStep, CanCancelStep);
         UpdateInstallerCommand = new AsyncRelayCommand<ProcessStepViewModel?>(UpdateInstallerAsync, CanUpdateInstaller);
@@ -337,7 +341,12 @@ public sealed class MainViewModel : ObservableObject
         SetPresetListViewCommand = new RelayCommand(() => IsPresetGridView = false);
         SetPresetGridViewCommand = new RelayCommand(() => IsPresetGridView = true);
 
-        ExecutionQueue.CollectionChanged += (_, _) => RunQueueCommand.NotifyCanExecuteChanged();
+        ExecutionQueue.CollectionChanged += (_, _) =>
+        {
+            RunQueueCommand.NotifyCanExecuteChanged();
+            MoveQueueStepUpCommand.NotifyCanExecuteChanged();
+            MoveQueueStepDownCommand.NotifyCanExecuteChanged();
+        };
     }
 
     public async Task InitializeAsync()
@@ -458,6 +467,8 @@ public sealed class MainViewModel : ObservableObject
         foreach (var it in enabled) FilteredExecutionQueueDisplayItems.Add(it);
         if (enabled.Count > 0 && disabled.Count > 0) FilteredExecutionQueueDisplayItems.Add(new ListSeparatorItem());
         foreach (var it in disabled) FilteredExecutionQueueDisplayItems.Add(it);
+
+        UpdateExecutionIndices();
     }
 
     private void RebuildExecutionQueue()
@@ -522,6 +533,11 @@ public sealed class MainViewModel : ObservableObject
             var stepVm = new ProcessStepViewModel(process, order, _dialogService, isInSelectedPreset, isRequired);
             stepVm.ShowLoginBadge = stepVm.Process.RequiresAuth && !IsAuthenticatedForProcess(stepVm.Process);
             stepVm.PropertyChanged += OnExecutionQueueStepPropertyChanged;
+
+            if (_prefsService.Preferences.ProcessOrderOverrides.TryGetValue(process.Id, out var overriddenOrder) && overriddenOrder > 0)
+            {
+                stepVm.Order = overriddenOrder;
+            }
             
             // Determine enabled state
             if (_userManualDeselections.TryGetValue(process.Id, out bool forcedOff))
@@ -552,6 +568,8 @@ public sealed class MainViewModel : ObservableObject
 
         ApplyProcessFilter();
         _log.Info($"Execution queue rebuilt: {ExecutionQueue.Count} total processes ({processesInSelectedPresets.Count} in selected presets).");
+        MoveQueueStepUpCommand.NotifyCanExecuteChanged();
+        MoveQueueStepDownCommand.NotifyCanExecuteChanged();
     }
 
     private void OnExecutionQueueStepPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -574,8 +592,24 @@ public sealed class MainViewModel : ObservableObject
                 _userManualDeselections.Remove(step.Process.Id);
         }
 
+        if (step.IsEnabled && step.Order >= 9999)
+        {
+            var max = ExecutionQueue
+                .Where(s => s.IsEnabled && !ReferenceEquals(s, step))
+                .Select(s => s.Order)
+                .DefaultIfEmpty(0)
+                .Max();
+
+            var next = Math.Max(10, ((max / 10) + 1) * 10);
+            step.Order = next;
+            _prefsService.Preferences.ProcessOrderOverrides[step.Process.Id] = next;
+            _prefsService.Save();
+        }
+
         ResortExecutionQueue();
         ApplyProcessFilter();
+        MoveQueueStepUpCommand.NotifyCanExecuteChanged();
+        MoveQueueStepDownCommand.NotifyCanExecuteChanged();
     }
 
     private void ResortExecutionQueue()
@@ -598,6 +632,73 @@ public sealed class MainViewModel : ObservableObject
         finally
         {
             _suppressQueueResort = false;
+        }
+    }
+
+    private bool CanMoveQueueStepUp(ProcessStepViewModel? step)
+    {
+        if (step is null) return false;
+        if (!step.IsEnabled) return false;
+        if (IsRunning || IsInitializing) return false;
+        var enabled = ExecutionQueue.Where(s => s.IsEnabled).OrderBy(s => s.Order).ToList();
+        var idx = enabled.IndexOf(step);
+        return idx > 0;
+    }
+
+    private bool CanMoveQueueStepDown(ProcessStepViewModel? step)
+    {
+        if (step is null) return false;
+        if (!step.IsEnabled) return false;
+        if (IsRunning || IsInitializing) return false;
+        var enabled = ExecutionQueue.Where(s => s.IsEnabled).OrderBy(s => s.Order).ToList();
+        var idx = enabled.IndexOf(step);
+        return idx >= 0 && idx < enabled.Count - 1;
+    }
+
+    private void MoveQueueStepUp(ProcessStepViewModel? step) => MoveQueueStep(step, -1);
+    private void MoveQueueStepDown(ProcessStepViewModel? step) => MoveQueueStep(step, +1);
+
+    private void MoveQueueStep(ProcessStepViewModel? step, int delta)
+    {
+        if (step is null) return;
+        if (!step.IsEnabled) return;
+        if (IsRunning || IsInitializing) return;
+
+        var enabled = ExecutionQueue.Where(s => s.IsEnabled).OrderBy(s => s.Order).ToList();
+        var idx = enabled.IndexOf(step);
+        if (idx < 0) return;
+        var target = idx + delta;
+        if (target < 0 || target >= enabled.Count) return;
+
+        (enabled[idx], enabled[target]) = (enabled[target], enabled[idx]);
+
+        var order = 10;
+        foreach (var s in enabled)
+        {
+            s.Order = order;
+            _prefsService.Preferences.ProcessOrderOverrides[s.Process.Id] = order;
+            order += 10;
+        }
+        _prefsService.Save();
+
+        ResortExecutionQueue();
+        ApplyProcessFilter();
+        MoveQueueStepUpCommand.NotifyCanExecuteChanged();
+        MoveQueueStepDownCommand.NotifyCanExecuteChanged();
+    }
+
+    private void UpdateExecutionIndices()
+    {
+        var i = 1;
+        foreach (var step in ExecutionQueue.Where(s => s.IsEnabled).OrderBy(s => s.Order))
+        {
+            step.ExecutionIndex = i;
+            i++;
+        }
+
+        foreach (var step in ExecutionQueue.Where(s => !s.IsEnabled))
+        {
+            step.ExecutionIndex = 0;
         }
     }
 
@@ -959,6 +1060,8 @@ public sealed class MainViewModel : ObservableObject
 
     public async Task<int> RunSingleProcessHeadlessAsync(string processId, System.Threading.CancellationToken ct = default)
     {
+        _argumentPromptChoiceThisRun.Clear();
+
         var id = (processId ?? string.Empty).Trim();
         if (id.Length == 0) return 2;
 
@@ -989,6 +1092,7 @@ public sealed class MainViewModel : ObservableObject
         try
         {
             var result = await RunDeploymentProcessAsync(step, process, args, ct);
+            UpdateArgumentProfileAfterRun(process, result.ExitCode == 0 || result.ExitCode == 3010 || result.ExitCode == 1641);
             return result.ExitCode;
         }
         catch (OperationCanceledException)
@@ -1004,10 +1108,11 @@ public sealed class MainViewModel : ObservableObject
 
     private async Task RunQueueAsync()
     {
-        var enabledSteps = ExecutionQueue.Where(s => s.IsEnabled).ToList();
+        var enabledSteps = ExecutionQueue.Where(s => s.IsEnabled).OrderBy(s => s.Order).ToList();
         if (enabledSteps.Count == 0) return;
 
         ResetQueueVisuals();
+        _argumentPromptChoiceThisRun.Clear();
 
         while (true)
         {
@@ -1028,7 +1133,7 @@ public sealed class MainViewModel : ObservableObject
 
         IsRunning = true;
         OverallStatus = "Esecuzione in corso...";
-        IsTerminalTabSelected = true;
+        IsTerminalTabSelected = false;
         LogViewModel.ClearTerminal();
         _queueCts?.Cancel();
         _queueCts?.Dispose();
@@ -1077,6 +1182,7 @@ public sealed class MainViewModel : ObservableObject
                 }
 
                 var result = await RunDeploymentProcessAsync(step, process, args, ct);
+                UpdateArgumentProfileAfterRun(process, result.ExitCode == 0 || result.ExitCode == 3010 || result.ExitCode == 1641);
 
                 step.IsRunningStep = false;
                 step.IsProgressIndeterminate = false;
@@ -1161,24 +1267,36 @@ public sealed class MainViewModel : ObservableObject
 
     private async Task<ProcessResult> RunDeploymentProcessAsync(ProcessStepViewModel step, DeploymentProcess process, string arguments, System.Threading.CancellationToken ct)
     {
+        IDisposable? argScope = null;
+        try
+        {
         var installDir = NormalizeInstallDirectory(process.InstallDirectory);
         var rawArgs = (arguments ?? string.Empty).Trim();
         if (!string.IsNullOrWhiteSpace(rawArgs) && rawArgs.Contains("{INSTALL_DIR}", StringComparison.OrdinalIgnoreCase))
             rawArgs = rawArgs.Replace("{INSTALL_DIR}", installDir ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-        var expandedArguments = Environment.ExpandEnvironmentVariables(rawArgs);
+        var expandedArguments = string.Empty;
 
         if (process.SubProcesses is not null && process.SubProcesses.Count > 0)
         {
-            if (process.Kind == ProcessKind.Installer &&
-                process.InstallerSourceMode != InstallerSourceMode.StaticLocal &&
-                !string.IsNullOrWhiteSpace(process.RelativePath))
-            {
-                var parentInstallerPath = Path.IsPathRooted(process.RelativePath)
-                    ? process.RelativePath
-                    : Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+            var ensured = await EnsureArgumentInputsAsync(step, process, rawArgs, installerArtifactPath: null, msiPath: null, ct);
+            if (ensured.EarlyReturn is not null)
+                return ensured.EarlyReturn;
+            argScope = ensured.Scope;
 
-                if (!File.Exists(parentInstallerPath))
+            expandedArguments = Environment.ExpandEnvironmentVariables(rawArgs);
+
+            if (process.Kind == ProcessKind.Installer &&
+                process.InstallerSourceMode != InstallerSourceMode.StaticLocal)
+            {
+                var parentInstallerPath = string.IsNullOrWhiteSpace(process.RelativePath)
+                    ? string.Empty
+                    : (Path.IsPathRooted(process.RelativePath)
+                        ? process.RelativePath
+                        : Path.Combine(AppContext.BaseDirectory, process.RelativePath));
+
+                if (string.IsNullOrWhiteSpace(parentInstallerPath) || !File.Exists(parentInstallerPath))
                 {
+                    string? downloadError = null;
                     try
                     {
                         step.SetStatus("⏳", "Download installer...");
@@ -1186,16 +1304,25 @@ public sealed class MainViewModel : ObservableObject
                     }
                     catch (Exception ex)
                     {
+                        downloadError = $"{ex.GetType().Name}: {ex.Message}";
                         _log.Warning($"Installer download failed for '{process.Name}': {ex.GetType().Name}: {ex.Message}");
                     }
 
-                    if (!File.Exists(parentInstallerPath))
+                    parentInstallerPath = string.IsNullOrWhiteSpace(process.RelativePath)
+                        ? string.Empty
+                        : (Path.IsPathRooted(process.RelativePath)
+                            ? process.RelativePath
+                            : Path.Combine(AppContext.BaseDirectory, process.RelativePath));
+
+                    if (string.IsNullOrWhiteSpace(parentInstallerPath) || !File.Exists(parentInstallerPath))
                     {
                         var src = process.InstallerSourceMode == InstallerSourceMode.StaticWeb
                             ? (string.IsNullOrWhiteSpace(process.DownloadUrl) ? "URL non impostato" : process.DownloadUrl.Trim())
                             : (string.IsNullOrWhiteSpace(process.DownloadBaseFolderUrl) ? "Cartella web non impostata" : process.DownloadBaseFolderUrl.Trim());
 
                         var err = $"Installer non trovato prima dei sottoprocessi. Sorgente: {src}";
+                        if (!string.IsNullOrWhiteSpace(downloadError))
+                            err += $" — {downloadError}";
                         step.SetStatus("❌", "Download fallito");
                         return new ProcessResult(1, string.Empty, err);
                     }
@@ -1247,9 +1374,22 @@ public sealed class MainViewModel : ObservableObject
                 var subArgs = Environment.ExpandEnvironmentVariables(subArgsRaw ?? string.Empty);
 
                 step.IsProgressIndeterminate = true;
-                step.SetStatus("▶️", $"{process.Name} — {stepName}");
+                step.IsSubProcessRunning = true;
+                step.IsSubProgressIndeterminate = true;
+                step.SubProgressValue = 0;
+                step.CurrentSubProcessName = stepName;
 
-                last = await RunDeploymentProcessAsync(step, spProcess, subArgs, ct);
+                try
+                {
+                    last = await RunDeploymentProcessAsync(step, spProcess, subArgs, ct);
+                }
+                finally
+                {
+                    step.IsSubProcessRunning = false;
+                    step.IsSubProgressIndeterminate = false;
+                    step.SubProgressValue = 0;
+                    step.CurrentSubProcessName = string.Empty;
+                }
                 if (last.ExitCode != 0 && last.ExitCode != 3010 && last.ExitCode != 1641)
                     return last;
             }
@@ -1262,7 +1402,11 @@ public sealed class MainViewModel : ObservableObject
             case ProcessKind.Installer:
             {
                 if (string.IsNullOrWhiteSpace(process.RelativePath))
-                    throw new InvalidOperationException($"Installer path missing for process: {process.Name}");
+                {
+                    if (process.InstallerSourceMode == InstallerSourceMode.StaticLocal)
+                        throw new InvalidOperationException($"Installer path missing for process: {process.Name}");
+                    process.RelativePath = string.Empty;
+                }
 
                 var installerPath = string.IsNullOrWhiteSpace(process.RelativePath)
                     ? string.Empty
@@ -1274,9 +1418,8 @@ public sealed class MainViewModel : ObservableObject
                     process.InstallerSourceMode == InstallerSourceMode.DynamicWeb &&
                     process.DownloadUseLatestVersion;
 
-                if (!string.IsNullOrWhiteSpace(installerPath) &&
-                    (shouldAutoUpdateBeforeRun || !File.Exists(installerPath)) &&
-                    process.InstallerSourceMode != InstallerSourceMode.StaticLocal)
+                if (process.InstallerSourceMode != InstallerSourceMode.StaticLocal &&
+                    (shouldAutoUpdateBeforeRun || string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath)))
                 {
                     string? downloadError = null;
                     try
@@ -1290,7 +1433,13 @@ public sealed class MainViewModel : ObservableObject
                         _log.Warning($"Installer download failed for '{process.Name}': {ex.GetType().Name}: {ex.Message}");
                     }
 
-                    if (!string.IsNullOrWhiteSpace(installerPath) && !File.Exists(installerPath))
+                    installerPath = string.IsNullOrWhiteSpace(process.RelativePath)
+                        ? string.Empty
+                        : (Path.IsPathRooted(process.RelativePath)
+                            ? process.RelativePath
+                            : Path.Combine(AppContext.BaseDirectory, process.RelativePath));
+
+                    if (string.IsNullOrWhiteSpace(installerPath) || !File.Exists(installerPath))
                     {
                         var src = process.InstallerSourceMode == InstallerSourceMode.StaticWeb
                             ? (string.IsNullOrWhiteSpace(process.DownloadUrl) ? "URL non impostato" : process.DownloadUrl.Trim())
@@ -1313,370 +1462,118 @@ public sealed class MainViewModel : ObservableObject
                 }
 
                 var ext = Path.GetExtension(installerPath).ToLowerInvariant();
+                var extractionMode = GetExeExtractionMode(rawArgs);
+                if (ext == ".exe" && extractionMode != ExeExtractionMode.None)
+                {
+                    rawArgs = StripExeExecutionMarkers(rawArgs);
+
+                    var ensuredExtracted = await EnsureArgumentInputsAsync(step, process, rawArgs, installerArtifactPath: installerPath, msiPath: null, ct);
+                    if (ensuredExtracted.EarlyReturn is not null)
+                        return ensuredExtracted.EarlyReturn;
+                    argScope = ensuredExtracted.Scope;
+
+                    expandedArguments = Environment.ExpandEnvironmentVariables(rawArgs);
+                    return await RunExtractedBootstrapperAsync(step, process, installerPath, expandedArguments, installDir, extractionMode, ct);
+                }
+                if (ext == ".exe" && rawArgs.Contains("{SILENT}", StringComparison.OrdinalIgnoreCase))
+                {
+                    var silent = ResolveSilentArgsForExeInstaller(installerPath);
+                    rawArgs = rawArgs.Replace("{SILENT}", silent, StringComparison.OrdinalIgnoreCase).Trim();
+                }
                 if (ext == ".msi")
                 {
+                    var ensuredMsi = await EnsureArgumentInputsAsync(step, process, rawArgs, installerArtifactPath: installerPath, msiPath: installerPath, ct);
+                    if (ensuredMsi.EarlyReturn is not null)
+                        return ensuredMsi.EarlyReturn;
+                    argScope = ensuredMsi.Scope;
+
+                    expandedArguments = Environment.ExpandEnvironmentVariables(rawArgs);
+
                     var msiArgs = string.IsNullOrWhiteSpace(installDir)
                         ? expandedArguments
                         : AppendMsiInstallDirIfMissing(expandedArguments, installDir);
                     return await RunMsiWithAppProgressAsync(step, installerPath, msiArgs, process.RunAsAdmin, ct);
                 }
 
-                if (ext == ".exe")
-                {
-                    var shouldExtract =
-                        await LooksLikeDotNetZipSfxAsync(installerPath, ct) ||
-                        IsLikelySelfExtractingArchiveExe(installerPath);
-                    if (shouldExtract)
-                    {
-                        var retailLogDir = Path.Combine(AppContext.BaseDirectory, "Data", "retail-logs");
-                        Directory.CreateDirectory(retailLogDir);
+                var ensured = await EnsureArgumentInputsAsync(step, process, rawArgs, installerArtifactPath: installerPath, msiPath: null, ct);
+                if (ensured.EarlyReturn is not null)
+                    return ensured.EarlyReturn;
+                argScope = ensured.Scope;
 
-                        step.IsProgressIndeterminate = false;
-                        step.ProgressValue = 0;
-                        step.SetStatus("⏳", "Preparing...");
-
-                        step.SetStatus("⏳", "Downloading 7-Zip...");
-                        step.ProgressValue = 10;
-                        var sevenZipExe = await _processExecutionService.Ensure7ZipInstalledAsync(ct);
-                        step.SetStatus("⏳", "Installing 7-Zip...");
-                        step.ProgressValue = 35;
-
-                        var extractedDir = CreateProcessExtractionDir(process.Name);
-
-                        _log.Info("Extracting with 7-Zip...");
-                        step.SetStatus("⏳", "Extracting...");
-                        step.ProgressValue = 55;
-
-                        var extractArgs = $"x \"{installerPath}\" -o\"{extractedDir}\" -y";
-                        var extractResult = await _processExecutionService.RunAsync(sevenZipExe, extractArgs, runAsAdmin: false, ct);
-                        if (extractResult.ExitCode != 0)
-                            throw new InvalidOperationException($"7-Zip extraction failed (exit {extractResult.ExitCode}).");
-
-                        _log.Info($"Installing {process.Name}...");
-                        step.SetStatus("▶️", "Installing...");
-                        step.ProgressValue = 80;
-
-                        if (process.RunAsAdmin && !IsRunningAsAdmin())
-                            throw new InvalidOperationException("This installer is configured to run as Administrator. Restart KlevaDeploy as Administrator to avoid UAC prompts.");
-
-                        var msis = FindExtractedMsis(extractedDir);
-                        var mainMsi = ResolveInstallerFromExtractedDir(extractedDir);
-                        if (!string.IsNullOrWhiteSpace(mainMsi) &&
-                            !string.Equals(Path.GetExtension(mainMsi), ".msi", StringComparison.OrdinalIgnoreCase))
-                        {
-                            mainMsi = null;
-                        }
-                        if (msis.Count > 0)
-                        {
-                            var msiLogDir = Path.Combine(AppContext.BaseDirectory, "Data", "msi-logs");
-                            Directory.CreateDirectory(msiLogDir);
-
-                            step.SetStatus("⏳", "Installing prerequisites...");
-                            step.ProgressValue = 70;
-
-                            static int GetPrereqOrderScore(string msiPath)
-                            {
-                                var n = Path.GetFileName(msiPath) ?? string.Empty;
-                                if (n.StartsWith("SetupRetail", StringComparison.OrdinalIgnoreCase)) return 10_000;
-                                if (n.Contains("sqlncli", StringComparison.OrdinalIgnoreCase) ||
-                                    n.Contains("nativeclient", StringComparison.OrdinalIgnoreCase) ||
-                                    n.Contains("native client", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    return 0;
-                                }
-                                if (n.Contains("SharedManagementObjects", StringComparison.OrdinalIgnoreCase)) return 10;
-                                if (n.Contains("SQLSysClrTypes", StringComparison.OrdinalIgnoreCase)) return 20;
-                                if (n.Contains("SqlCmd", StringComparison.OrdinalIgnoreCase) ||
-                                    n.Contains("CmdLnUtils", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    return 30;
-                                }
-                                return 100;
-                            }
-
-                            var prereqMsis = msis
-                                .Where(p => !string.IsNullOrWhiteSpace(p))
-                                .OrderBy(GetPrereqOrderScore)
-                                .ThenBy(p => p, StringComparer.OrdinalIgnoreCase)
-                                .ToList();
-
-                            foreach (var msi in prereqMsis)
-                            {
-                                ct.ThrowIfCancellationRequested();
-                                var fileName = Path.GetFileName(msi) ?? string.Empty;
-                                if (!string.IsNullOrWhiteSpace(mainMsi) &&
-                                    string.Equals(msi, mainMsi, StringComparison.OrdinalIgnoreCase))
-                                    continue;
-
-                                var logPath = Path.Combine(
-                                    msiLogDir,
-                                    $"KlevaDeploy_{Guid.NewGuid():N}_Prereq_{Path.GetFileNameWithoutExtension(msi)}.msi.log");
-
-                                var msiArgs =
-                                    $"/i \"{msi}\" /qn /norestart REBOOT=ReallySuppress ALLUSERS=2 /L*v \"{logPath}\"";
-
-                                if (fileName.Contains("sqlncli", StringComparison.OrdinalIgnoreCase) ||
-                                    fileName.Contains("nativeclient", StringComparison.OrdinalIgnoreCase) ||
-                                    fileName.Contains("native client", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    msiArgs = $"{msiArgs} IACCEPTSQLNCLILICENSETERMS=YES".Trim();
-                                }
-
-                                var msiResult = new ProcessResult(1618, string.Empty, string.Empty);
-                                for (var attempt = 0; attempt < 25; attempt++)
-                                {
-                                    msiResult = await _processExecutionService.RunAsync("msiexec.exe", msiArgs, runAsAdmin: false, ct);
-                                    if (msiResult.ExitCode != 1618)
-                                        break;
-
-                                    await Task.Delay(1000, ct);
-                                }
-
-                                if (msiResult.ExitCode != 0 && msiResult.ExitCode != 3010 && msiResult.ExitCode != 1641)
-                                {
-                                    static bool LogContainsAny(string path, params string[] needles)
-                                    {
-                                        try
-                                        {
-                                            if (!File.Exists(path)) return false;
-                                            var text = File.ReadAllText(path);
-                                            foreach (var n in needles)
-                                            {
-                                                if (string.IsNullOrWhiteSpace(n)) continue;
-                                                if (text.Contains(n, StringComparison.OrdinalIgnoreCase))
-                                                    return true;
-                                            }
-                                            return false;
-                                        }
-                                        catch
-                                        {
-                                            return false;
-                                        }
-                                    }
-
-                                    var isSqlNcli = fileName.Contains("sqlncli", StringComparison.OrdinalIgnoreCase) ||
-                                                    fileName.Contains("nativeclient", StringComparison.OrdinalIgnoreCase) ||
-                                                    fileName.Contains("native client", StringComparison.OrdinalIgnoreCase);
-                                    var isSqlCmd = fileName.Contains("SqlCmd", StringComparison.OrdinalIgnoreCase) ||
-                                                   fileName.Contains("CmdLnUtils", StringComparison.OrdinalIgnoreCase);
-
-                                    var unsupportedOs = LogContainsAny(logPath, "not supported on this operating system");
-                                    var missingPrereq = LogContainsAny(logPath, "Setup is missing an installation prerequisite");
-
-                                    if (isSqlNcli && unsupportedOs)
-                                    {
-                                        _log.Warning($"Skipping prerequisite (unsupported OS): {fileName}. Log: {logPath}");
-                                        step.SetStatus("⚠️", $"Skipped prereq (unsupported OS): {fileName}");
-                                        continue;
-                                    }
-
-                                    if (isSqlCmd && missingPrereq)
-                                    {
-                                        _log.Warning($"Skipping prerequisite (missing dependency): {fileName}. Log: {logPath}");
-                                        step.SetStatus("⚠️", $"Skipped prereq (dependency missing): {fileName}");
-                                        continue;
-                                    }
-
-                                    throw new InvalidOperationException($"MSI install failed: {Path.GetFileName(msi)} (exit {msiResult.ExitCode}). Log: {logPath}");
-                                }
-                            }
-                        }
-
-                        var setupExe = FindSetupExe(extractedDir);
-                        if (string.IsNullOrWhiteSpace(setupExe))
-                            throw new InvalidOperationException($"setup.exe not found after extraction: {installerPath}");
-
-                        if (!string.IsNullOrWhiteSpace(mainMsi) && File.Exists(mainMsi))
-                        {
-                            var msiLogDir = Path.Combine(AppContext.BaseDirectory, "Data", "msi-logs");
-                            Directory.CreateDirectory(msiLogDir);
-
-                            var logPath = Path.Combine(
-                                msiLogDir,
-                                $"KlevaDeploy_{Guid.NewGuid():N}_Main_{Path.GetFileNameWithoutExtension(mainMsi)}.msi.log");
-
-                            static string SetMsiProp(string tail, string key, string value)
-                            {
-                                if (string.IsNullOrWhiteSpace(tail)) return $"{key}={value}";
-
-                                var parts = tail.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                                var updated = false;
-                                for (var i = 0; i < parts.Length; i++)
-                                {
-                                    if (!parts[i].StartsWith($"{key}=", StringComparison.OrdinalIgnoreCase)) continue;
-                                    parts[i] = $"{key}={value}";
-                                    updated = true;
-                                }
-
-                                if (!updated)
-                                    return $"{tail} {key}={value}";
-                                return string.Join(' ', parts).Trim();
-                            }
-
-                            static string EnsureSecureCustomProperties(string tail)
-                            {
-                                if (string.IsNullOrWhiteSpace(tail)) return tail;
-
-                                const string secureKey = "SECURECUSTOMPROPERTIES";
-                                static bool IsNameChar(char c) => char.IsLetterOrDigit(c) || c == '_';
-                                static bool IsMsiPropertyName(string name)
-                                {
-                                    if (string.IsNullOrWhiteSpace(name)) return false;
-                                    if (!IsNameChar(name[0]) || char.IsDigit(name[0])) return false;
-                                    for (var i = 1; i < name.Length; i++)
-                                    {
-                                        if (!IsNameChar(name[i])) return false;
-                                    }
-                                    return true;
-                                }
-
-                                var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                                var parts = tail.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                                var existingIdx = -1;
-                                var existingValue = string.Empty;
-
-                                for (var i = 0; i < parts.Length; i++)
-                                {
-                                    var p = parts[i];
-                                    if (p.StartsWith($"{secureKey}=", StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        existingIdx = i;
-                                        var eq = p.IndexOf('=');
-                                        existingValue = eq >= 0 ? p[(eq + 1)..].Trim().Trim('"') : string.Empty;
-                                        break;
-                                    }
-                                }
-
-                                if (!string.IsNullOrWhiteSpace(existingValue))
-                                {
-                                    var existingParts = existingValue
-                                        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                                    foreach (var p in existingParts)
-                                    {
-                                        if (!string.IsNullOrWhiteSpace(p))
-                                            names.Add(p.Trim().ToUpperInvariant());
-                                    }
-                                }
-
-                                foreach (var p in parts)
-                                {
-                                    if (p.StartsWith("/") || p.StartsWith("-")) continue;
-                                    var eq = p.IndexOf('=');
-                                    if (eq <= 0) continue;
-
-                                    var name = p[..eq].Trim();
-                                    if (!IsMsiPropertyName(name)) continue;
-                                    if (string.Equals(name, secureKey, StringComparison.OrdinalIgnoreCase)) continue;
-
-                                    names.Add(name.ToUpperInvariant());
-                                }
-
-                                if (names.Count == 0) return tail;
-
-                                var mergedToken = $"{secureKey}={string.Join(';', names)}";
-                                if (existingIdx >= 0)
-                                {
-                                    parts[existingIdx] = mergedToken;
-                                    return string.Join(' ', parts).Trim();
-                                }
-
-                                return $"{tail} {mergedToken}".Trim();
-                            }
-
-                            static string? TryGetPropValue(string tail, string key)
-                            {
-                                if (string.IsNullOrWhiteSpace(tail)) return null;
-                                var parts = tail.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                                foreach (var p in parts)
-                                {
-                                    if (!p.StartsWith($"{key}=", StringComparison.OrdinalIgnoreCase)) continue;
-                                    return p[(key.Length + 1)..];
-                                }
-                                return null;
-                            }
-
-                            static string EnsureAlias(string tail, string fromKey, string toKey)
-                            {
-                                if (string.IsNullOrWhiteSpace(tail)) return tail;
-
-                                var parts = tail.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                                if (parts.Any(p => p.StartsWith($"{toKey}=", StringComparison.Ordinal)))
-                                    return tail;
-
-                                var v = TryGetPropValue(tail, fromKey);
-                                if (string.IsNullOrWhiteSpace(v)) return tail;
-                                return $"{tail} {toKey}={v}".Trim();
-                            }
-
-                            var msiPropTail = expandedArguments.Trim();
-                            var isRetailMain = string.Equals(Path.GetFileName(mainMsi), "SetupRetail.msi", StringComparison.OrdinalIgnoreCase);
-                            if (isRetailMain)
-                            {
-                                var retailLogPath = Path.Combine(retailLogDir, $"RetailInstall_{DateTimeOffset.Now:yyyyMMdd_HHmmss}.log");
-                                msiPropTail = SetMsiProp(msiPropTail, "LOGFILE", retailLogPath);
-
-                                msiPropTail = EnsureAlias(msiPropTail, "INSTALLAZIONEAUTOMATICA", "InstallazioneAutomatica");
-                                msiPropTail = EnsureAlias(msiPropTail, "REINSTALLMODE", "ReinstallMode");
-                                msiPropTail = EnsureAlias(msiPropTail, "USABULK", "UsaBulk");
-                                msiPropTail = EnsureAlias(msiPropTail, "LIVEUPDATE", "Liveupdate");
-                                msiPropTail = EnsureAlias(msiPropTail, "IPSERVERDATABASE", "IpServerDatabase");
-                                msiPropTail = EnsureAlias(msiPropTail, "PORTASERVER", "PortaServer");
-                                msiPropTail = EnsureAlias(msiPropTail, "NOMEDATABASE", "NomeDatabase");
-                                msiPropTail = EnsureAlias(msiPropTail, "PASSWORDDATABASE", "PasswordDatabase");
-                                msiPropTail = EnsureAlias(msiPropTail, "LOGFILE", "LogFile");
-                                msiPropTail = EnsureAlias(msiPropTail, "InstallazioneAutomatica", "INSTALLAZIONEAUTOMATICA");
-                                msiPropTail = EnsureAlias(msiPropTail, "ReinstallMode", "REINSTALLMODE");
-                                msiPropTail = EnsureAlias(msiPropTail, "UsaBulk", "USABULK");
-                                msiPropTail = EnsureAlias(msiPropTail, "Liveupdate", "LIVEUPDATE");
-                                msiPropTail = EnsureAlias(msiPropTail, "IpServerDatabase", "IPSERVERDATABASE");
-                                msiPropTail = EnsureAlias(msiPropTail, "PortaServer", "PORTASERVER");
-                                msiPropTail = EnsureAlias(msiPropTail, "NomeDatabase", "NOMEDATABASE");
-                                msiPropTail = EnsureAlias(msiPropTail, "PasswordDatabase", "PASSWORDDATABASE");
-                                msiPropTail = EnsureAlias(msiPropTail, "LogFile", "LOGFILE");
-                                msiPropTail = SetMsiProp(msiPropTail, "INSTALLAZIONEAUTOMATICA", "true");
-                                msiPropTail = SetMsiProp(msiPropTail, "USABULK", "false");
-                                msiPropTail = SetMsiProp(msiPropTail, "LIVEUPDATE", "false");
-                                msiPropTail = SetMsiProp(msiPropTail, "REINSTALLMODE", "amus");
-                                msiPropTail = EnsureSecureCustomProperties(msiPropTail);
-                            }
-
-                            var msiArgs =
-                                $"/i \"{mainMsi}\" /qn /norestart REBOOT=ReallySuppress ALLUSERS=2 /L*v \"{logPath}\" {msiPropTail}".Trim();
-                            var msiResult = await _processExecutionService.RunAsync("msiexec.exe", msiArgs, runAsAdmin: false, ct);
-                            if (msiResult.ExitCode != 0 && msiResult.ExitCode != 3010 && msiResult.ExitCode != 1641)
-                                throw new InvalidOperationException($"MSI install failed: {Path.GetFileName(mainMsi)} (exit {msiResult.ExitCode}). Log: {logPath}");
-
-                            step.ProgressValue = 95;
-                            return msiResult;
-                        }
-
-                        var argTail = expandedArguments.Trim();
-                        var installArgs = string.IsNullOrWhiteSpace(argTail) ? "/quiet /norestart" : $"/quiet /norestart {argTail}";
-                        var installResult = await _processExecutionService.RunAsync(setupExe, installArgs, runAsAdmin: false, ct);
-                        step.ProgressValue = 95;
-                        return installResult;
-                    }
-                }
-
+                expandedArguments = Environment.ExpandEnvironmentVariables(rawArgs);
                 return await _processExecutionService.RunAsync(installerPath, expandedArguments, process.RunAsAdmin, ct);
             }
             case ProcessKind.PowerShellScript:
             {
-                if (!string.IsNullOrWhiteSpace(process.ScriptContent))
+                var ensured = await EnsureArgumentInputsAsync(step, process, rawArgs, installerArtifactPath: null, msiPath: null, ct);
+                if (ensured.EarlyReturn is not null)
+                    return ensured.EarlyReturn;
+                argScope = ensured.Scope;
+
+                EventHandler<LogEntry>? progressHandler = null;
+                if (step.IsSubProcessRunning)
                 {
-                    return await _processExecutionService.RunPowerShellAsync(process.ScriptContent, isInlineScript: true, process.RunAsAdmin, ct);
+                    var gate = new object();
+                    var lastPercent = -1;
+                    progressHandler = async (_, entry) =>
+                    {
+                        if (!string.Equals(entry.Level, "STDOUT", StringComparison.OrdinalIgnoreCase)) return;
+                        var msg = (entry.Message ?? string.Empty).Trim();
+                        if (!msg.StartsWith("KLEVADEPLOY_PROGRESS:", StringComparison.OrdinalIgnoreCase)) return;
+
+                        var tail = msg["KLEVADEPLOY_PROGRESS:".Length..].Trim();
+                        if (!int.TryParse(tail, out var p)) return;
+                        if (p < 0) p = 0;
+                        if (p > 100) p = 100;
+
+                        var shouldUpdate = false;
+                        lock (gate)
+                        {
+                            if (p > lastPercent)
+                            {
+                                lastPercent = p;
+                                shouldUpdate = true;
+                            }
+                        }
+                        if (!shouldUpdate) return;
+
+                        await System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+                        {
+                            step.IsSubProgressIndeterminate = false;
+                            step.SubProgressValue = p;
+                        });
+                    };
+                    _log.LogAdded += progressHandler;
                 }
 
-                if (string.IsNullOrWhiteSpace(process.RelativePath))
-                    throw new InvalidOperationException($"PowerShell script path missing for process: {process.Name}");
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(process.ScriptContent))
+                    {
+                        return await _processExecutionService.RunPowerShellAsync(process.ScriptContent, isInlineScript: true, process.RunAsAdmin, ct);
+                    }
 
-                var scriptPath = Path.IsPathRooted(process.RelativePath)
-                    ? process.RelativePath
-                    : Path.Combine(AppContext.BaseDirectory, process.RelativePath);
-                return await _processExecutionService.RunPowerShellAsync(scriptPath, isInlineScript: false, process.RunAsAdmin, ct);
+                    if (string.IsNullOrWhiteSpace(process.RelativePath))
+                        throw new InvalidOperationException($"PowerShell script path missing for process: {process.Name}");
+
+                    var scriptPath = Path.IsPathRooted(process.RelativePath)
+                        ? process.RelativePath
+                        : Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+                    return await _processExecutionService.RunPowerShellAsync(scriptPath, isInlineScript: false, process.RunAsAdmin, ct);
+                }
+                finally
+                {
+                    if (progressHandler is not null)
+                        _log.LogAdded -= progressHandler;
+                }
             }
             case ProcessKind.BatchScript:
             {
+                var ensured = await EnsureArgumentInputsAsync(step, process, rawArgs, installerArtifactPath: null, msiPath: null, ct);
+                if (ensured.EarlyReturn is not null)
+                    return ensured.EarlyReturn;
+                argScope = ensured.Scope;
+
                 if (!string.IsNullOrWhiteSpace(process.ScriptContent))
                 {
                     return await _processExecutionService.RunBatchAsync(process.ScriptContent, isInlineScript: true, process.RunAsAdmin, ct);
@@ -1692,6 +1589,11 @@ public sealed class MainViewModel : ObservableObject
             }
             case ProcessKind.BashScript:
             {
+                var ensured = await EnsureArgumentInputsAsync(step, process, rawArgs, installerArtifactPath: null, msiPath: null, ct);
+                if (ensured.EarlyReturn is not null)
+                    return ensured.EarlyReturn;
+                argScope = ensured.Scope;
+
                 if (!string.IsNullOrWhiteSpace(process.ScriptContent))
                 {
                     return await _processExecutionService.RunBashAsync(process.ScriptContent, isInlineScript: true, ct);
@@ -1707,6 +1609,11 @@ public sealed class MainViewModel : ObservableObject
             }
             case ProcessKind.RegistryFile:
             {
+                var ensured = await EnsureArgumentInputsAsync(step, process, rawArgs, installerArtifactPath: null, msiPath: null, ct);
+                if (ensured.EarlyReturn is not null)
+                    return ensured.EarlyReturn;
+                argScope = ensured.Scope;
+
                 if (string.IsNullOrWhiteSpace(process.RelativePath))
                     throw new InvalidOperationException($"Registry file path missing for process: {process.Name}");
 
@@ -1722,6 +1629,1074 @@ public sealed class MainViewModel : ObservableObject
                 _log.Warning($"ConfigAction not implemented: {process.Name}");
                 return new ProcessResult(0, string.Empty, string.Empty);
             }
+        }
+        }
+        finally
+        {
+            argScope?.Dispose();
+        }
+    }
+
+    private async Task<(IDisposable? Scope, ProcessResult? EarlyReturn)> EnsureArgumentInputsAsync(
+        ProcessStepViewModel step,
+        DeploymentProcess process,
+        string rawArgs,
+        string? installerArtifactPath,
+        string? msiPath,
+        System.Threading.CancellationToken ct)
+    {
+        var inputs = new List<ArgumentInputDefinition>();
+        if (process.ArgumentInputs is not null && process.ArgumentInputs.Count > 0)
+        {
+            inputs.AddRange(
+                process.ArgumentInputs
+                    .Where(x => !string.IsNullOrWhiteSpace((x.Key ?? string.Empty).Trim()))
+                    .Select(x => new ArgumentInputDefinition
+                    {
+                        Key = (x.Key ?? string.Empty).Trim(),
+                        Label = x.Label ?? string.Empty,
+                        Description = x.Description ?? string.Empty,
+                        DefaultValue = x.DefaultValue ?? string.Empty,
+                        IsSecret = x.IsSecret,
+                        IsRequired = x.IsRequired
+                    }));
+        }
+
+        var inferred = InferArgumentInputsFromArguments(rawArgs);
+        if (inferred.Count > 0)
+        {
+            var existingKeys = new HashSet<string>(inputs.Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
+            foreach (var d in inferred)
+            {
+                if (existingKeys.Contains(d.Key)) continue;
+                inputs.Add(d);
+            }
+        }
+
+        if (inputs.Count == 0)
+            return (null, null);
+
+        var prefs = _prefsService.Preferences;
+        prefs.ProcessArgumentProfiles ??= new List<ProcessArgumentProfile>();
+
+        var processKey = GetArgumentProfileProcessKey(process);
+        var schemaHash = ComputeArgumentInputsSchemaHash(inputs);
+
+        var profile = prefs.ProcessArgumentProfiles
+            .FirstOrDefault(p => string.Equals((p.ProcessId ?? string.Empty).Trim(), processKey, StringComparison.OrdinalIgnoreCase));
+
+        static bool IsMissingRequired(ProcessArgumentProfile? p, IReadOnlyList<ArgumentInputDefinition> defs)
+        {
+            foreach (var d in defs)
+            {
+                if (!d.IsRequired) continue;
+                if (p?.Values is null) return true;
+                if (!p.Values.TryGetValue(d.Key, out var v) || string.IsNullOrWhiteSpace(v))
+                    return true;
+            }
+            return false;
+        }
+
+        var schemaMismatch = profile is null || !string.Equals(profile.SchemaHash ?? string.Empty, schemaHash, StringComparison.OrdinalIgnoreCase);
+        var shouldPrompt = profile is null || schemaMismatch || profile.LastRunFailed || IsMissingRequired(profile, inputs);
+
+        var mergedPrefill = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var d in inputs)
+        {
+            mergedPrefill[d.Key] = d.DefaultValue ?? string.Empty;
+        }
+
+        if (profile?.Values is not null)
+        {
+            foreach (var kvp in profile.Values)
+            {
+                var k = (kvp.Key ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(k)) continue;
+                if (!mergedPrefill.ContainsKey(k)) continue;
+                mergedPrefill[k] = kvp.Value ?? string.Empty;
+            }
+        }
+
+        if (!shouldPrompt)
+        {
+            _argumentPromptChoiceThisRun[processKey] = ArgumentPromptChoice.RunAlways;
+            return (new EnvironmentVariableScope(mergedPrefill), null);
+        }
+
+        string? prefillNotice = null;
+        var hasAnyEmpty = mergedPrefill.Values.Any(v => string.IsNullOrWhiteSpace(v));
+        if (hasAnyEmpty)
+        {
+            var defaults = await TryGetDefaultsFromInstallerAsync(installerArtifactPath, msiPath, rawArgs, ct);
+            foreach (var kvp in defaults.Defaults)
+            {
+                if (!mergedPrefill.TryGetValue(kvp.Key, out var cur) || !string.IsNullOrWhiteSpace(cur))
+                    continue;
+                if (!string.IsNullOrWhiteSpace(kvp.Value))
+                    mergedPrefill[kvp.Key] = kvp.Value;
+            }
+            prefillNotice = defaults.Notice;
+        }
+
+        ArgumentPromptResponse response;
+        var subtitle = schemaMismatch
+            ? "Parametri aggiornati: verifica e aggiorna i valori necessari."
+            : "Inserisci i parametri richiesti per questo processo.";
+        if (!string.IsNullOrWhiteSpace(prefillNotice))
+            subtitle = $"{subtitle}\n\n{prefillNotice}".Trim();
+
+        var app = System.Windows.Application.Current;
+        if (app?.Dispatcher is not null && !app.Dispatcher.CheckAccess())
+        {
+            response = app.Dispatcher.Invoke(() =>
+                _dialogService.ShowArgumentPrompt(process.Name, subtitle, inputs, mergedPrefill));
+        }
+        else
+        {
+            response = _dialogService.ShowArgumentPrompt(process.Name, subtitle, inputs, mergedPrefill);
+        }
+
+        _argumentPromptChoiceThisRun[processKey] = response.Choice;
+
+        if (response.Choice == ArgumentPromptChoice.Cancel)
+        {
+            step.SetStatus("⛔", "Annullato");
+            return (null, new ProcessResult(1, string.Empty, "Operazione annullata: parametri richiesti non forniti."));
+        }
+
+        var chosenValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var d in inputs)
+        {
+            var v = string.Empty;
+            if (response.Values is not null && response.Values.TryGetValue(d.Key, out var rv))
+                v = rv ?? string.Empty;
+            else if (mergedPrefill.TryGetValue(d.Key, out var pv))
+                v = pv ?? string.Empty;
+
+            chosenValues[d.Key] = v;
+        }
+
+        if (response.Choice == ArgumentPromptChoice.RunAlways)
+        {
+            if (profile is null)
+            {
+                profile = new ProcessArgumentProfile
+                {
+                    ProcessId = processKey,
+                    SchemaHash = schemaHash,
+                    Values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    LastRunFailed = false
+                };
+                prefs.ProcessArgumentProfiles.Add(profile);
+            }
+
+            profile.SchemaHash = schemaHash;
+            profile.Values = new Dictionary<string, string>(chosenValues, StringComparer.OrdinalIgnoreCase);
+            profile.LastRunFailed = false;
+            _prefsService.Save();
+        }
+
+        return (new EnvironmentVariableScope(chosenValues), null);
+    }
+
+    private static List<ArgumentInputDefinition> InferArgumentInputsFromArguments(string? arguments)
+    {
+        var text = arguments ?? string.Empty;
+        if (text.Length == 0) return new List<ArgumentInputDefinition>();
+
+        static bool IsNameChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+
+        static bool LooksSecret(string key) =>
+            key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("PASS", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("PWD", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("SECRET", StringComparison.OrdinalIgnoreCase);
+
+        var vars = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < text.Length - 2; i++)
+        {
+            if (text[i] != '%') continue;
+            var end = text.IndexOf('%', i + 1);
+            if (end <= i + 1) continue;
+
+            var name = text.Substring(i + 1, end - i - 1).Trim();
+            if (name.Length == 0) { i = end; continue; }
+            if (!name.StartsWith("KLEVADEPLOY_", StringComparison.OrdinalIgnoreCase)) { i = end; continue; }
+            if (!IsNameChar(name[0]) || char.IsDigit(name[0])) { i = end; continue; }
+            var ok = true;
+            for (var k = 1; k < name.Length; k++)
+            {
+                if (!IsNameChar(name[k])) { ok = false; break; }
+            }
+            if (!ok) { i = end; continue; }
+
+            vars.Add(name);
+            i = end;
+        }
+
+        var envToArgKey = InferEnvVarToMsiPropertyMap(text);
+
+        var result = new List<ArgumentInputDefinition>();
+        foreach (var v in vars.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+        {
+            var isSecret = LooksSecret(v);
+            var envDefault = isSecret ? string.Empty : (Environment.GetEnvironmentVariable(v) ?? string.Empty);
+
+            var label = v;
+            var description = "Valore richiesto per completare l'installazione.";
+            if (envToArgKey.TryGetValue(v, out var argKey) && !string.IsNullOrWhiteSpace(argKey))
+            {
+                label = argKey;
+                description = $"Valore per '{argKey}'.";
+            }
+
+            result.Add(new ArgumentInputDefinition
+            {
+                Key = v,
+                Label = label,
+                Description = description,
+                DefaultValue = envDefault,
+                IsSecret = isSecret,
+                IsRequired = true
+            });
+        }
+
+        return result;
+    }
+
+    private sealed record InstallerDefaultsResult(IReadOnlyDictionary<string, string> Defaults, string? Notice);
+
+    private async Task<InstallerDefaultsResult> TryGetDefaultsFromInstallerAsync(
+        string? installerArtifactPath,
+        string? msiPath,
+        string rawArgs,
+        System.Threading.CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(msiPath) && File.Exists(msiPath))
+        {
+            var msiEnvDefaults = TryGetEnvVarDefaultsFromMsi(msiPath, rawArgs);
+            return msiEnvDefaults.Count == 0
+                ? new InstallerDefaultsResult(msiEnvDefaults, "Impossibile leggere in modo automatico i valori predefiniti dall'MSI: verifica i campi.")
+                : new InstallerDefaultsResult(msiEnvDefaults, "Valori precompilati letti automaticamente dall'installer.");
+        }
+
+        if (string.IsNullOrWhiteSpace(installerArtifactPath) || !File.Exists(installerArtifactPath))
+            return new InstallerDefaultsResult(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), null);
+
+        var ext = Path.GetExtension(installerArtifactPath).ToLowerInvariant();
+        if (ext != ".exe")
+            return new InstallerDefaultsResult(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), null);
+
+        try
+        {
+            var family = TryDetectExeInstallerFamily(installerArtifactPath);
+
+            if (string.Equals(family, "WiX Burn", StringComparison.OrdinalIgnoreCase))
+            {
+                var (layoutDir, extractedMsiFromBurn) = await TryExtractMsiFromBurnBundleAsync(installerArtifactPath, ct);
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(extractedMsiFromBurn) && File.Exists(extractedMsiFromBurn))
+                    {
+                        var burnDefaults = TryGetEnvVarDefaultsFromMsi(extractedMsiFromBurn, rawArgs);
+                        if (burnDefaults.Count > 0)
+                            return new InstallerDefaultsResult(burnDefaults, "Valori precompilati letti automaticamente dall'installer.");
+                    }
+                }
+                finally
+                {
+                    if (!string.IsNullOrWhiteSpace(layoutDir))
+                        TryDeleteDirectory(layoutDir);
+                }
+
+                return new InstallerDefaultsResult(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), BuildUnsupportedInstallerNotice(installerArtifactPath));
+            }
+
+            var sevenZipExe = await _processExecutionService.Ensure7ZipInstalledAsync(ct);
+            var listArgs = $"l -slt \"{installerArtifactPath}\"";
+            var listResult = await _processExecutionService.RunAsync(sevenZipExe, listArgs, runAsAdmin: false, ct);
+            if (listResult.ExitCode != 0)
+                return new InstallerDefaultsResult(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), BuildUnsupportedInstallerNotice(installerArtifactPath));
+
+            var msiInArchive = ParseFirstMsiPathFrom7ZipSlt(listResult.StdOut);
+            if (string.IsNullOrWhiteSpace(msiInArchive))
+                return new InstallerDefaultsResult(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), BuildUnsupportedInstallerNotice(installerArtifactPath));
+
+            var tempDir = Path.Combine(AppContext.BaseDirectory, "Data", "temp", "prefill", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            var extractArgs = $"e \"{installerArtifactPath}\" -o\"{tempDir}\" \"{msiInArchive}\" -y";
+            var extractResult = await _processExecutionService.RunAsync(sevenZipExe, extractArgs, runAsAdmin: false, ct);
+            if (extractResult.ExitCode != 0)
+            {
+                TryDeleteDirectory(tempDir);
+                return new InstallerDefaultsResult(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), BuildUnsupportedInstallerNotice(installerArtifactPath));
+            }
+
+            var extractedMsi = Directory.EnumerateFiles(tempDir, "*.msi", SearchOption.AllDirectories).FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(extractedMsi) || !File.Exists(extractedMsi))
+            {
+                TryDeleteDirectory(tempDir);
+                return new InstallerDefaultsResult(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), BuildUnsupportedInstallerNotice(installerArtifactPath));
+            }
+
+            var defaults = TryGetEnvVarDefaultsFromMsi(extractedMsi, rawArgs);
+            TryDeleteDirectory(tempDir);
+            if (defaults.Count == 0)
+                return new InstallerDefaultsResult(defaults, BuildUnsupportedInstallerNotice(installerArtifactPath));
+
+            return new InstallerDefaultsResult(defaults, "Valori precompilati letti automaticamente dall'installer.");
+        }
+        catch
+        {
+            return new InstallerDefaultsResult(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase), BuildUnsupportedInstallerNotice(installerArtifactPath));
+        }
+    }
+
+    private async Task<(string? LayoutDir, string? ExtractedMsi)> TryExtractMsiFromBurnBundleAsync(string bundleExePath, System.Threading.CancellationToken ct)
+    {
+        var layoutDir = Path.Combine(AppContext.BaseDirectory, "Data", "temp", "prefill", "burn-layout", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(layoutDir);
+        }
+        catch
+        {
+            return (null, null);
+        }
+
+        try
+        {
+            var args = $"/layout \"{layoutDir}\" /quiet";
+            var result = await _processExecutionService.RunAsync(bundleExePath, args, runAsAdmin: false, ct);
+            var ok = result.ExitCode == 0 || result.ExitCode == 3010 || result.ExitCode == 1641;
+            if (!ok)
+                return (layoutDir, null);
+
+            var msi = Directory
+                .EnumerateFiles(layoutDir, "*.msi", SearchOption.AllDirectories)
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+
+            return (layoutDir, msi);
+        }
+        catch
+        {
+            return (layoutDir, null);
+        }
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+                Directory.Delete(path, recursive: true);
+        }
+        catch { }
+    }
+
+    private static string? ParseFirstMsiPathFrom7ZipSlt(string? stdout)
+    {
+        var text = stdout ?? string.Empty;
+        if (text.Length == 0) return null;
+
+        string? currentPath = null;
+        foreach (var raw in SplitLines(text))
+        {
+            var line = raw.Trim();
+            if (line.StartsWith("Path = ", StringComparison.OrdinalIgnoreCase))
+            {
+                currentPath = line["Path = ".Length..].Trim();
+                continue;
+            }
+            if (line.StartsWith("Attributes = ", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!string.IsNullOrWhiteSpace(currentPath) &&
+                    currentPath.EndsWith(".msi", StringComparison.OrdinalIgnoreCase))
+                {
+                    return currentPath;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string BuildUnsupportedInstallerNotice(string installerPath)
+    {
+        var kind = TryDetectExeInstallerFamily(installerPath);
+        if (!string.IsNullOrWhiteSpace(kind))
+            return $"Tipo installer rilevato: {kind}. Impossibile leggere in modo automatico i valori predefiniti: verifica i campi.";
+        return "Impossibile leggere in modo automatico i valori predefiniti dell'installer: verifica i campi.";
+    }
+
+    private static ExeExtractionMode GetExeExtractionMode(string rawArgs)
+    {
+        var text = rawArgs ?? string.Empty;
+        if (text.Contains("{AUTOEXTRACT_ALL_MSI}", StringComparison.OrdinalIgnoreCase))
+            return ExeExtractionMode.AllMsis;
+        if (text.Contains("{AUTOEXTRACT_MAIN_MSI}", StringComparison.OrdinalIgnoreCase))
+            return ExeExtractionMode.MainMsiOnly;
+        return ExeExtractionMode.None;
+    }
+
+    private static string StripExeExecutionMarkers(string rawArgs)
+    {
+        var text = rawArgs ?? string.Empty;
+        text = text.Replace("{AUTOEXTRACT_ALL_MSI}", string.Empty, StringComparison.OrdinalIgnoreCase);
+        text = text.Replace("{AUTOEXTRACT_MAIN_MSI}", string.Empty, StringComparison.OrdinalIgnoreCase);
+        return text.Trim();
+    }
+
+    private static string ResolveSilentArgsForExeInstaller(string installerPath)
+    {
+        var kind = TryDetectExeInstallerFamily(installerPath);
+        if (string.Equals(kind, "Inno Setup", StringComparison.OrdinalIgnoreCase))
+            return "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART";
+        if (string.Equals(kind, "NSIS", StringComparison.OrdinalIgnoreCase))
+            return "/S";
+        if (string.Equals(kind, "InstallShield", StringComparison.OrdinalIgnoreCase))
+            return "/s /v\"/qn /norestart\"";
+        if (string.Equals(kind, "WiX Burn", StringComparison.OrdinalIgnoreCase))
+            return "/quiet /norestart";
+        return "/quiet /norestart";
+    }
+
+    private async Task<ProcessResult> RunExtractedBootstrapperAsync(
+        ProcessStepViewModel step,
+        DeploymentProcess process,
+        string installerPath,
+        string expandedArguments,
+        string? installDir,
+        ExeExtractionMode extractionMode,
+        System.Threading.CancellationToken ct)
+    {
+        var extractedDir = CreateProcessExtractionDir(process.Name);
+        var msiLogDir = Path.Combine(AppContext.BaseDirectory, "Data", "msi-logs");
+        Directory.CreateDirectory(msiLogDir);
+
+        step.IsProgressIndeterminate = false;
+        step.ProgressValue = 0;
+        step.SetStatus("⏳", "Preparing...");
+
+        step.SetStatus("⏳", "Downloading 7-Zip...");
+        step.ProgressValue = 10;
+        var sevenZipExe = await _processExecutionService.Ensure7ZipInstalledAsync(ct);
+
+        step.SetStatus("⏳", "Extracting...");
+        step.ProgressValue = 40;
+        var extractArgs = $"x \"{installerPath}\" -o\"{extractedDir}\" -y";
+        var extractResult = await _processExecutionService.RunAsync(sevenZipExe, extractArgs, runAsAdmin: false, ct);
+        if (extractResult.ExitCode != 0)
+            return new ProcessResult(extractResult.ExitCode, string.Empty, $"7-Zip extraction failed (exit {extractResult.ExitCode}).");
+
+        var mainInstaller = ResolveInstallerFromExtractedDir(extractedDir);
+        if (string.IsNullOrWhiteSpace(mainInstaller) || !File.Exists(mainInstaller))
+            throw new InvalidOperationException($"Installer non trovato dopo l'estrazione: {installerPath}");
+
+        var mainExt = Path.GetExtension(mainInstaller).ToLowerInvariant();
+        if (mainExt == ".msi" && extractionMode == ExeExtractionMode.AllMsis)
+        {
+            step.SetStatus("⏳", "Installing prerequisites...");
+            step.ProgressValue = 65;
+
+            foreach (var prereqMsi in FindExtractedMsis(extractedDir))
+            {
+                ct.ThrowIfCancellationRequested();
+                if (string.Equals(prereqMsi, mainInstaller, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var prereqLogPath = Path.Combine(
+                    msiLogDir,
+                    $"KlevaDeploy_{Guid.NewGuid():N}_Prereq_{Path.GetFileNameWithoutExtension(prereqMsi)}.msi.log");
+
+                var prereqArgs = BuildGenericPrereqMsiArgs(prereqMsi, prereqLogPath);
+                var prereqResult = new ProcessResult(1618, string.Empty, string.Empty);
+                for (var attempt = 0; attempt < 25; attempt++)
+                {
+                    prereqResult = await _processExecutionService.RunAsync("msiexec.exe", prereqArgs, runAsAdmin: false, ct);
+                    if (prereqResult.ExitCode != 1618)
+                        break;
+                    await Task.Delay(1000, ct);
+                }
+
+                if (prereqResult.ExitCode != 0 && prereqResult.ExitCode != 3010 && prereqResult.ExitCode != 1641)
+                {
+                    return new ProcessResult(
+                        prereqResult.ExitCode,
+                        string.Empty,
+                        $"MSI prerequisite failed: {Path.GetFileName(prereqMsi)}. Log: {prereqLogPath}");
+                }
+            }
+        }
+
+        step.SetStatus("▶️", "Installing...");
+        step.ProgressValue = 80;
+
+        if (mainExt == ".msi")
+        {
+            var msiArgs = string.IsNullOrWhiteSpace(installDir)
+                ? expandedArguments
+                : AppendMsiInstallDirIfMissing(expandedArguments, installDir);
+            return await RunMsiWithAppProgressAsync(step, mainInstaller, msiArgs, process.RunAsAdmin, ct);
+        }
+
+        var finalArgs = expandedArguments;
+        if (finalArgs.Contains("{SILENT}", StringComparison.OrdinalIgnoreCase))
+        {
+            var silent = ResolveSilentArgsForExeInstaller(mainInstaller);
+            finalArgs = finalArgs.Replace("{SILENT}", silent, StringComparison.OrdinalIgnoreCase).Trim();
+        }
+
+        return await _processExecutionService.RunAsync(mainInstaller, finalArgs, process.RunAsAdmin, ct);
+    }
+
+    private static string BuildGenericPrereqMsiArgs(string msiPath, string logPath)
+    {
+        var args = $"/i \"{msiPath}\" /qn /norestart REBOOT=ReallySuppress ALLUSERS=2 /L*v \"{logPath}\"";
+        var fileName = Path.GetFileName(msiPath) ?? string.Empty;
+        if (fileName.Contains("sqlncli", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Contains("nativeclient", StringComparison.OrdinalIgnoreCase) ||
+            fileName.Contains("native client", StringComparison.OrdinalIgnoreCase))
+        {
+            args = $"{args} IACCEPTSQLNCLILICENSETERMS=YES";
+        }
+
+        return args.Trim();
+    }
+
+    private static string? TryDetectExeInstallerFamily(string installerPath)
+    {
+        try
+        {
+            using var fs = File.OpenRead(installerPath);
+            var max = 1024 * 1024;
+            var buf = new byte[Math.Min(max, (int)Math.Min(fs.Length, max))];
+            var read = fs.Read(buf, 0, buf.Length);
+            if (read <= 0) return null;
+            var s = Encoding.ASCII.GetString(buf, 0, read);
+
+            if (s.Contains("Inno Setup Setup Data", StringComparison.OrdinalIgnoreCase))
+                return "Inno Setup";
+            if (s.Contains("Nullsoft", StringComparison.OrdinalIgnoreCase) ||
+                s.Contains("NSIS", StringComparison.OrdinalIgnoreCase))
+                return "NSIS";
+            if (s.Contains("InstallShield", StringComparison.OrdinalIgnoreCase))
+                return "InstallShield";
+            if (s.Contains("WixBundle", StringComparison.OrdinalIgnoreCase) ||
+                s.Contains("Burn", StringComparison.OrdinalIgnoreCase))
+                return "WiX Burn";
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static Dictionary<string, string> TryGetEnvVarDefaultsFromMsi(string msiPath, string rawArgs)
+    {
+        var map = InferEnvVarToMsiPropertyMap(rawArgs);
+        if (map.Count == 0) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var props = map.Values.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var defaultsByProp = TryReadMsiPropertyTableValues(msiPath, props);
+        if (defaultsByProp.Count == 0) return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in map)
+        {
+            if (defaultsByProp.TryGetValue(kvp.Value, out var v) && v is not null)
+                result[kvp.Key] = v;
+        }
+        return result;
+    }
+
+    private static Dictionary<string, string> InferEnvVarToMsiPropertyMap(string rawArgs)
+    {
+        static bool IsNameChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+        static bool IsMsiPropertyName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            if (!IsNameChar(name[0]) || char.IsDigit(name[0])) return false;
+            for (var i = 1; i < name.Length; i++)
+            {
+                if (!IsNameChar(name[i])) return false;
+            }
+            return true;
+        }
+
+        static string TrimOuterQuotes(string s)
+        {
+            var v = (s ?? string.Empty).Trim();
+            if (v.Length >= 2 && v[0] == '"' && v[^1] == '"')
+                return v[1..^1];
+            return v;
+        }
+
+        var text = rawArgs ?? string.Empty;
+        var tokens = new List<string>();
+        var sb = new StringBuilder();
+        var inQuotes = false;
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c == '"')
+            {
+                inQuotes = !inQuotes;
+                sb.Append(c);
+                continue;
+            }
+
+            if (!inQuotes && char.IsWhiteSpace(c))
+            {
+                var t = sb.ToString().Trim();
+                if (t.Length > 0) tokens.Add(t);
+                sb.Clear();
+                continue;
+            }
+
+            sb.Append(c);
+        }
+        {
+            var t = sb.ToString().Trim();
+            if (t.Length > 0) tokens.Add(t);
+        }
+
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var token in tokens)
+        {
+            var idx = token.IndexOf('=');
+            if (idx <= 0 || idx >= token.Length - 1) continue;
+
+            var left = token[..idx].Trim();
+            var right = token[(idx + 1)..].Trim();
+            if (left.Length == 0 || right.Length == 0) continue;
+
+            left = left.TrimStart('/', '-');
+            if (!IsMsiPropertyName(left)) continue;
+
+            right = TrimOuterQuotes(right);
+            if (right.Length < 3) continue;
+            if (right[0] != '%' || right[^1] != '%') continue;
+
+            var env = right[1..^1].Trim();
+            if (env.Length == 0) continue;
+            if (!env.StartsWith("KLEVADEPLOY_", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!IsMsiPropertyName(env)) continue;
+
+            map[env] = left;
+        }
+
+        return map;
+    }
+
+    private static Dictionary<string, string> TryReadMsiPropertyTableValues(string msiPath, IReadOnlyList<string> propertyNames)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(msiPath) || !File.Exists(msiPath)) return result;
+        if (propertyNames.Count == 0) return result;
+
+        try
+        {
+            var installerType = Type.GetTypeFromProgID("WindowsInstaller.Installer");
+            if (installerType is null) return result;
+
+            dynamic installer = Activator.CreateInstance(installerType)!;
+            dynamic db = installer.OpenDatabase(msiPath, 0);
+            var all = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            dynamic view = db.OpenView("SELECT `Property`,`Value` FROM `Property`");
+            view.Execute();
+            while (true)
+            {
+                dynamic rec = view.Fetch();
+                if (rec is null) break;
+                try
+                {
+                    var k = (string)(rec.StringData[1] ?? string.Empty);
+                    if (string.IsNullOrWhiteSpace(k)) continue;
+                    var v = (string)(rec.StringData[2] ?? string.Empty);
+                    all[k] = v ?? string.Empty;
+                }
+                catch { }
+            }
+            try { view.Close(); } catch { }
+
+            foreach (var name in propertyNames)
+            {
+                var n = (name ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(n)) continue;
+                if (all.TryGetValue(n, out var v) && !string.IsNullOrWhiteSpace(v))
+                {
+                    result[n] = v ?? string.Empty;
+                    continue;
+                }
+
+                var fromControl = TryReadMsiControlDefaultValue(installer, db, n);
+                if (!string.IsNullOrWhiteSpace(fromControl))
+                    result[n] = fromControl;
+            }
+        }
+        catch
+        {
+            return result;
+        }
+
+        return result;
+    }
+
+    private static string? TryReadMsiControlDefaultValue(dynamic installer, dynamic db, string propertyName)
+    {
+        try
+        {
+            static bool LooksLikeDefaultValue(string? s)
+            {
+                var v = (s ?? string.Empty).Trim();
+                if (v.Length == 0) return false;
+                if (v.StartsWith("[", StringComparison.OrdinalIgnoreCase)) return false;
+                return true;
+            }
+
+            dynamic view = db.OpenView("SELECT `Type`,`Text` FROM `Control` WHERE `Property`=?");
+            dynamic rec = installer.CreateRecord(1);
+            rec.StringData[1] = propertyName;
+            view.Execute(rec);
+
+            string? best = null;
+            while (true)
+            {
+                dynamic row = view.Fetch();
+                if (row is null) break;
+                try
+                {
+                    var type = (string)(row.StringData[1] ?? string.Empty);
+                    var text = (string)(row.StringData[2] ?? string.Empty);
+
+                    if (string.IsNullOrWhiteSpace(type) || !type.Contains("Edit", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    if (!LooksLikeDefaultValue(text))
+                        continue;
+
+                    best = text.Trim();
+                    break;
+                }
+                catch { }
+            }
+
+            try { view.Close(); } catch { }
+            return best;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static IEnumerable<string> SplitLines(string text)
+    {
+        if (string.IsNullOrEmpty(text)) yield break;
+        using var reader = new StringReader(text);
+        while (true)
+        {
+            var line = reader.ReadLine();
+            if (line is null) yield break;
+            if (line.Length == 0) continue;
+            yield return line;
+        }
+    }
+
+    private void UpdateArgumentProfileAfterRun(DeploymentProcess process, bool success)
+    {
+        var inputs = (process.ArgumentInputs ?? new List<ArgumentInputDefinition>())
+            .Where(x => !string.IsNullOrWhiteSpace((x.Key ?? string.Empty).Trim()))
+            .ToList();
+
+        if (inputs.Count == 0)
+            return;
+
+        var processKey = GetArgumentProfileProcessKey(process);
+        if (!_argumentPromptChoiceThisRun.TryGetValue(processKey, out var choice))
+            return;
+
+        if (choice != ArgumentPromptChoice.RunAlways)
+            return;
+
+        var prefs = _prefsService.Preferences;
+        if (prefs.ProcessArgumentProfiles is null || prefs.ProcessArgumentProfiles.Count == 0)
+            return;
+
+        var schemaHash = ComputeArgumentInputsSchemaHash(inputs);
+        var profile = prefs.ProcessArgumentProfiles
+            .FirstOrDefault(p => string.Equals((p.ProcessId ?? string.Empty).Trim(), processKey, StringComparison.OrdinalIgnoreCase));
+
+        if (profile is null)
+            return;
+
+        if (!string.Equals(profile.SchemaHash ?? string.Empty, schemaHash, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var newFailed = !success;
+        if (profile.LastRunFailed == newFailed)
+            return;
+
+        profile.LastRunFailed = newFailed;
+        _prefsService.Save();
+    }
+
+    private static string GetArgumentProfileProcessKey(DeploymentProcess process)
+    {
+        var id = (process.Id ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(id))
+            return id;
+
+        var fingerprint = $"{process.Kind}|{(process.Name ?? string.Empty).Trim()}|{(process.RelativePath ?? string.Empty).Trim()}";
+        using var sha = SHA256.Create();
+        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(fingerprint));
+        return $"anon:{Convert.ToHexString(bytes)}";
+    }
+
+    private static string ComputeArgumentInputsSchemaHash(IReadOnlyList<ArgumentInputDefinition> inputs)
+    {
+        var canonical = new StringBuilder();
+        foreach (var d in inputs
+                     .Where(x => !string.IsNullOrWhiteSpace((x.Key ?? string.Empty).Trim()))
+                     .OrderBy(x => (x.Key ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase))
+        {
+            canonical.Append((d.Key ?? string.Empty).Trim());
+            canonical.Append('|');
+            canonical.Append(d.IsRequired ? '1' : '0');
+            canonical.Append('|');
+            canonical.Append(d.IsSecret ? '1' : '0');
+            canonical.Append('|');
+            canonical.Append(d.Label ?? string.Empty);
+            canonical.Append('|');
+            canonical.Append(d.Description ?? string.Empty);
+            canonical.Append('|');
+            canonical.Append(d.DefaultValue ?? string.Empty);
+            canonical.Append('\n');
+        }
+
+        using var sha = SHA256.Create();
+        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(canonical.ToString()));
+        return Convert.ToHexString(bytes);
+    }
+
+    private sealed class EnvironmentVariableScope : IDisposable
+    {
+        private readonly Dictionary<string, string?> _original = new(StringComparer.OrdinalIgnoreCase);
+        private bool _disposed;
+
+        public EnvironmentVariableScope(IReadOnlyDictionary<string, string> values)
+        {
+            foreach (var kvp in values)
+            {
+                var key = (kvp.Key ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(key)) continue;
+                _original[key] = Environment.GetEnvironmentVariable(key);
+                var raw = kvp.Value ?? string.Empty;
+                string expanded;
+                try
+                {
+                    expanded = Environment.ExpandEnvironmentVariables(raw);
+                }
+                catch
+                {
+                    expanded = raw;
+                }
+                Environment.SetEnvironmentVariable(key, expanded);
+            }
+
+            foreach (var kvp in BuildDerivedEnvironmentVariables(values))
+            {
+                _original.TryAdd(kvp.Key, Environment.GetEnvironmentVariable(kvp.Key));
+                Environment.SetEnvironmentVariable(kvp.Key, kvp.Value);
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            foreach (var kvp in _original)
+                Environment.SetEnvironmentVariable(kvp.Key, kvp.Value);
+        }
+    }
+
+    private static Dictionary<string, string> BuildDerivedEnvironmentVariables(IReadOnlyDictionary<string, string> values)
+    {
+        var derived = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in values)
+        {
+            var key = (kvp.Key ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(key)) continue;
+
+            string expanded;
+            try
+            {
+                expanded = Environment.ExpandEnvironmentVariables(kvp.Value ?? string.Empty);
+            }
+            catch
+            {
+                expanded = kvp.Value ?? string.Empty;
+            }
+
+            var tcpEndpoint = TryResolveSqlServerTcpEndpoint(expanded);
+            if (string.IsNullOrWhiteSpace(tcpEndpoint)) continue;
+            derived[key + "_TCP"] = tcpEndpoint;
+        }
+
+        return derived;
+    }
+
+    private static string? TryResolveSqlServerTcpEndpoint(string value)
+    {
+        var trimmed = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed)) return null;
+        if (!trimmed.Contains('\\')) return null;
+        if (trimmed.Contains(',')) return trimmed;
+
+        var parts = trimmed.Split(new[] { '\\' }, 2, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 2) return null;
+
+        var host = parts[0].Trim();
+        var instance = parts[1].Trim();
+        if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(instance)) return null;
+
+        var port = TryReadSqlInstanceTcpPort(instance);
+        if (string.IsNullOrWhiteSpace(port)) return null;
+
+        return $"{host},{port}";
+    }
+
+    private static string? TryReadSqlInstanceTcpPort(string instanceName)
+    {
+        if (string.IsNullOrWhiteSpace(instanceName)) return null;
+
+        var normalized = instanceName.Trim();
+        var candidates = new[]
+        {
+            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL16.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
+            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL15.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
+            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL14.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
+            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL13.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
+            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL12.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
+            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL11.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll"
+        };
+
+        foreach (var subKey in candidates)
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(subKey);
+            if (key is null) continue;
+
+            var tcpPort = key.GetValue("TcpPort") as string;
+            if (!string.IsNullOrWhiteSpace(tcpPort)) return tcpPort.Trim();
+
+            var dynamicPort = key.GetValue("TcpDynamicPorts") as string;
+            if (!string.IsNullOrWhiteSpace(dynamicPort)) return dynamicPort.Trim();
+        }
+
+        return null;
+    }
+
+    private string? TryBuildFriendlyMsiFailureHint(string logPath)
+    {
+        if (string.IsNullOrWhiteSpace(logPath) || !File.Exists(logPath))
+            return null;
+
+        var tail = ReadTextTail(logPath, maxChars: 120_000);
+        if (string.IsNullOrWhiteSpace(tail))
+            return null;
+
+        var outOfDisk =
+            tail.Contains("OutOfDiskSpace = 1", StringComparison.OrdinalIgnoreCase) ||
+            tail.Contains("OutOfNoRbDiskSpace = 1", StringComparison.OrdinalIgnoreCase) ||
+            tail.Contains("There is not enough space", StringComparison.OrdinalIgnoreCase) ||
+            tail.Contains("not enough disk space", StringComparison.OrdinalIgnoreCase) ||
+            tail.Contains("spazio su disco", StringComparison.OrdinalIgnoreCase) ||
+            tail.Contains("spazio su disco insufficiente", StringComparison.OrdinalIgnoreCase);
+
+        if (outOfDisk)
+            return "Spazio su disco insufficiente per completare l'installazione.";
+
+        var rebootPending =
+            tail.Contains("MsiSystemRebootPending = 1", StringComparison.OrdinalIgnoreCase) ||
+            tail.Contains("reboot pending", StringComparison.OrdinalIgnoreCase) ||
+            tail.Contains("riavvio", StringComparison.OrdinalIgnoreCase) && tail.Contains("necess", StringComparison.OrdinalIgnoreCase);
+
+        var hasSqlSetupError1001 = tail.Contains("Errore 1001", StringComparison.OrdinalIgnoreCase) ||
+                                   tail.Contains("Error 1001", StringComparison.OrdinalIgnoreCase);
+
+        if (hasSqlSetupError1001)
+        {
+            var mentionsSa =
+                tail.Contains("utente sa", StringComparison.OrdinalIgnoreCase) ||
+                tail.Contains("user sa", StringComparison.OrdinalIgnoreCase);
+
+            var cannotCreateDbOrInsert =
+                tail.Contains("non esiste", StringComparison.OrdinalIgnoreCase) ||
+                tail.Contains("non può creare database", StringComparison.OrdinalIgnoreCase) ||
+                tail.Contains("non puo creare database", StringComparison.OrdinalIgnoreCase) ||
+                tail.Contains("effettuare inserimenti", StringComparison.OrdinalIgnoreCase) ||
+                tail.Contains("cannot create database", StringComparison.OrdinalIgnoreCase) ||
+                tail.Contains("cannot insert", StringComparison.OrdinalIgnoreCase);
+
+            var mentionsDbServer =
+                tail.Contains("Server database", StringComparison.OrdinalIgnoreCase) ||
+                tail.Contains("IpServerDatabase", StringComparison.OrdinalIgnoreCase) ||
+                tail.Contains("IPSERVERDATABASE", StringComparison.OrdinalIgnoreCase) ||
+                tail.Contains("SQLPASS", StringComparison.OrdinalIgnoreCase);
+
+            if (mentionsSa && cannotCreateDbOrInsert)
+            {
+                return rebootPending
+                    ? "Errore SQL: credenziali/permessi non validi per l'utente sa (o sa disabilitato). Riavvia Windows (se richiesto), verifica che SQLPASS sia installato e avviato e che l'istanza sia in Mixed Mode con login sa abilitato. Controlla anche che password e server/istanza siano corretti (es: NOMEPC\\SQLPASS)."
+                    : "Errore SQL: credenziali/permessi non validi per l'utente sa (o sa disabilitato). Verifica che SQLPASS sia installato e avviato e che l'istanza sia in Mixed Mode con login sa abilitato. Controlla anche che password e server/istanza siano corretti (es: NOMEPC\\SQLPASS).";
+            }
+
+            if (mentionsDbServer)
+            {
+                return rebootPending
+                    ? "Connessione SQL non riuscita (Errore 1001). Riavvia Windows (se richiesto) e verifica che l'istanza SQLPASS sia attiva e raggiungibile."
+                    : "Connessione SQL non riuscita (Errore 1001). Verifica che l'istanza SQLPASS sia attiva e raggiungibile (servizio MSSQL$SQLPASS avviato).";
+            }
+
+            return rebootPending
+                ? "Errore SQL durante l'installazione (Errore 1001). Riavvia Windows (se richiesto) e riprova."
+                : "Errore SQL durante l'installazione (Errore 1001). Verifica che SQLPASS sia installato e raggiungibile e che le credenziali siano corrette.";
+        }
+
+        if (rebootPending)
+            return "È presente un riavvio di Windows in sospeso: riavvia e riprova.";
+
+        return null;
+    }
+
+    private static string ReadTextTail(string path, int maxChars)
+    {
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            if (fs.Length <= 0) return string.Empty;
+            var maxBytes = Math.Min((long)maxChars * 2, 256_000);
+            var toRead = (int)Math.Min(fs.Length, maxBytes);
+            fs.Seek(-toRead, SeekOrigin.End);
+            var buf = new byte[toRead];
+            var read = fs.Read(buf, 0, toRead);
+            if (read <= 0) return string.Empty;
+
+            try
+            {
+                return Encoding.UTF8.GetString(buf, 0, read);
+            }
+            catch
+            {
+                return Encoding.Default.GetString(buf, 0, read);
+            }
+        }
+        catch
+        {
+            return string.Empty;
         }
     }
 
@@ -1776,6 +2751,15 @@ public sealed class MainViewModel : ObservableObject
         Kind = p.Kind,
         RelativePath = p.RelativePath,
         Arguments = p.Arguments,
+        ArgumentInputs = p.ArgumentInputs?.Select(x => new ArgumentInputDefinition
+        {
+            Key = x.Key,
+            Label = x.Label,
+            Description = x.Description,
+            DefaultValue = x.DefaultValue,
+            IsSecret = x.IsSecret,
+            IsRequired = x.IsRequired
+        }).ToList() ?? new(),
         DownloadUrl = p.DownloadUrl,
         DownloadBaseFolderUrl = p.DownloadBaseFolderUrl,
         DownloadSelectedFileName = p.DownloadSelectedFileName,
@@ -1823,21 +2807,6 @@ public sealed class MainViewModel : ObservableObject
         return dir;
     }
 
-    private static string? FindSetupExe(string extractedDir)
-    {
-        try
-        {
-            return Directory.EnumerateFiles(extractedDir, "setup.exe", SearchOption.AllDirectories)
-                .OrderBy(p => p.Count(c => c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar))
-                .ThenBy(p => p, StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     private static IReadOnlyList<string> FindExtractedMsis(string extractedDir)
     {
         try
@@ -1868,6 +2837,21 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    private static string? FindSetupExe(string extractedDir)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(extractedDir, "setup.exe", SearchOption.AllDirectories)
+                .OrderBy(p => p.Count(c => c == Path.DirectorySeparatorChar || c == Path.AltDirectorySeparatorChar))
+                .ThenBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static bool IsRunningAsAdmin()
     {
         try
@@ -1875,37 +2859,6 @@ public sealed class MainViewModel : ObservableObject
             using var identity = WindowsIdentity.GetCurrent();
             var principal = new WindowsPrincipal(identity);
             return principal.IsInRole(WindowsBuiltInRole.Administrator);
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static async Task<bool> LooksLikeDotNetZipSfxAsync(string exePath, System.Threading.CancellationToken ct)
-    {
-        try
-        {
-            if (!File.Exists(exePath)) return false;
-            await using var fs = new FileStream(exePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            var len = fs.Length;
-            if (len <= 0) return false;
-
-            var window = (int)Math.Min(4L * 1024 * 1024, len);
-            var buffer = new byte[window];
-            var read = await fs.ReadAsync(buffer.AsMemory(0, window), ct);
-            if (read <= 0) return false;
-
-            var text = Encoding.ASCII.GetString(buffer, 0, read);
-            if (text.Contains("DotNetZip", StringComparison.OrdinalIgnoreCase)) return true;
-            if (text.Contains("Ionic.Zip", StringComparison.OrdinalIgnoreCase)) return true;
-            if (text.Contains("Self Extractor", StringComparison.OrdinalIgnoreCase) &&
-                text.Contains("Zip", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            return false;
         }
         catch
         {
@@ -1936,70 +2889,6 @@ public sealed class MainViewModel : ObservableObject
         return false;
     }
 
-    private static bool IsLikelySelfExtractingArchiveExe(string exePath)
-    {
-        try
-        {
-            var info = new FileInfo(exePath);
-            if (!info.Exists) return false;
-            if (info.Length < 1024 * 1024) return false;
-
-            var patterns = new[]
-            {
-                new byte[] { 0x52, 0x61, 0x72, 0x21 },                         // "Rar!"
-                new byte[] { 0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C },             // 7z
-                new byte[] { 0x50, 0x4B, 0x03, 0x04 },                         // zip (PK..)
-            };
-
-            using var fs = new FileStream(exePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            var window = (int)Math.Min(2L * 1024 * 1024, fs.Length);
-
-            var head = new byte[window];
-            _ = fs.Read(head, 0, head.Length);
-            if (ContainsAnyPattern(head, patterns)) return true;
-
-            if (fs.Length > window)
-            {
-                fs.Seek(-window, SeekOrigin.End);
-                var tail = new byte[window];
-                _ = fs.Read(tail, 0, tail.Length);
-                if (ContainsAnyPattern(tail, patterns)) return true;
-            }
-
-            return false;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static bool ContainsAnyPattern(byte[] haystack, IReadOnlyList<byte[]> patterns)
-    {
-        foreach (var p in patterns)
-        {
-            if (IndexOf(haystack, p) >= 0) return true;
-        }
-        return false;
-    }
-
-    private static int IndexOf(byte[] haystack, byte[] needle)
-    {
-        if (needle.Length == 0) return 0;
-        if (haystack.Length < needle.Length) return -1;
-
-        for (var i = 0; i <= haystack.Length - needle.Length; i++)
-        {
-            var ok = true;
-            for (var j = 0; j < needle.Length; j++)
-            {
-                if (haystack[i + j] != needle[j]) { ok = false; break; }
-            }
-            if (ok) return i;
-        }
-        return -1;
-    }
-
     private async Task<ProcessResult> RunMsiWithAppProgressAsync(
         ProcessStepViewModel step,
         string msiPath,
@@ -2019,14 +2908,20 @@ public sealed class MainViewModel : ObservableObject
             transmissionMode: PipeTransmissionMode.Byte,
             options: PipeOptions.Asynchronous);
 
-        var workerArgs = BuildMsiWorkerArgs(pipeName, msiPath, msiArgs);
         var psi = new ProcessStartInfo
         {
             FileName = exePath,
-            Arguments = workerArgs,
             CreateNoWindow = true,
             UseShellExecute = runAsAdmin,
         };
+
+        psi.ArgumentList.Add("--msi-worker");
+        psi.ArgumentList.Add("--pipe");
+        psi.ArgumentList.Add(pipeName);
+        psi.ArgumentList.Add("--msi");
+        psi.ArgumentList.Add(msiPath);
+        psi.ArgumentList.Add("--msi-args");
+        psi.ArgumentList.Add(msiArgs ?? string.Empty);
 
         if (runAsAdmin)
             psi.Verb = "runas";
@@ -2059,6 +2954,7 @@ public sealed class MainViewModel : ObservableObject
 
         var exitCodeFromWorker = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var readCts = new System.Threading.CancellationTokenSource();
+        string? workerLogPath = null;
 
         var readTask = Task.Run(async () =>
         {
@@ -2091,7 +2987,10 @@ public sealed class MainViewModel : ObservableObject
                     {
                         case "start":
                             if (!string.IsNullOrWhiteSpace(msg.LogPath))
+                            {
+                                workerLogPath = msg.LogPath;
                                 _log.Info($"MSI log: {msg.LogPath}");
+                            }
                             if (!string.IsNullOrWhiteSpace(msg.Message))
                                 _log.AppendRaw("MSI", msg.Message);
                             break;
@@ -2132,7 +3031,10 @@ public sealed class MainViewModel : ObservableObject
                             if (!string.IsNullOrWhiteSpace(msg.Message))
                                 _log.AppendRaw("MSI", msg.Message);
                             if (!string.IsNullOrWhiteSpace(msg.LogPath))
+                            {
+                                workerLogPath = msg.LogPath;
                                 _log.Info($"MSI log: {msg.LogPath}");
+                            }
                             break;
                     }
                 }
@@ -2160,20 +3062,16 @@ public sealed class MainViewModel : ObservableObject
             exitCodeFromWorker.TrySetResult(proc.ExitCode);
 
         var exitCode = await exitCodeFromWorker.Task;
-        return new ProcessResult(exitCode, string.Empty, string.Empty);
-    }
+        if (exitCode != 0 && exitCode != 3010 && exitCode != 1641 && !string.IsNullOrWhiteSpace(workerLogPath))
+        {
+            var friendly = TryBuildFriendlyMsiFailureHint(workerLogPath);
+            var err = string.IsNullOrWhiteSpace(friendly)
+                ? $"MSI install failed. Log: {workerLogPath}"
+                : $"{friendly}\nLog: {workerLogPath}";
+            return new ProcessResult(exitCode, string.Empty, err);
+        }
 
-    private static string BuildMsiWorkerArgs(string pipeName, string msiPath, string msiArgs)
-    {
-        var sb = new StringBuilder();
-        sb.Append("--msi-worker ");
-        sb.Append("--pipe ");
-        sb.Append('"').Append(pipeName.Replace("\"", "\"\"")).Append("\" ");
-        sb.Append("--msi ");
-        sb.Append('"').Append(msiPath.Replace("\"", "\"\"")).Append("\" ");
-        sb.Append("--msi-args ");
-        sb.Append('"').Append((msiArgs ?? string.Empty).Replace("\"", "\"\"")).Append('"');
-        return sb.ToString();
+        return new ProcessResult(exitCode, string.Empty, string.Empty);
     }
 
     private sealed class MsiWorkerMessage
@@ -2365,7 +3263,7 @@ public sealed class MainViewModel : ObservableObject
 
     private void OpenSettings(SettingsSection initialSection, string? initialPortalId)
     {
-        var vm = new SettingsViewModel(_appUpdateService, _prefsService, _log, _dialogService, _presetIconService);
+        var vm = new SettingsViewModel(_appUpdateService, _prefsService, _themeService, _log, _dialogService, _presetIconService);
         vm.SelectedSection = initialSection;
         if (!string.IsNullOrWhiteSpace(initialPortalId))
             vm.SelectedPortal = vm.Portals.FirstOrDefault(p => string.Equals(p.Id, initialPortalId, StringComparison.OrdinalIgnoreCase));

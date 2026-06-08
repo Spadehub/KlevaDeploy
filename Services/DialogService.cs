@@ -1,6 +1,7 @@
 using KlevaDeploy.Models;
 using KlevaDeploy.Services.Interfaces;
 using KlevaDeploy.Views;
+using KlevaDeploy.ViewModels;
 using System.Windows;
 
 namespace KlevaDeploy.Services;
@@ -91,5 +92,32 @@ public sealed class DialogService : IDialogService
     {
         _prefs.SuppressRequiredProcessWarning = false;
         _prefs.Save();
+    }
+
+    public ArgumentPromptResponse ShowArgumentPrompt(string processName, string subtitle, IReadOnlyList<ArgumentInputDefinition> inputs, IReadOnlyDictionary<string, string> prefill)
+    {
+        var owner = Application.Current?.MainWindow;
+        if (owner is null)
+            return new ArgumentPromptResponse(ArgumentPromptChoice.Cancel, new Dictionary<string, string>());
+
+        var vm = new ArgumentPromptViewModel(processName, subtitle, inputs, prefill);
+        var dialog = new ArgumentPromptDialog(vm)
+        {
+            Owner = owner
+        };
+
+        var ok = dialog.ShowDialog() == true;
+        if (!ok || vm.Mode == ArgumentPromptMode.None)
+            return new ArgumentPromptResponse(ArgumentPromptChoice.Cancel, new Dictionary<string, string>());
+
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var i in vm.Items)
+        {
+            if (string.IsNullOrWhiteSpace(i.Key)) continue;
+            values[i.Key.Trim()] = i.Value ?? string.Empty;
+        }
+
+        var choice = vm.Mode == ArgumentPromptMode.RunAlways ? ArgumentPromptChoice.RunAlways : ArgumentPromptChoice.RunOnce;
+        return new ArgumentPromptResponse(choice, values);
     }
 }

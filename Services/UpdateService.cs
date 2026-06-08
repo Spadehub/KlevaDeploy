@@ -92,7 +92,7 @@ public sealed class UpdateService : IUpdateService
         if (string.IsNullOrWhiteSpace(process.DownloadUrl)) return false;
         if (string.IsNullOrWhiteSpace(process.RelativePath)) return false;
 
-        var localPath = Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+        var localPath = ResolveLocalPath(process.RelativePath);
         if (!File.Exists(localPath)) return false;
 
         var storageDir = GetStorageDir();
@@ -102,6 +102,56 @@ public sealed class UpdateService : IUpdateService
         var expected = NormalizeAbsoluteUrl(process.DownloadUrl);
         var actual = NormalizeAbsoluteUrl(entry.LastDownloadedFromUrl);
         return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ResolveLocalPath(string path) =>
+        Path.IsPathRooted(path) ? path : Path.Combine(AppContext.BaseDirectory, path);
+
+    private static void EnsureInstallerRelativePath(DeploymentProcess process, string remoteUrl)
+    {
+        if (!string.IsNullOrWhiteSpace(process.RelativePath) && Path.HasExtension(process.RelativePath))
+            return;
+
+        var fileName = "installer.exe";
+        if (Uri.TryCreate(remoteUrl, UriKind.Absolute, out var uri))
+        {
+            var fromUrl = Path.GetFileName(uri.LocalPath);
+            if (!string.IsNullOrWhiteSpace(fromUrl))
+                fileName = fromUrl;
+        }
+
+        fileName = SanitizeFileName(fileName);
+        var id = SanitizeFileName(string.IsNullOrWhiteSpace(process.Id) ? process.Name : process.Id);
+        if (string.IsNullOrWhiteSpace(id))
+            id = "installer";
+
+        process.RelativePath = Path.Combine("Data", "installers", id, fileName);
+    }
+
+    private static string SanitizeFileName(string? value)
+    {
+        var name = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            return string.Empty;
+
+        var invalid = Path.GetInvalidFileNameChars();
+        Span<char> buffer = stackalloc char[name.Length];
+        var idx = 0;
+        foreach (var ch in name)
+        {
+            var safe = ch;
+            foreach (var bad in invalid)
+            {
+                if (safe == bad)
+                {
+                    safe = '_';
+                    break;
+                }
+            }
+            buffer[idx++] = safe;
+        }
+
+        return new string(buffer[..idx]).Trim();
     }
 
     private async Task UpdateSingleInstallerInternalAsync(
@@ -139,7 +189,8 @@ public sealed class UpdateService : IUpdateService
             return;
         }
 
-        var localPath = Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+        EnsureInstallerRelativePath(process, remoteUrl);
+        var localPath = ResolveLocalPath(process.RelativePath);
         var dir = Path.GetDirectoryName(localPath);
         if (dir is not null) Directory.CreateDirectory(dir);
 

@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon Condition="Exists('Assets\Brand\KlevaDeploy.ico')">Assets\Brand\KlevaDeploy.ico</ApplicationIcon>
     <AssemblyName>KlevaDeploy</AssemblyName>
     <RootNamespace>KlevaDeploy</RootNamespace>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
@@ -33,15 +34,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Defaults\portals.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Defaults\Imports\*.kdp.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Assets\Brand\*.png">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
+    <EmbeddedResource Include="Defaults\portals.json" />
+    <EmbeddedResource Include="Defaults\Imports\*.kdp.json" />
+    <EmbeddedResource Include="appsettings.json" />
+
+    <Resource Include="Assets\Brand\*.png" />
+    <Resource Include="Assets\Brand\*.ico" />
   </ItemGroup>
 
 </Project>

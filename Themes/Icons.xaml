@@ -161,4 +161,52 @@
         </DrawingImage.Drawing>
     </DrawingImage>
 
+    <DrawingImage x:Key="IconChevronUp" x:Shared="False">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}"
+                             Geometry="M7.41,14.59 L12,10 L16.59,14.59 L18,13.17 L12,7.17 L6,13.17 Z"/>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <DrawingImage x:Key="IconChevronDown" x:Shared="False">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}"
+                             Geometry="M7.41,9.41 L12,14 L16.59,9.41 L18,10.83 L12,16.83 L6,10.83 Z"/>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <DrawingImage x:Key="IconPending" x:Shared="False">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="{x:Null}">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="{DynamicResource TextSecondaryBrush}" Thickness="2"/>
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        M12,2 A10,10 0 1 0 22,12 A10,10 0 0 0 12,2 Z
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="{DynamicResource TextSecondaryBrush}"
+                                 Geometry="M12,6 L12,12.5 L16,14.5 L17,12.77 L14,11.2 L14,6 Z"/>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <DrawingImage x:Key="IconCheckCircle" x:Shared="False">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="{x:Null}">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="{DynamicResource SuccessBrush}" Thickness="2"/>
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        M12,2 A10,10 0 1 0 22,12 A10,10 0 0 0 12,2 Z
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="{DynamicResource SuccessBrush}"
+                                 Geometry="M10,16.17 L6.5,12.67 L5.09,14.09 L10,19 L19,10 L17.59,8.59 Z"/>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
 </ResourceDictionary>

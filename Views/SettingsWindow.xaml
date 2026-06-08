@@ -1,6 +1,7 @@
 <Window x:Class="KlevaDeploy.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:KlevaDeploy.Models"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Impostazioni"
         Width="900" Height="620"
@@ -229,6 +230,25 @@
                                                        Margin="0,6,0,0"
                                                        Foreground="{DynamicResource TextSecondaryBrush}"
                                                        TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Style="{StaticResource Win11Card}" Margin="0,12,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Aspetto"
+                                                       Style="{StaticResource Win11TextSubtitle}"/>
+                                            <TextBlock Text="Stile tema"
+                                                       Margin="0,10,0,0"
+                                                       Foreground="{DynamicResource TextSecondaryBrush}"/>
+                                            <ComboBox Style="{StaticResource Win11ComboBox}"
+                                                      Margin="0,6,0,0"
+                                                      Width="260"
+                                                      HorizontalAlignment="Left"
+                                                      SelectedValuePath="Tag"
+                                                      SelectedValue="{Binding ThemeStyle, Mode=TwoWay}">
+                                                <ComboBoxItem Content="Win11 (Default)" Tag="{x:Static models:AppThemeStyle.Default}"/>
+                                                <ComboBoxItem Content="Windows 11 Fluent (più pulito)" Tag="{x:Static models:AppThemeStyle.FluentClean}"/>
+                                            </ComboBox>
                                         </StackPanel>
                                     </Border>
 

@@ -1,0 +1,16 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#FFF7F8FA"/>
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFFFF"/>
+    <SolidColorBrush x:Key="SurfaceElevatedBrush" Color="#FFF2F4F7"/>
+    <SolidColorBrush x:Key="BorderBrush" Color="#FFE3E6EA"/>
+    <SolidColorBrush x:Key="SidebarBrush" Color="#FFF1F3F6"/>
+    <SolidColorBrush x:Key="ToolbarBrush" Color="#FFF6F7F9"/>
+    <SolidColorBrush x:Key="HoverBrush" Color="#FFEDEFF2"/>
+    <SolidColorBrush x:Key="IconButtonHoverBrush" Color="#FFE6E8EC"/>
+    <SolidColorBrush x:Key="IconButtonPressedBrush" Color="#FFDDE0E5"/>
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FF5F6368"/>
+    <SolidColorBrush x:Key="TextDisabledBrush" Color="#FFB0B4BA"/>
+    <SolidColorBrush x:Key="ScrollFadeOverlayBrush" Color="#FFF7F8FA"/>
+    <SolidColorBrush x:Key="OutputLineHoverBrush" Color="#22000000"/>
+</ResourceDictionary>

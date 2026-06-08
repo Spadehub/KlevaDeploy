@@ -8,6 +8,7 @@ namespace KlevaDeploy.Services;
 public sealed class InstallerService : IInstallerService
 {
     private readonly ILogService _log;
+    private readonly IAppConfigService _config;
     private readonly string _baseDir = AppContext.BaseDirectory;
     private readonly string _storageDir;
     private readonly string _presetsFilePath;
@@ -19,9 +20,10 @@ public sealed class InstallerService : IInstallerService
     private IReadOnlyList<DeploymentProcess> _cachedProcesses = Array.Empty<DeploymentProcess>();
     private IReadOnlyList<DeploymentPreset> _cachedPresets = Array.Empty<DeploymentPreset>();
 
-    public InstallerService(ILogService log)
+    public InstallerService(ILogService log, IAppConfigService config)
     {
         _log = log;
+        _config = config;
         _storageDir = GetStorageDir();
         _presetsFilePath = Path.Combine(_storageDir, "custom_presets.json");
         _processesFilePath = Path.Combine(_storageDir, "custom_processes.json");
@@ -42,11 +44,13 @@ public sealed class InstallerService : IInstallerService
     {
         try
         {
+            var needsSave = false;
+
             if (File.Exists(_processesFilePath))
             {
                 var json = File.ReadAllText(_processesFilePath);
                 _userCreatedProcesses = JsonSerializer.Deserialize<List<DeploymentProcess>>(json) ?? new();
-                NormalizeInstallerProcesses(_userCreatedProcesses);
+                needsSave |= NormalizeInstallerProcesses(_userCreatedProcesses);
                 _log.Info($"Loaded {_userCreatedProcesses.Count} custom processes from storage.");
             }
             
@@ -56,6 +60,9 @@ public sealed class InstallerService : IInstallerService
                 _userCreatedPresets = JsonSerializer.Deserialize<List<DeploymentPreset>>(json) ?? new();
                 _log.Info($"Loaded {_userCreatedPresets.Count} custom presets from storage.");
             }
+
+            if (needsSave)
+                SaveUserStorage();
         }
         catch (Exception ex)
         {
@@ -603,11 +610,26 @@ public sealed class InstallerService : IInstallerService
         _cachedProcesses = merged;
     }
 
-    private static void NormalizeInstallerProcesses(List<DeploymentProcess> processes)
+    private bool NormalizeInstallerProcesses(List<DeploymentProcess> processes)
     {
+        var changed = false;
+        var normalization = _config.Config.InstallerService.Normalization;
+
         foreach (var p in processes)
         {
             if (p.Kind != ProcessKind.Installer) continue;
+
+            var originalDownloadUrl = p.DownloadUrl;
+            var originalDownloadBase = p.DownloadBaseFolderUrl;
+
+            p.DownloadUrl = ApplyKnownUrlFixups(NormalizeAbsoluteUrl(p.DownloadUrl));
+            p.DownloadBaseFolderUrl = NormalizeAbsoluteUrl(p.DownloadBaseFolderUrl);
+
+            if (!string.Equals(originalDownloadUrl, p.DownloadUrl, StringComparison.Ordinal) ||
+                !string.Equals(originalDownloadBase, p.DownloadBaseFolderUrl, StringComparison.Ordinal))
+            {
+                changed = true;
+            }
 
             var inferred =
                 !string.IsNullOrWhiteSpace(p.DownloadBaseFolderUrl) ? InstallerSourceMode.DynamicWeb :
@@ -650,6 +672,51 @@ public sealed class InstallerService : IInstallerService
                 }
             }
         }
+
+        return changed;
+    }
+
+    private static string NormalizeAbsoluteUrl(string? value)
+    {
+        var raw = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+
+        if (Uri.TryCreate(raw, UriKind.Absolute, out _)) return raw;
+        if (!raw.Contains("://", StringComparison.Ordinal) &&
+            Uri.TryCreate("https://" + raw, UriKind.Absolute, out _))
+        {
+            return "https://" + raw;
+        }
+
+        return raw;
+    }
+
+    private static string ApplyKnownUrlFixups(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return string.Empty;
+
+        if (string.Equals(
+                url,
+                "https://download.microsoft.com/download/5/1/4/-4d30-4b85-b0d1-39533663a2f1/SQL2022-SSEI-Expr.exe",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return "https://download.microsoft.com/download/5/1/4/5145fe04-4d30-4b85-b0d1-39533663a2f1/SQL2022-SSEI-Expr.exe";
+        }
+
+        return url;
+    }
+
+    private static string TryGetDataRelativePath(string? path)
+    {
+        var rel = (path ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(rel)) return string.Empty;
+        if (Path.IsPathRooted(rel)) return string.Empty;
+
+        var normalized = rel.Replace('/', '\\').TrimStart('\\');
+        if (!normalized.StartsWith("Data\\", StringComparison.OrdinalIgnoreCase))
+            return string.Empty;
+
+        return normalized["Data\\".Length..];
     }
 
     private static string SanitizeFileName(string? fileName)

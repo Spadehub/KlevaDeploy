@@ -96,23 +96,29 @@ public sealed class ProcessExecutionService : IProcessExecutionService
 
     public async Task<ProcessResult> RunAsync(string executablePath, string arguments, bool runAsAdmin = false, CancellationToken ct = default)
     {
-        _log.Info(BuildStartProcessMessage(executablePath, arguments, runAsAdmin));
-
         var storageDir = GetStorageDir();
         var tempDir = GetTempDir(storageDir);
         try { Directory.CreateDirectory(tempDir); } catch { }
 
         string? adminCapturePath = null;
+        string? adminWrapperPath = null;
         var captureAdminOutputToFile = runAsAdmin;
 
         if (captureAdminOutputToFile)
             adminCapturePath = Path.Combine(tempDir, $"KlevaDeploy_{Guid.NewGuid():N}.out.txt");
 
+        if (captureAdminOutputToFile)
+        {
+            adminWrapperPath = Path.Combine(tempDir, $"KlevaDeploy_{Guid.NewGuid():N}.admin.ps1");
+            var wrapper = BuildAdminCaptureWrapperPs1(executablePath, arguments, adminCapturePath!, storageDir, tempDir);
+            await File.WriteAllTextAsync(adminWrapperPath, wrapper, Encoding.UTF8, ct);
+        }
+
         var psi = new ProcessStartInfo
         {
-            FileName = captureAdminOutputToFile ? "cmd.exe" : executablePath,
+            FileName = captureAdminOutputToFile ? "powershell.exe" : executablePath,
             Arguments = captureAdminOutputToFile
-                ? BuildCmdCaptureArguments(executablePath, arguments, adminCapturePath!, storageDir, tempDir)
+                ? $"-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File \"{adminWrapperPath}\""
                 : arguments,
             CreateNoWindow = true,
             UseShellExecute = runAsAdmin,
@@ -206,6 +212,10 @@ public sealed class ProcessExecutionService : IProcessExecutionService
                         _log.AppendRaw("STDOUT", line);
                     }
                 }
+                else
+                {
+                    _log.AppendRaw("STDOUT", $"Admin process output capture file not found: {adminCapturePath}");
+                }
             }
             catch (Exception ex)
             {
@@ -213,34 +223,59 @@ public sealed class ProcessExecutionService : IProcessExecutionService
             }
             finally
             {
-                try { File.Delete(adminCapturePath); } catch { }
+                if (process.ExitCode == 0)
+                {
+                    try { File.Delete(adminCapturePath); } catch { }
+                    if (adminWrapperPath is not null)
+                    {
+                        try { File.Delete(adminWrapperPath); } catch { }
+                    }
+                }
+                else
+                {
+                    _log.AppendRaw("STDOUT", $"Admin process output captured at: {adminCapturePath}");
+                    if (adminWrapperPath is not null)
+                        _log.AppendRaw("STDOUT", $"Admin wrapper script kept for debugging: {adminWrapperPath}");
+                }
             }
         }
 
         var result = new ProcessResult(process.ExitCode, stdOut.ToString(), stdErr.ToString());
-        _log.Info($"Process exited with code {result.ExitCode}");
+        if (result.ExitCode != 0)
+            _log.Warning($"Process exited with code {result.ExitCode}");
         return result;
     }
 
     public async Task<ProcessResult> RunPowerShellAsync(string scriptPathOrContent, bool isInlineScript, bool runAsAdmin = false, CancellationToken ct = default)
     {
-        _log.Info($"Running PowerShell script (Inline: {isInlineScript}, RunAsAdmin: {runAsAdmin})");
-
         string arguments;
         if (isInlineScript)
         {
             var tempPs1 = Path.Combine(GetTempDir(), $"KlevaDeploy_{Guid.NewGuid():N}.ps1");
             await File.WriteAllTextAsync(tempPs1, scriptPathOrContent, Encoding.UTF8, ct);
-            _log.Info($"Inline PowerShell script written to: {tempPs1}");
 
+            ProcessResult? result = null;
             try
             {
                 arguments = $"-ExecutionPolicy Bypass -NoProfile -File \"{tempPs1}\"";
-                return await RunAsync("powershell.exe", arguments, runAsAdmin, ct);
+                result = await RunAsync("powershell.exe", arguments, runAsAdmin, ct);
+                if (result.ExitCode == 0)
+                {
+                    try { File.Delete(tempPs1); } catch { }
+                }
+                else
+                {
+                    _log.AppendRaw("STDOUT", "Inline PowerShell script kept for debugging.");
+                }
+
+                return result;
             }
             finally
             {
-                try { File.Delete(tempPs1); } catch { }
+                if (!runAsAdmin || result is null || result.ExitCode == 0)
+                {
+                    try { File.Delete(tempPs1); } catch { }
+                }
             }
         }
         
@@ -253,21 +288,32 @@ public sealed class ProcessExecutionService : IProcessExecutionService
 
     public async Task<ProcessResult> RunBatchAsync(string scriptPathOrContent, bool isInlineScript, bool runAsAdmin = false, CancellationToken ct = default)
     {
-        _log.Info($"Running Batch script (Inline: {isInlineScript}, RunAsAdmin: {runAsAdmin})");
-
         if (isInlineScript)
         {
             var tempBatchFile = Path.Combine(GetTempDir(), $"KlevaDeploy_{Guid.NewGuid():N}.bat");
             await File.WriteAllTextAsync(tempBatchFile, scriptPathOrContent, ct);
-            _log.Info($"Inline batch script written to: {tempBatchFile}");
 
+            ProcessResult? result = null;
             try
             {
-                return await RunAsync("cmd.exe", $"/c \"{tempBatchFile}\"", runAsAdmin, ct);
+                result = await RunAsync("cmd.exe", $"/c \"{tempBatchFile}\"", runAsAdmin, ct);
+                if (result.ExitCode == 0)
+                {
+                    try { File.Delete(tempBatchFile); } catch { }
+                }
+                else
+                {
+                    _log.AppendRaw("STDOUT", "Inline batch script kept for debugging.");
+                }
+
+                return result;
             }
             finally
             {
-                try { File.Delete(tempBatchFile); } catch { }
+                if (!runAsAdmin || result is null || result.ExitCode == 0)
+                {
+                    try { File.Delete(tempBatchFile); } catch { }
+                }
             }
         }
 
@@ -279,14 +325,11 @@ public sealed class ProcessExecutionService : IProcessExecutionService
 
     public async Task<ProcessResult> RunBashAsync(string scriptPathOrContent, bool isInlineScript, CancellationToken ct = default)
     {
-        _log.Info($"Running Bash script (Inline: {isInlineScript})");
-
         string arguments;
         if (isInlineScript)
         {
             var tempSh = Path.Combine(GetTempDir(), $"KlevaDeploy_{Guid.NewGuid():N}.sh");
             await File.WriteAllTextAsync(tempSh, scriptPathOrContent, Encoding.UTF8, ct);
-            _log.Info($"Inline bash script written to: {tempSh}");
 
             try
             {
@@ -467,16 +510,6 @@ public sealed class ProcessExecutionService : IProcessExecutionService
                string.Equals(name, "7za.exe", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string BuildStartProcessMessage(string executablePath, string arguments, bool runAsAdmin)
-    {
-        var exeName = Path.GetFileName(executablePath);
-        if (string.IsNullOrWhiteSpace(exeName))
-            exeName = executablePath;
-
-        var compact = $"{exeName} {CompactArguments(exeName, arguments)}".Trim();
-        return $"Starting process: {compact} (RunAsAdmin: {runAsAdmin})";
-    }
-
     private static string BuildTerminalCommandLine(string? workingDirectory, string executablePath, string arguments, bool runAsAdmin)
     {
         var wd = string.IsNullOrWhiteSpace(workingDirectory) ? Directory.GetCurrentDirectory() : workingDirectory;
@@ -484,12 +517,85 @@ public sealed class ProcessExecutionService : IProcessExecutionService
         if (!Path.IsPathRooted(exe))
             exe = Path.GetFileName(exe) ?? executablePath;
 
-        var args = (arguments ?? string.Empty).Trim();
+        var exeName = Path.GetFileName(executablePath) ?? executablePath;
+        var args = SanitizeArgumentsForDisplay(exeName, arguments);
         var cmd = args.Length == 0
             ? $"PS {wd}> & \"{exe}\""
             : $"PS {wd}> & \"{exe}\" {args}";
 
         return runAsAdmin ? $"{cmd}  (admin)" : cmd;
+    }
+
+    private static string SanitizeArgumentsForDisplay(string exeName, string? arguments)
+    {
+        var args = (arguments ?? string.Empty).Trim();
+        if (args.Length == 0) return string.Empty;
+
+        args = RedactArgumentValue(args, "/SAPWD=");
+        args = RedactArgumentValue(args, "SAPWD=");
+        args = RedactArgumentValue(args, "PASSWORDDATABASE=");
+        args = RedactArgumentValue(args, "PASSWORD=");
+
+        if (string.Equals(exeName, "powershell.exe", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(exeName, "pwsh.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            args = ReplaceTempInlineScriptPath(args, ".ps1");
+        }
+        else if (string.Equals(exeName, "cmd.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            args = ReplaceTempInlineScriptPath(args, ".bat");
+        }
+        else if (string.Equals(exeName, "bash.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            args = ReplaceTempInlineScriptPath(args, ".sh");
+        }
+
+        return args;
+    }
+
+    private static string ReplaceTempInlineScriptPath(string args, string extension)
+    {
+        var idx = args.IndexOf("KlevaDeploy_", StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return args;
+
+        var extIdx = args.IndexOf(extension, idx, StringComparison.OrdinalIgnoreCase);
+        if (extIdx < 0) return args;
+
+        var end = extIdx + extension.Length;
+        var start = idx;
+        while (start > 0 && args[start - 1] != '"' && !char.IsWhiteSpace(args[start - 1]))
+            start--;
+
+        var token = args.Substring(start, end - start);
+        var fileName = token.Trim('"');
+        var lastSlash = Math.Max(fileName.LastIndexOf('\\'), fileName.LastIndexOf('/'));
+        if (lastSlash >= 0 && lastSlash + 1 < fileName.Length)
+            fileName = fileName[(lastSlash + 1)..];
+
+        var replacement = token.StartsWith("\"", StringComparison.Ordinal) ? $"\"{fileName}\"" : fileName;
+        return args.Replace(token, replacement, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string RedactArgumentValue(string args, string token)
+    {
+        var idx = args.IndexOf(token, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return args;
+
+        var start = idx + token.Length;
+        if (start >= args.Length) return args;
+
+        if (args[start] == '"')
+        {
+            var end = args.IndexOf('"', start + 1);
+            if (end < 0) return args.Substring(0, start + 1) + "*****" + "\"";
+            return args.Substring(0, start + 1) + "*****" + args.Substring(end);
+        }
+
+        var stop = start;
+        while (stop < args.Length && !char.IsWhiteSpace(args[stop]))
+            stop++;
+
+        return args.Substring(0, start) + "*****" + args.Substring(stop);
     }
 
     private static string CompactArguments(string exeName, string arguments)
@@ -689,6 +795,66 @@ public sealed class ProcessExecutionService : IProcessExecutionService
         return string.IsNullOrWhiteSpace(arguments)
             ? $"/c \"{prefix}\"\"{exe}\" > \"{outPath}\" 2>&1\""
             : $"/c \"{prefix}\"\"{exe}\" {arguments} > \"{outPath}\" 2>&1\"";
+    }
+
+    private static string BuildAdminCaptureWrapperPs1(string executablePath, string arguments, string outputPath, string storageDir, string tempDir)
+    {
+        var exeB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(executablePath ?? string.Empty));
+        var argsB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(arguments ?? string.Empty));
+
+        var outPath = outputPath.Replace("'", "''");
+        var dataDir = storageDir.Replace("'", "''");
+        var tmpDir = tempDir.Replace("'", "''");
+
+        var sb = new StringBuilder();
+        sb.AppendLine("$ErrorActionPreference = 'Stop'");
+        sb.AppendLine($"$out = '{outPath}'");
+        sb.AppendLine($"$dataDir = '{dataDir}'");
+        sb.AppendLine($"$tmpDir = '{tmpDir}'");
+        sb.AppendLine("$stdout = $out + '.stdout'");
+        sb.AppendLine("$stderr = $out + '.stderr'");
+        sb.AppendLine("Remove-Item -Path $out, $stdout, $stderr -ErrorAction SilentlyContinue | Out-Null");
+        sb.AppendLine("New-Item -Path $out -ItemType File -Force | Out-Null");
+        sb.AppendLine("Add-Content -Path $out -Value ('[KlevaDeploy admin wrapper] ' + (Get-Date).ToString('s'))");
+        sb.AppendLine("");
+        sb.AppendLine("$env:KLEVADEPLOY_STORAGE_DIR = $dataDir");
+        sb.AppendLine("$env:KLEVADEPLOY_DATA_DIR = $dataDir");
+        sb.AppendLine("$env:KLEVADEPLOY_TEMP_DIR = $tmpDir");
+        sb.AppendLine("$env:TEMP = $tmpDir");
+        sb.AppendLine("$env:TMP = $tmpDir");
+        sb.AppendLine("");
+        sb.AppendLine($"$exe = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{exeB64}'))");
+        sb.AppendLine($"$args = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{argsB64}'))");
+        sb.AppendLine("if ([string]::IsNullOrWhiteSpace($exe)) { Add-Content -Path $out -Value 'Executable path missing.'; exit 1 }");
+        sb.AppendLine("");
+        sb.AppendLine("try {");
+        sb.AppendLine("  $psi = New-Object System.Diagnostics.ProcessStartInfo");
+        sb.AppendLine("  $psi.FileName = $exe");
+        sb.AppendLine("  $psi.Arguments = $args");
+        sb.AppendLine("  $psi.WorkingDirectory = $tmpDir");
+        sb.AppendLine("  $psi.UseShellExecute = $false");
+        sb.AppendLine("  $psi.CreateNoWindow = $true");
+        sb.AppendLine("  $psi.RedirectStandardOutput = $true");
+        sb.AppendLine("  $psi.RedirectStandardError = $true");
+        sb.AppendLine("  $p = New-Object System.Diagnostics.Process");
+        sb.AppendLine("  $p.StartInfo = $psi");
+        sb.AppendLine("  $null = $p.Start()");
+        sb.AppendLine("  $outText = $p.StandardOutput.ReadToEnd()");
+        sb.AppendLine("  $errText = $p.StandardError.ReadToEnd()");
+        sb.AppendLine("  $p.WaitForExit()");
+        sb.AppendLine("  if (-not [string]::IsNullOrEmpty($outText)) { Set-Content -Path $stdout -Value $outText -Encoding UTF8 }");
+        sb.AppendLine("  if (-not [string]::IsNullOrEmpty($errText)) { Set-Content -Path $stderr -Value $errText -Encoding UTF8 }");
+        sb.AppendLine("} catch {");
+        sb.AppendLine("  Add-Content -Path $out -Value ('Failed to start process: ' + $_.Exception.Message)");
+        sb.AppendLine("  exit 1");
+        sb.AppendLine("}");
+        sb.AppendLine("");
+        sb.AppendLine("if (Test-Path $stdout) { Get-Content -Path $stdout -ErrorAction SilentlyContinue | Add-Content -Path $out }");
+        sb.AppendLine("if (Test-Path $stderr) { Get-Content -Path $stderr -ErrorAction SilentlyContinue | Add-Content -Path $out }");
+        sb.AppendLine("Remove-Item -Path $stdout, $stderr -ErrorAction SilentlyContinue | Out-Null");
+        sb.AppendLine("exit $p.ExitCode");
+
+        return sb.ToString();
     }
 
     private static string ReadTextWithBomFallback(string path)

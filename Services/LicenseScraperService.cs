@@ -10,21 +10,21 @@ public sealed class LicenseScraperService : ILicenseScraperService
 {
     private readonly HttpClient _httpClient;
     private readonly ILogService _log;
+    private readonly LicenseScraperServiceConfig _cfg;
 
-    // TODO: Update to the real Excel download URL on the Passepartout portal
-    private const string LicenseExcelUrl = "https://www.passepartout.net/area-riservata/licenze.xlsx";
-
-    public LicenseScraperService(HttpClient httpClient, ILogService log)
+    public LicenseScraperService(HttpClient httpClient, ILogService log, IAppConfigService config)
     {
         _httpClient = httpClient;
         _log = log;
+        _cfg = config.Config.LicenseScraperService;
     }
 
     public async Task<IReadOnlyList<LicenseEntry>> FetchLicensesAsync(CancellationToken ct = default)
     {
         _log.Info("Downloading license Excel from Passepartout portal...");
 
-        var bytes = await _httpClient.GetByteArrayAsync(LicenseExcelUrl, ct);
+        var url = (_cfg.LicenseExcelUrl ?? string.Empty).Trim();
+        var bytes = await _httpClient.GetByteArrayAsync(url, ct);
         _log.Info($"Excel downloaded ({bytes.Length} bytes). Parsing...");
 
         using var stream = new MemoryStream(bytes);

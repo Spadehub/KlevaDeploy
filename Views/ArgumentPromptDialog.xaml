@@ -1,0 +1,171 @@
+<Window x:Class="KlevaDeploy.Views.ArgumentPromptDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="Parametri"
+        Width="560" Height="520"
+        MinWidth="520" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="False"
+        ResizeMode="CanResize"
+        ShowInTaskbar="False"
+        Background="{DynamicResource AppBackgroundBrush}"
+        FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="40"
+                      ResizeBorderThickness="6"
+                      GlassFrameThickness="0,0,0,1"
+                      UseAeroCaptionButtons="False"
+                      CornerRadius="12"/>
+    </WindowChrome.WindowChrome>
+
+    <Border Background="{DynamicResource AppBackgroundBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="12">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="40"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Border x:Name="TitleBar"
+                    Grid.Row="0"
+                    Background="{DynamicResource SurfaceElevatedBrush}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    CornerRadius="12,12,0,0"
+                    Padding="14,0,6,0"
+                    shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Source="{DynamicResource IconSettings}"
+                               Width="16" Height="16"
+                               Margin="0,0,10,0"
+                               VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                        <TextBlock Text="{Binding ProcessName}"
+                                   Style="{StaticResource Win11TextBody}"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <Button x:Name="BtnClose"
+                            Grid.Column="1"
+                            Content="✕"
+                            Width="38"
+                            Height="28"
+                            Padding="0"
+                            Style="{StaticResource Win11CloseButton}"
+                            VerticalAlignment="Center"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True"/>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1" Margin="24,18,24,22">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="12"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="14"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0"
+                           Text="{Binding Subtitle}"
+                           TextWrapping="Wrap"
+                           Style="{StaticResource Win11TextBody}"
+                           Foreground="{DynamicResource TextSecondaryBrush}"/>
+
+                <ScrollViewer Grid.Row="2"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding Items}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource CornerRadiusSmall}"
+                                        Padding="12"
+                                        Margin="0,0,0,10">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="6"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Label}"
+                                                       Style="{StaticResource Win11TextBody}"
+                                                       FontWeight="SemiBold"/>
+                                            <TextBlock Text=" *"
+                                                       Margin="2,0,0,0"
+                                                       Foreground="{DynamicResource WarningBrush}"
+                                                       Visibility="{Binding IsRequired, Converter={StaticResource BoolToVisibility}}"/>
+                                        </StackPanel>
+
+                                        <TextBlock Grid.Row="2"
+                                                   Text="{Binding ReplacementHint}"
+                                                   Margin="0,0,0,6"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource Win11TextSecondary}"
+                                                   Visibility="{Binding ReplacementHint, Converter={StaticResource StringToVisibilityConverter}}"/>
+
+                                        <TextBox Grid.Row="3"
+                                                 Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                                                 Style="{StaticResource Win11TextBox}"
+                                                 Height="40"
+                                                 Visibility="{Binding IsSecret, Converter={StaticResource InverseBoolToVisibility}}"/>
+
+                                        <PasswordBox Grid.Row="3"
+                                                     Style="{StaticResource Win11PasswordBox}"
+                                                     Height="40"
+                                                     Visibility="{Binding IsSecret, Converter={StaticResource BoolToVisibility}}"
+                                                     Loaded="OnPasswordLoaded"
+                                                     PasswordChanged="OnPasswordChanged"/>
+
+                                        <TextBlock Grid.Row="4"
+                                                   Text="{Binding Description}"
+                                                   Margin="0,6,0,0"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource Win11TextSecondary}"
+                                                   Visibility="{Binding Description, Converter={StaticResource StringToVisibilityConverter}}"/>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="RunOnceButton"
+                            Content="Esegui solo questa volta"
+                            Style="{StaticResource Win11Button}"
+                            Height="34"
+                            Padding="14,0"
+                            Margin="0,0,10,0"
+                            IsEnabled="{Binding IsValid}"/>
+                    <Button x:Name="RunAlwaysButton"
+                            Content="Esegui sempre"
+                            Style="{StaticResource Win11AccentButton}"
+                            Height="34"
+                            Padding="16,0"
+                            IsEnabled="{Binding IsValid}"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

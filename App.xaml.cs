@@ -8,7 +8,9 @@ using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
+using System.Reflection;
 using System.Windows;
+using Microsoft.Win32;
 using KlevaDeploy.Services;
 using KlevaDeploy.Services.Interfaces;
 using KlevaDeploy.ViewModels;
@@ -24,6 +26,8 @@ public partial class App : Application
     {
         InstallCrashHandlers();
         EnsureStandaloneStorageEnvironment();
+        EnsureStandaloneBundledFiles();
+        ApplyConfigEnvironmentDefaults();
 
         try
         {
@@ -96,6 +100,22 @@ public partial class App : Application
         }
     }
 
+    private static void ApplyConfigEnvironmentDefaults()
+    {
+        try
+        {
+            var cfg = new AppConfigService().Config;
+            var secureKey = (cfg.Msi.SecureCustomPropertiesKey ?? string.Empty).Trim();
+            if (!string.IsNullOrWhiteSpace(secureKey))
+            {
+                Environment.SetEnvironmentVariable("KLEVADEPLOY_MSI_SECURECUSTOMPROPERTIES_KEY", secureKey, EnvironmentVariableTarget.Process);
+            }
+        }
+        catch
+        {
+        }
+    }
+
     private static bool IsRunningAsAdmin()
     {
         try
@@ -129,6 +149,68 @@ public partial class App : Application
             Environment.SetEnvironmentVariable("TMP", tempDir, EnvironmentVariableTarget.Process);
         }
         catch { }
+    }
+
+    private static void EnsureStandaloneBundledFiles()
+    {
+        try
+        {
+            var storageDir = Environment.GetEnvironmentVariable("KLEVADEPLOY_STORAGE_DIR");
+            if (string.IsNullOrWhiteSpace(storageDir))
+                storageDir = Path.Combine(AppContext.BaseDirectory, "Data");
+
+            Directory.CreateDirectory(storageDir);
+
+            var asm = Assembly.GetExecutingAssembly();
+            var names = asm.GetManifestResourceNames();
+            if (names is null || names.Length == 0) return;
+
+            const string defaultsPrefix = "KlevaDeploy.Defaults.";
+            const string importsPrefix = "KlevaDeploy.Defaults.Imports.";
+
+            foreach (var name in names)
+            {
+                if (string.IsNullOrWhiteSpace(name)) continue;
+
+                string? relativeOut = null;
+                if (string.Equals(name, "KlevaDeploy.appsettings.json", StringComparison.OrdinalIgnoreCase))
+                {
+                    relativeOut = "appsettings.json";
+                }
+                else if (name.StartsWith(importsPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    var fileName = name[importsPrefix.Length..];
+                    if (string.IsNullOrWhiteSpace(fileName)) continue;
+                    relativeOut = Path.Combine("Defaults", "Imports", fileName);
+                }
+                else if (name.StartsWith(defaultsPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    var fileName = name[defaultsPrefix.Length..];
+                    if (string.IsNullOrWhiteSpace(fileName)) continue;
+                    relativeOut = Path.Combine("Defaults", fileName);
+                }
+                else
+                {
+                    continue;
+                }
+
+                var outPath = Path.Combine(storageDir, relativeOut);
+                if (File.Exists(outPath)) continue;
+
+                var dir = Path.GetDirectoryName(outPath);
+                if (!string.IsNullOrWhiteSpace(dir))
+                    Directory.CreateDirectory(dir);
+
+                using var stream = asm.GetManifestResourceStream(name);
+                if (stream is null) continue;
+
+                using var fs = File.Create(outPath);
+                stream.CopyTo(fs);
+            }
+        }
+        catch
+        {
+        }
     }
 
     private static string QuoteArgument(string arg)
@@ -259,11 +341,29 @@ public partial class App : Application
 
         var logPath = Path.Combine(msiLogDir, $"msi_{DateTimeOffset.Now:yyyyMMdd_HHmmss}_{Environment.ProcessId}.log");
 
-        var fullArgs = BuildMsiCommandLineWithLog(msiArgs, logPath);
+        var fullArgs = BuildMsiInstallCommandLine(msiArgs);
 
         var state = new MsiProgressState();
         var callbackState = new MsiCallbackState(writer, state);
         var gcHandle = GCHandle.Alloc(callbackState);
+
+        var logMode =
+            NativeMsi.INSTALLLOGMODE_PROGRESS |
+            NativeMsi.INSTALLLOGMODE_FATALEXIT |
+            NativeMsi.INSTALLLOGMODE_ERROR |
+            NativeMsi.INSTALLLOGMODE_WARNING |
+            NativeMsi.INSTALLLOGMODE_USER |
+            NativeMsi.INSTALLLOGMODE_INFO |
+            NativeMsi.INSTALLLOGMODE_ACTIONSTART |
+            NativeMsi.INSTALLLOGMODE_ACTIONDATA |
+            NativeMsi.INSTALLLOGMODE_COMMONDATA |
+            NativeMsi.INSTALLLOGMODE_INITIALIZE |
+            NativeMsi.INSTALLLOGMODE_TERMINATE |
+            NativeMsi.INSTALLLOGMODE_SHOWDIALOG |
+            NativeMsi.INSTALLLOGMODE_RESOLVESOURCE |
+            NativeMsi.INSTALLLOGMODE_OUTOFDISKSPACE |
+            NativeMsi.INSTALLLOGMODE_FILESINUSE |
+            NativeMsi.INSTALLLOGMODE_RMFILESINUSE;
 
         var previousInternalUi = NativeMsi.MsiSetInternalUI(NativeMsi.INSTALLUILEVEL_NONE, IntPtr.Zero);
         NativeMsi.InstallUIHandlerRecord handler = MsiExternalUiHandlerRecord;
@@ -297,6 +397,7 @@ public partial class App : Application
         try
         {
             callbackState.LogPath = logPath;
+            _ = NativeMsi.MsiEnableLog(logMode, logPath, 0);
             var rc = NativeMsi.MsiInstallProduct(msiPath, fullArgs);
             var exit = unchecked((int)rc);
             WriteJsonLine(writer, new MsiWorkerMessage { Type = "done", ExitCode = exit, LogPath = logPath });
@@ -322,17 +423,102 @@ public partial class App : Application
         }
     }
 
-    private static string BuildMsiCommandLineWithLog(string args, string logPath)
+    private static string BuildMsiInstallCommandLine(string args)
     {
         var trimmed = (args ?? string.Empty).Trim();
         var safe = StripMsiUiSwitches(trimmed);
         safe = Environment.ExpandEnvironmentVariables(safe);
         safe = NormalizeKnownRetailAliases(safe);
+        safe = NormalizeSqlServerInstanceEndpoints(safe);
         safe = EnsureSecureCustomProperties(safe);
+        return safe.Trim();
+    }
 
-        var logArg = $"/l*v \"{logPath}\"";
-        if (string.IsNullOrWhiteSpace(safe)) return logArg;
-        return $"{logArg} {safe}".Trim();
+    private static string NormalizeSqlServerInstanceEndpoints(string args)
+    {
+        if (string.IsNullOrWhiteSpace(args)) return string.Empty;
+
+        static bool TryGetKeyValue(string token, out string key, out string value)
+        {
+            key = string.Empty;
+            value = string.Empty;
+
+            var t = (token ?? string.Empty).Trim();
+            if (t.Length == 0) return false;
+            if (t[0] == '/' || t[0] == '-') return false;
+
+            var eq = t.IndexOf('=');
+            if (eq <= 0 || eq >= t.Length - 1) return false;
+            key = t[..eq].Trim();
+            value = t[(eq + 1)..].Trim().Trim('"');
+            return key.Length > 0;
+        }
+
+        var tokens = TokenizeCommandLine(args);
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            if (!TryGetKeyValue(tokens[i], out var key, out var value)) continue;
+
+            if (!string.Equals(key, "IPSERVERDATABASE", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(key, "IpServerDatabase", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var resolved = TryResolveSqlServerTcpEndpoint(value);
+            if (string.IsNullOrWhiteSpace(resolved)) continue;
+            tokens[i] = $"{key}={resolved}";
+        }
+
+        return string.Join(' ', tokens).Trim();
+    }
+
+    private static string? TryResolveSqlServerTcpEndpoint(string value)
+    {
+        var trimmed = (value ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(trimmed)) return null;
+        if (!trimmed.Contains('\\')) return null;
+        if (trimmed.Contains(',')) return trimmed;
+
+        var parts = trimmed.Split(new[] { '\\' }, 2, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 2) return null;
+
+        var host = parts[0].Trim();
+        var instance = parts[1].Trim();
+        if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(instance)) return null;
+
+        var port = TryReadSqlInstanceTcpPort(instance);
+        if (string.IsNullOrWhiteSpace(port)) return null;
+
+        return $"{host},{port}";
+    }
+
+    private static string? TryReadSqlInstanceTcpPort(string instanceName)
+    {
+        if (string.IsNullOrWhiteSpace(instanceName)) return null;
+
+        var normalized = instanceName.Trim();
+        var candidates = new[]
+        {
+            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL16.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
+            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL15.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
+            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL14.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
+            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL13.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
+            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL12.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
+            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL11.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll"
+        };
+
+        foreach (var subKey in candidates)
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(subKey);
+            if (key is null) continue;
+
+            var tcpPort = key.GetValue("TcpPort") as string;
+            if (!string.IsNullOrWhiteSpace(tcpPort)) return tcpPort.Trim();
+
+            var dynamicPort = key.GetValue("TcpDynamicPorts") as string;
+            if (!string.IsNullOrWhiteSpace(dynamicPort)) return dynamicPort.Trim();
+        }
+
+        return null;
     }
 
     private static string NormalizeKnownRetailAliases(string args)
@@ -393,7 +579,8 @@ public partial class App : Application
     {
         if (string.IsNullOrWhiteSpace(args)) return string.Empty;
 
-        const string secureKey = "SECURECUSTOMPROPERTIES";
+        var secureKey = (Environment.GetEnvironmentVariable("KLEVADEPLOY_MSI_SECURECUSTOMPROPERTIES_KEY") ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(secureKey)) return args;
         var tokens = TokenizeCommandLine(args);
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var existingIdx = -1;
@@ -647,9 +834,21 @@ public partial class App : Application
             return NativeMsi.IDOK;
         }
 
+        if (msgType == NativeMsi.INSTALLMESSAGE_FILESINUSE ||
+            msgType == NativeMsi.INSTALLMESSAGE_RMFILESINUSE)
+        {
+            WriteJsonLine(state.Writer, new MsiWorkerMessage { Type = "warning", Message = "MSI reported files in use. Continuing automatically." });
+            return NativeMsi.IDIGNORE;
+        }
+
+        if (msgType == NativeMsi.INSTALLMESSAGE_SHOWDIALOG)
+        {
+            if (!string.IsNullOrWhiteSpace(message))
+                WriteJsonLine(state.Writer, new MsiWorkerMessage { Type = "info", Message = message });
+            return NativeMsi.IDOK;
+        }
+
         if (msgType == NativeMsi.INSTALLMESSAGE_RESOLVESOURCE ||
-            msgType == NativeMsi.INSTALLMESSAGE_FILESINUSE ||
-            msgType == NativeMsi.INSTALLMESSAGE_RMFILESINUSE ||
             msgType == NativeMsi.INSTALLMESSAGE_OUTOFDISKSPACE)
         {
             WriteJsonLine(state.Writer, new MsiWorkerMessage
@@ -734,6 +933,11 @@ public partial class App : Application
 
         public const int IDOK = 1;
         public const int IDCANCEL = 2;
+        public const int IDABORT = 3;
+        public const int IDRETRY = 4;
+        public const int IDIGNORE = 5;
+        public const int IDYES = 6;
+        public const int IDNO = 7;
 
         public const uint INSTALLMESSAGE_FATALEXIT = 0x00000000;
         public const uint INSTALLMESSAGE_ERROR = 0x01000000;
@@ -780,6 +984,9 @@ public partial class App : Application
 
         [DllImport("msi.dll", CharSet = CharSet.Unicode)]
         public static extern uint MsiInstallProduct(string szPackagePath, string szCommandLine);
+
+        [DllImport("msi.dll", CharSet = CharSet.Unicode)]
+        public static extern uint MsiEnableLog(uint dwLogMode, string szLogFile, uint dwLogAttributes);
 
         [DllImport("msi.dll")]
         public static extern int MsiRecordGetInteger(IntPtr hRecord, int iField);
@@ -834,6 +1041,7 @@ public partial class App : Application
         // Services
         services.AddSingleton<ILogService, LogService>();
         services.AddSingleton<IClipboardService, ClipboardService>();
+        services.AddSingleton<IAppConfigService, AppConfigService>();
         services.AddSingleton<IAuthService, AuthService>();
         services.AddSingleton<IPreferencesService, PreferencesService>();
         services.AddSingleton<IInstallerService, InstallerService>();

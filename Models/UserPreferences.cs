@@ -7,21 +7,25 @@ using System.Text.Json;
 namespace KlevaDeploy.Models;
 
 public enum AppTheme { Dark, Light }
+public enum AppThemeStyle { Default, FluentClean }
 public enum PresetsViewMode { List, Grid }
 
 public class UserPreferences
 {
     public AppTheme Theme { get; set; } = AppTheme.Dark;
+    public AppThemeStyle ThemeStyle { get; set; } = AppThemeStyle.Default;
     public bool SuppressRequiredProcessWarning { get; set; } = false;
     public PresetsViewMode PresetsViewMode { get; set; } = PresetsViewMode.List;
     public string? SelectedPortalId { get; set; }
     public List<PortalPreference> Portals { get; set; } = new();
+    public List<ProcessArgumentProfile> ProcessArgumentProfiles { get; set; } = new();
+    public Dictionary<string, int> ProcessOrderOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public string? SelectedPortalHomeUrl { get; set; }
     public List<string> RecentPortalHomeUrls { get; set; } = new();
 
     private static readonly string StoragePath = Path.Combine(GetStorageDir(), "user_preferences.json");
-    private static readonly string DefaultPortalsPath = Path.Combine(AppContext.BaseDirectory, "Defaults", "portals.json");
+    private static readonly string DefaultPortalsPath = Path.Combine(GetStorageDir(), "Defaults", "portals.json");
 
     private static string GetStorageDir()
     {
@@ -40,6 +44,10 @@ public class UserPreferences
                 var json = File.ReadAllText(StoragePath);
                 var prefs = JsonSerializer.Deserialize<UserPreferences>(json) ?? new UserPreferences();
                 prefs.RecentPortalHomeUrls ??= new();
+                prefs.ProcessArgumentProfiles ??= new();
+                prefs.ProcessOrderOverrides = prefs.ProcessOrderOverrides is null
+                    ? new(StringComparer.OrdinalIgnoreCase)
+                    : new Dictionary<string, int>(prefs.ProcessOrderOverrides, StringComparer.OrdinalIgnoreCase);
 
                 prefs.Portals ??= new();
                 if (prefs.Portals.Count == 0)
@@ -158,4 +166,12 @@ public sealed class PortalPreference
     public string? LastUsername { get; set; }
     public string? LogoLightPath { get; set; }
     public string? LogoDarkPath { get; set; }
+}
+
+public sealed class ProcessArgumentProfile
+{
+    public string ProcessId { get; set; } = string.Empty;
+    public string SchemaHash { get; set; } = string.Empty;
+    public Dictionary<string, string> Values { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public bool LastRunFailed { get; set; }
 }

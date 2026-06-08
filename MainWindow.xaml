@@ -23,8 +23,10 @@
 
     <Window.Icon>
         <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
-            <Binding Source="Assets\Brand\KlevaDeploy Icon.png"/>
-            <Binding Source="Assets\Brand\KlevaDeploy Icon.png"/>
+            <Binding Source="pack://application:,,,/Assets/Brand/KlevaDeploy.ico"/>
+            <Binding Source="pack://application:,,,/Assets/Brand/KlevaDeploy.ico"/>
+            <Binding Source="pack://application:,,,/Assets/Brand/KlevaDeploy%20Icon.png"/>
+            <Binding Source="pack://application:,,,/Assets/Brand/KlevaDeploy%20Icon.png"/>
             <Binding RelativeSource="{RelativeSource Self}" Path="DataContext.IsDarkTheme"/>
         </MultiBinding>
     </Window.Icon>
@@ -312,8 +314,8 @@
                                RenderOptions.BitmapScalingMode="HighQuality">
                             <Image.Source>
                                 <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
-                                    <Binding Source="Assets\Brand\KlevaDeploy logo light.png"/>
-                                    <Binding Source="Assets\Brand\KlevaDeploy logo dark.png"/>
+                                    <Binding Source="pack://application:,,,/Assets/Brand/KlevaDeploy%20logo%20light.png"/>
+                                    <Binding Source="pack://application:,,,/Assets/Brand/KlevaDeploy%20logo%20dark.png"/>
                                     <Binding Path="IsDarkTheme"/>
                                 </MultiBinding>
                             </Image.Source>
@@ -1083,13 +1085,19 @@
                                     </StackPanel>
                                 </Button>
 
-                                <!-- Overall status -->
-                                <TextBlock Grid.Row="1" Grid.Column="0"
-                                           Text="{Binding OverallStatus}"
-                                           TextWrapping="Wrap"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource TextSecondaryBrush}"
-                                           FontSize="12"/>
+                                <TextBox Grid.Row="1" Grid.Column="0"
+                                         Text="{Binding OverallStatus}"
+                                         IsReadOnly="True"
+                                         IsReadOnlyCaretVisible="True"
+                                         TextWrapping="Wrap"
+                                         VerticalAlignment="Center"
+                                         Foreground="{DynamicResource TextSecondaryBrush}"
+                                         FontSize="12"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         Padding="0"
+                                         VerticalScrollBarVisibility="Hidden"
+                                         HorizontalScrollBarVisibility="Hidden"/>
 
                                 <StackPanel Grid.Row="1" Grid.Column="1"
                                             Orientation="Horizontal"
@@ -1337,41 +1345,129 @@
                                                     <RowDefinition Height="Auto"/>
                                                     <RowDefinition Height="Auto"/>
                                                     <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
                                                 </Grid.RowDefinitions>
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>  <!-- Checkbox indicator -->
-                                                    <ColumnDefinition Width="Auto"/>  <!-- Status icon -->
+                                                    <ColumnDefinition Width="Auto"/>  <!-- Indicator + reorder -->
+                                                    <ColumnDefinition Width="Auto"/>  <!-- Process icon + state -->
                                                     <ColumnDefinition Width="*"/>     <!-- Name -->
-                                                    <ColumnDefinition Width="Auto"/>  <!-- Kind label -->
+                                                    <ColumnDefinition Width="Auto"/>  <!-- Badges / actions -->
                                                 </Grid.ColumnDefinitions>
 
-                                                <!-- Checkbox indicator (visual only) -->
-                                                <Border Grid.Row="0" Grid.Column="0"
-                                                        Width="22" Height="22"
-                                                        CornerRadius="11"
-                                                        BorderThickness="2"
-                                                        VerticalAlignment="Center"
-                                                        Margin="0,0,8,0">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-                                                            <Setter Property="Background" Value="Transparent"/>
+                                                <Grid Grid.Row="0" Grid.Column="0"
+                                                      Grid.RowSpan="4"
+                                                      Margin="0,0,10,0">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+
+                                                    <Border Grid.Row="0"
+                                                            Width="22" Height="22"
+                                                            CornerRadius="11"
+                                                            Background="{DynamicResource AccentBrush}"
+                                                            BorderBrush="{DynamicResource AccentBrush}"
+                                                            BorderThickness="1"
+                                                            VerticalAlignment="Top">
+                                                        <TextBlock Text="{Binding ExecutionIndex}"
+                                                                   FontSize="12"
+                                                                   FontWeight="SemiBold"
+                                                                   Foreground="White"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                    </Border>
+
+                                                    <Button Grid.Row="1"
+                                                            Command="{Binding DataContext.MoveQueueStepUpCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"
+                                                            Style="{StaticResource Win11IconButton}"
+                                                            Width="20"
+                                                            Height="20"
+                                                            Padding="0"
+                                                            Margin="0,8,0,0"
+                                                            ToolTip="Sposta su">
+                                                        <Image Source="{DynamicResource IconChevronUp}"
+                                                               Width="14"
+                                                               Height="14"
+                                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                    </Button>
+
+                                                    <Button Grid.Row="2"
+                                                            Command="{Binding DataContext.MoveQueueStepDownCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"
+                                                            Style="{StaticResource Win11IconButton}"
+                                                            Width="20"
+                                                            Height="20"
+                                                            Padding="0"
+                                                            Margin="0,2,0,0"
+                                                            ToolTip="Sposta giù">
+                                                        <Image Source="{DynamicResource IconChevronDown}"
+                                                               Width="14"
+                                                               Height="14"
+                                                               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                    </Button>
+
+                                                    <Grid.Style>
+                                                        <Style TargetType="Grid">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsEnabled}" Value="True">
-                                                                    <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-                                                                    <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                                    <Setter Property="Visibility" Value="Visible"/>
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
-                                                    </Border.Style>
-                                                    <TextBlock Text="✓"
-                                                               FontSize="13"
-                                                               FontWeight="Bold"
-                                                               Foreground="White"
-                                                               HorizontalAlignment="Center"
-                                                               VerticalAlignment="Center">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
+                                                    </Grid.Style>
+                                                </Grid>
+
+                                                <Grid Grid.Row="0" Grid.Column="1"
+                                                      Grid.RowSpan="4"
+                                                      Margin="0,0,12,0">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+
+                                                    <Border Grid.Row="0"
+                                                            Width="40" Height="40"
+                                                            CornerRadius="{StaticResource CornerRadiusMedium}"
+                                                            Background="{DynamicResource SurfaceElevatedBrush}">
+                                                        <Grid>
+                                                            <Image Width="22"
+                                                                   Height="22"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                                                   Visibility="{Binding HasCustomIcon, Converter={StaticResource BoolToVisibility}}">
+                                                                <Image.Source>
+                                                                    <MultiBinding Converter="{StaticResource IconVariantToImageSourceConverter}">
+                                                                        <Binding Path="CustomIconLightPath"/>
+                                                                        <Binding Path="CustomIconDarkPath"/>
+                                                                        <Binding Path="DataContext.IsDarkTheme"
+                                                                                 RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                    </MultiBinding>
+                                                                </Image.Source>
+                                                            </Image>
+
+                                                            <TextBlock Text="{Binding Icon}"
+                                                                       FontSize="18"
+                                                                       FontFamily="Segoe UI Emoji"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"
+                                                                       Visibility="{Binding HasEmojiIcon, Converter={StaticResource BoolToVisibility}}"/>
+
+                                                            <Image Source="{DynamicResource IconPackage}"
+                                                                   Width="22"
+                                                                   Height="22"
+                                                                   Visibility="{Binding ShowDefaultIcon, Converter={StaticResource BoolToVisibility}}"
+                                                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                        </Grid>
+                                                    </Border>
+
+                                                    <Grid Grid.Row="1"
+                                                          Width="40"
+                                                          Height="18"
+                                                          Margin="0,4,0,0">
+                                                        <Grid.Style>
+                                                            <Style TargetType="Grid">
                                                                 <Setter Property="Visibility" Value="Collapsed"/>
                                                                 <Style.Triggers>
                                                                     <DataTrigger Binding="{Binding IsEnabled}" Value="True">
@@ -1379,17 +1475,112 @@
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </Border>
+                                                        </Grid.Style>
 
-                                                <!-- Status icon -->
-                                                <TextBlock Grid.Row="0" Grid.Column="1"
-                                                           Text="{Binding StatusIcon}"
-                                                           FontSize="13"
-                                                           VerticalAlignment="Center"
-                                                           Margin="0,0,7,0"
-                                                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
+                                                        <Image Source="{DynamicResource IconPending}"
+                                                               Width="14"
+                                                               Height="14"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center">
+                                                            <Image.Style>
+                                                                <Style TargetType="Image">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <MultiDataTrigger>
+                                                                            <MultiDataTrigger.Conditions>
+                                                                                <Condition Binding="{Binding DataContext.IsRunning, RelativeSource={RelativeSource AncestorType=Window}}" Value="False"/>
+                                                                            </MultiDataTrigger.Conditions>
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </MultiDataTrigger>
+                                                                        <DataTrigger Binding="{Binding StatusIcon}" Value="✅">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Image.Style>
+                                                        </Image>
+
+                                                        <TextBlock Text="⏳"
+                                                                   FontSize="13"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"
+                                                                   Foreground="{DynamicResource TextSecondaryBrush}">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <MultiDataTrigger>
+                                                                            <MultiDataTrigger.Conditions>
+                                                                                <Condition Binding="{Binding DataContext.IsRunning, RelativeSource={RelativeSource AncestorType=Window}}" Value="True"/>
+                                                                                <Condition Binding="{Binding IsRunningStep}" Value="False"/>
+                                                                            </MultiDataTrigger.Conditions>
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </MultiDataTrigger>
+                                                                        <DataTrigger Binding="{Binding StatusIcon}" Value="✅">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+
+                                                        <Grid Width="14"
+                                                              Height="14"
+                                                              HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center">
+                                                            <Grid.Style>
+                                                                <Style TargetType="Grid">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsRunningStep}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Grid.Style>
+                                                            <Ellipse Stroke="{DynamicResource BorderBrush}" StrokeThickness="2" Opacity="0.35"/>
+                                                            <Path Stroke="{DynamicResource AccentBrush}"
+                                                                  StrokeThickness="2"
+                                                                  StrokeStartLineCap="Round"
+                                                                  StrokeEndLineCap="Round"
+                                                                  Data="M 7,1 A 6,6 0 1 1 1,7">
+                                                                <Path.RenderTransform>
+                                                                    <RotateTransform x:Name="SpinnerRotate2" CenterX="7" CenterY="7"/>
+                                                                </Path.RenderTransform>
+                                                                <Path.Triggers>
+                                                                    <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                                                        <BeginStoryboard>
+                                                                            <Storyboard RepeatBehavior="Forever">
+                                                                                <DoubleAnimation Storyboard.TargetName="SpinnerRotate2"
+                                                                                                 Storyboard.TargetProperty="Angle"
+                                                                                                 From="0"
+                                                                                                 To="360"
+                                                                                                 Duration="0:0:0.9"/>
+                                                                            </Storyboard>
+                                                                        </BeginStoryboard>
+                                                                    </EventTrigger>
+                                                                </Path.Triggers>
+                                                            </Path>
+                                                        </Grid>
+
+                                                        <Image Source="{DynamicResource IconCheckCircle}"
+                                                               Width="14"
+                                                               Height="14"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center">
+                                                            <Image.Style>
+                                                                <Style TargetType="Image">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding StatusIcon}" Value="✅">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Image.Style>
+                                                        </Image>
+                                                    </Grid>
+                                                </Grid>
 
                                                 <!-- Process name -->
                                                 <TextBlock Grid.Row="0" Grid.Column="2"
@@ -1561,7 +1752,7 @@
                                                 </StackPanel>
 
                                                 <!-- Description + required badge + status text -->
-                                                <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"
+                                                <StackPanel Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2"
                                                             Orientation="Horizontal"
                                                             Margin="0,4,0,0">
                                                     <TextBlock Text="{Binding Description}"
@@ -1589,8 +1780,8 @@
                                                 </StackPanel>
 
                                                 <ProgressBar Grid.Row="2"
-                                                             Grid.Column="1"
-                                                             Grid.ColumnSpan="3"
+                                                             Grid.Column="2"
+                                                             Grid.ColumnSpan="2"
                                                              Height="3"
                                                              Maximum="100"
                                                              Value="{Binding ProgressValue}"
@@ -1608,6 +1799,24 @@
                                                         </Style>
                                                     </ProgressBar.Style>
                                                 </ProgressBar>
+
+                                                <StackPanel Grid.Row="3"
+                                                            Grid.Column="2"
+                                                            Grid.ColumnSpan="2"
+                                                            Margin="0,4,0,0"
+                                                            Visibility="{Binding IsSubProcessRunning, Converter={StaticResource BoolToVisibility}}">
+                                                    <TextBlock Text="{Binding CurrentSubProcessName}"
+                                                               Style="{StaticResource Win11TextSecondary}"
+                                                               FontSize="10"
+                                                               Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
+                                                    <ProgressBar Height="3"
+                                                                 Maximum="100"
+                                                                 Value="{Binding SubProgressValue}"
+                                                                 IsIndeterminate="{Binding IsSubProgressIndeterminate}"
+                                                                 Margin="0,4,0,0"
+                                                                 IsHitTestVisible="False"
+                                                                 Style="{StaticResource Win11ProgressBar}"/>
+                                                </StackPanel>
                                             </Grid>
                                         </ToggleButton>
                                     </DataTemplate>
@@ -1842,12 +2051,12 @@
                                      Background="Transparent"
                                      BorderThickness="0"
                                      Foreground="{DynamicResource LogTextBrush}"
-                                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
                                      Padding="6"
                                      IsReadOnly="True"
                                      IsReadOnlyCaretVisible="True"
-                                     TextWrapping="NoWrap"
+                                     TextWrapping="Wrap"
                                      AcceptsReturn="True"
                                      behaviors:TextBoxLineHoverBehavior.IsEnabled="True"
                                      behaviors:TextBoxLineHoverBehavior.HoverBrush="{DynamicResource OutputLineHoverBrush}"

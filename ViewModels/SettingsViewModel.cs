@@ -24,6 +24,7 @@ public sealed class SettingsViewModel : ObservableObject
 {
     private readonly IAppUpdateService _appUpdateService;
     private readonly IPreferencesService _prefsService;
+    private readonly IThemeService _themeService;
     private readonly ILogService _log;
     private readonly IDialogService _dialogService;
     private readonly IPresetIconService _presetIconService;
@@ -87,6 +88,19 @@ public sealed class SettingsViewModel : ObservableObject
     public string AppVersion { get; }
     public string StorageDirectory { get; }
     public string InstallerCacheDirectory { get; }
+    
+    public AppThemeStyle ThemeStyle
+    {
+        get => _prefsService.Preferences.ThemeStyle;
+        set
+        {
+            if (value == _prefsService.Preferences.ThemeStyle) return;
+            _prefsService.Preferences.ThemeStyle = value;
+            _prefsService.Save();
+            _themeService.SetThemeStyle(value);
+            OnPropertyChanged();
+        }
+    }
 
     private string _installerStatusText = string.Empty;
     public string InstallerStatusText
@@ -251,10 +265,11 @@ public sealed class SettingsViewModel : ObservableObject
 
     public event EventHandler? CloseRequested;
 
-    public SettingsViewModel(IAppUpdateService appUpdateService, IPreferencesService prefsService, ILogService log, IDialogService dialogService, IPresetIconService presetIconService)
+    public SettingsViewModel(IAppUpdateService appUpdateService, IPreferencesService prefsService, IThemeService themeService, ILogService log, IDialogService dialogService, IPresetIconService presetIconService)
     {
         _appUpdateService = appUpdateService;
         _prefsService = prefsService;
+        _themeService = themeService;
         _log = log;
         _dialogService = dialogService;
         _presetIconService = presetIconService;

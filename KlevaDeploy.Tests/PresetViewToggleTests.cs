@@ -169,7 +169,9 @@ public sealed class PresetViewToggleTests
     private sealed class FakeThemeService : IThemeService
     {
         public AppTheme CurrentTheme => AppTheme.Dark;
+        public AppThemeStyle CurrentThemeStyle => AppThemeStyle.Default;
         public void SetTheme(AppTheme theme) { }
+        public void SetThemeStyle(AppThemeStyle style) { }
         public void ToggleTheme() { }
     }
 
@@ -208,6 +210,8 @@ public sealed class PresetViewToggleTests
         public bool Confirm(string title, string message) => true;
         public IDialogService.UnrarPromptResult ShowUnrarRequiredPrompt(string processName, string details) => IDialogService.UnrarPromptResult.Installa;
         public void ResetDisableRequiredWarningPreference() { }
+        public ArgumentPromptResponse ShowArgumentPrompt(string processName, string subtitle, IReadOnlyList<ArgumentInputDefinition> inputs, IReadOnlyDictionary<string, string> prefill) =>
+            new(ArgumentPromptChoice.RunOnce, prefill);
     }
 
     private sealed class FakePresetIconService : IPresetIconService

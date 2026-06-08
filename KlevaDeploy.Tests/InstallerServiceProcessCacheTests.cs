@@ -163,7 +163,7 @@ public sealed class InstallerServiceProcessCacheTests
 
         Environment.SetEnvironmentVariable("KLEVADEPLOY_STORAGE_DIR", tempDir);
 
-        var svc = new InstallerService(new FakeLogService());
+        var svc = new InstallerService(new FakeLogService(), new FakeConfigService());
 
         return (svc, () =>
         {
@@ -187,6 +187,11 @@ public sealed class InstallerServiceProcessCacheTests
         public void Warning(string message) { }
         public void Error(string message, Exception? ex = null) { }
         public void AppendRaw(string level, string message) { }
+    }
+
+    private sealed class FakeConfigService : IAppConfigService
+    {
+        public AppConfig Config { get; } = new();
     }
 }
 
