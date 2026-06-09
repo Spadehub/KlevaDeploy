@@ -1,9 +1,0 @@
-{
-    "dotnet.defaultSolution": "InstallerIT.sln",
-    "omnisharp.defaultLaunchSolution": "InstallerIT.sln",
-    "omnisharp.enableMsBuildLoadProjectsOnDemand": false,
-    "omnisharp.enableRoslynAnalyzers": true,
-    "csharp.unitTestDefaultReporting": "none",
-    "omnisharp.useModernNet": true,
-    "dotnet.formatting.organizeImportsOnFormat": true
-}
