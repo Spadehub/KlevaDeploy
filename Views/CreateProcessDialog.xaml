@@ -445,6 +445,45 @@
                             </Grid>
                         </StackPanel>
 
+                        <TextBlock Text="Modalità Installer EXE"
+                                   Style="{StaticResource Win11TextBody}"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,6"/>
+                        <ComboBox ItemsSource="{Binding AvailableExeInstallerModes}"
+                                  SelectedItem="{Binding SelectedExeInstallerMode, Mode=TwoWay}"
+                                  Style="{StaticResource Win11ComboBox}"
+                                  Margin="0,0,0,6">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock>
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="Manuale"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.Manual}">
+                                                        <Setter Property="Text" Value="Manuale (nessun placeholder)"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.Silent}">
+                                                        <Setter Property="Text" Value="Silent (inserisce {SILENT})"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.AutoExtractMainMsi}">
+                                                        <Setter Property="Text" Value="Autoextract (MSI principale)"/>
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.AutoExtractAllMsis}">
+                                                        <Setter Property="Text" Value="Autoextract (tutti gli MSI)"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <TextBlock Text="Questa opzione modifica automaticamente gli argomenti inserendo/rimuovendo i marker {SILENT} o {AUTOEXTRACT_*}. Si applica solo ai file .exe."
+                                   Style="{StaticResource Win11TextSecondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,12"/>
+
                         <TextBlock Text="Argomenti Riga di Comando"
                                    Style="{StaticResource Win11TextBody}"
                                    FontWeight="SemiBold"

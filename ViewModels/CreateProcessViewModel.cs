@@ -107,11 +107,51 @@ public sealed class CreateProcessViewModel : ObservableObject
         }
     }
 
+    private bool _suppressExeInstallerModeSync;
+    private ExeInstallerMode _selectedExeInstallerMode = ExeInstallerMode.Manual;
+    public IReadOnlyList<ExeInstallerMode> AvailableExeInstallerModes { get; } = Enum.GetValues<ExeInstallerMode>();
+    public ExeInstallerMode SelectedExeInstallerMode
+    {
+        get => _selectedExeInstallerMode;
+        set
+        {
+            if (!SetProperty(ref _selectedExeInstallerMode, value)) return;
+            if (_suppressExeInstallerModeSync) return;
+
+            _suppressExeInstallerModeSync = true;
+            try
+            {
+                Arguments = ApplyExeInstallerModeToArguments(Arguments, value);
+            }
+            finally
+            {
+                _suppressExeInstallerModeSync = false;
+            }
+        }
+    }
+
     private string _arguments = string.Empty;
     public string Arguments
     {
         get => _arguments;
-        set => SetProperty(ref _arguments, value);
+        set
+        {
+            if (!SetProperty(ref _arguments, value)) return;
+            if (_suppressExeInstallerModeSync) return;
+
+            var inferred = InferExeInstallerModeFromArguments(value);
+            if (inferred == _selectedExeInstallerMode) return;
+
+            _suppressExeInstallerModeSync = true;
+            try
+            {
+                SetProperty(ref _selectedExeInstallerMode, inferred, nameof(SelectedExeInstallerMode));
+            }
+            finally
+            {
+                _suppressExeInstallerModeSync = false;
+            }
+        }
     }
 
     public ObservableCollection<SubProcessItem> SubProcesses { get; } = new();
@@ -207,6 +247,60 @@ public sealed class CreateProcessViewModel : ObservableObject
 
     public IEnumerable<MsiPropertyItem> DisabledFilteredAutoConfigMsiProperties =>
         FilteredAutoConfigMsiProperties.Where(p => !p.IsEnabled);
+
+    private const string SilentMarker = "{SILENT}";
+    private const string AutoExtractMainMarker = "{AUTOEXTRACT_MAIN_MSI}";
+    private const string AutoExtractAllMarker = "{AUTOEXTRACT_ALL_MSI}";
+
+    private static ExeInstallerMode InferExeInstallerModeFromArguments(string? rawArgs)
+    {
+        var text = rawArgs ?? string.Empty;
+        if (text.Contains(AutoExtractAllMarker, StringComparison.OrdinalIgnoreCase))
+            return ExeInstallerMode.AutoExtractAllMsis;
+        if (text.Contains(AutoExtractMainMarker, StringComparison.OrdinalIgnoreCase))
+            return ExeInstallerMode.AutoExtractMainMsi;
+        if (text.Contains(SilentMarker, StringComparison.OrdinalIgnoreCase))
+            return ExeInstallerMode.Silent;
+        return ExeInstallerMode.Manual;
+    }
+
+    private static string ApplyExeInstallerModeToArguments(string? rawArgs, ExeInstallerMode mode)
+    {
+        var cleaned = RemoveExeInstallerMarkers(rawArgs);
+        if (mode == ExeInstallerMode.Manual)
+            return cleaned;
+
+        var marker = mode switch
+        {
+            ExeInstallerMode.Silent => SilentMarker,
+            ExeInstallerMode.AutoExtractMainMsi => AutoExtractMainMarker,
+            ExeInstallerMode.AutoExtractAllMsis => AutoExtractAllMarker,
+            _ => string.Empty
+        };
+
+        if (string.IsNullOrWhiteSpace(marker))
+            return cleaned;
+
+        if (string.IsNullOrWhiteSpace(cleaned))
+            return marker;
+
+        return $"{marker} {cleaned}".Trim();
+    }
+
+    private static string RemoveExeInstallerMarkers(string? rawArgs)
+    {
+        var text = (rawArgs ?? string.Empty).Trim();
+        if (text.Length == 0) return string.Empty;
+
+        text = text.Replace(SilentMarker, string.Empty, StringComparison.OrdinalIgnoreCase);
+        text = text.Replace(AutoExtractMainMarker, string.Empty, StringComparison.OrdinalIgnoreCase);
+        text = text.Replace(AutoExtractAllMarker, string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        while (text.Contains("  ", StringComparison.Ordinal))
+            text = text.Replace("  ", " ", StringComparison.Ordinal);
+
+        return text.Trim();
+    }
 
     public bool HasEnabledAutoConfigMsiProperties => FilteredAutoConfigMsiProperties.Any(p => p.IsEnabled);
     public bool HasDisabledAutoConfigMsiProperties => FilteredAutoConfigMsiProperties.Any(p => !p.IsEnabled);
