@@ -166,10 +166,6 @@ public partial class App : Application
             if (names is null || names.Length == 0) return;
 
             const string defaultsPrefix = "KlevaDeploy.Defaults.";
-            const string processKdpPrefix = "KlevaDeploy.Kdp.Processes.";
-            const string packageKdpPrefix = "KlevaDeploy.Kdp.Packages.";
-            const string scriptKdpPrefix = "KlevaDeploy.Kdp.Scripts.";
-
             foreach (var name in names)
             {
                 if (string.IsNullOrWhiteSpace(name)) continue;
@@ -178,24 +174,6 @@ public partial class App : Application
                 if (string.Equals(name, "KlevaDeploy.appsettings.json", StringComparison.OrdinalIgnoreCase))
                 {
                     relativeOut = "appsettings.json";
-                }
-                else if (name.StartsWith(processKdpPrefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    var fileName = name[processKdpPrefix.Length..];
-                    if (string.IsNullOrWhiteSpace(fileName)) continue;
-                    relativeOut = Path.Combine("Kdp", "Processes", fileName);
-                }
-                else if (name.StartsWith(packageKdpPrefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    var fileName = name[packageKdpPrefix.Length..];
-                    if (string.IsNullOrWhiteSpace(fileName)) continue;
-                    relativeOut = Path.Combine("Kdp", "Packages", fileName);
-                }
-                else if (name.StartsWith(scriptKdpPrefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    var fileName = name[scriptKdpPrefix.Length..];
-                    if (string.IsNullOrWhiteSpace(fileName)) continue;
-                    relativeOut = Path.Combine("Kdp", "Scripts", fileName);
                 }
                 else if (name.StartsWith(defaultsPrefix, StringComparison.OrdinalIgnoreCase))
                 {

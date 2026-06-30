@@ -59,6 +59,24 @@ jobs:
           }
           dotnet @args
 
+      - name: Package Release Assets
+        shell: pwsh
+        run: |
+          $publishDir = "bin\\Release\\net8.0-windows\\win-x64\\publish"
+          $exe = Join-Path $publishDir "KlevaDeploy.exe"
+          $zip = Join-Path $publishDir "KlevaDeploy-win-x64.zip"
+          if (!(Test-Path $exe)) { throw "Publish output not found: $exe" }
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path (Join-Path $publishDir "*") -DestinationPath $zip -Force
+
+      - name: Upload Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: KlevaDeploy-win-x64-beta
+          path: |
+            bin\Release\net8.0-windows\win-x64\publish\KlevaDeploy.exe
+            bin\Release\net8.0-windows\win-x64\publish\KlevaDeploy-win-x64.zip
+
       - name: Create Release
         shell: pwsh
         env:
@@ -67,7 +85,9 @@ jobs:
           $tag = "${env:GITHUB_REF_NAME}"
           $suffix = "${{ steps.ver.outputs.suffix }}"
           $exe = "bin\\Release\\net8.0-windows\\win-x64\\publish\\KlevaDeploy.exe"
+          $zip = "bin\\Release\\net8.0-windows\\win-x64\\publish\\KlevaDeploy-win-x64.zip"
           if (!(Test-Path $exe)) { throw "Publish output not found: $exe" }
-          $args = @("release", "create", $tag, $exe, "--title", $tag, "--generate-notes")
+          if (!(Test-Path $zip)) { throw "Publish output not found: $zip" }
+          $args = @("release", "create", $tag, $exe, $zip, "--title", $tag, "--generate-notes")
           if (![string]::IsNullOrWhiteSpace($suffix)) { $args += "--prerelease" }
           gh @args

@@ -34,3 +34,4 @@ Defaults/*.kac.json
 Defaults/**/*.kac.json
 
 .trae/
+Kdp/
