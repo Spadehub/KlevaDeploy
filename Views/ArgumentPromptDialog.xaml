@@ -7,10 +7,10 @@
         MinWidth="520" MinHeight="420"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
-        AllowsTransparency="False"
+        AllowsTransparency="True"
         ResizeMode="CanResize"
         ShowInTaskbar="False"
-        Background="{DynamicResource AppBackgroundBrush}"
+        Background="Transparent"
         FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True">
@@ -71,12 +71,12 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="1" Margin="24,18,24,22">
+            <Grid Grid.Row="1" Margin="24,18,24,18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="12"/>
                     <RowDefinition Height="*"/>
-                    <RowDefinition Height="14"/>
+                    <RowDefinition Height="12"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 

@@ -3,18 +3,18 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Conferma"
-        Width="440" Height="240"
+        Width="440"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
-        AllowsTransparency="False"
+        AllowsTransparency="True"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
-        Background="{DynamicResource AppBackgroundBrush}"
+        Background="Transparent"
         FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         SizeToContent="Height"
-        MinHeight="220"
+        MinHeight="180"
         MaxHeight="360">
 
     <WindowChrome.WindowChrome>
@@ -73,10 +73,10 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="1" Margin="24,18,24,24">
+            <Grid Grid.Row="1" Margin="24,18,24,18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="16"/>
+                    <RowDefinition Height="12"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
@@ -88,15 +88,15 @@
 
                 <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
                     <Button x:Name="CancelButton"
-                            Content="Annulla"
+                            Content="No"
                             Style="{StaticResource Win11Button}"
                             Width="90" Height="32"
                             Margin="0,0,8,0"
                             IsCancel="True"/>
                     <Button x:Name="ConfirmButton"
-                            Content="Elimina"
-                            Style="{StaticResource Win11DangerButton}"
-                            Width="110" Height="32"
+                            Content="Sì"
+                            Style="{StaticResource Win11AccentButton}"
+                            Width="90" Height="32"
                             IsDefault="True"/>
                 </StackPanel>
             </Grid>

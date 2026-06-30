@@ -9,7 +9,7 @@
         AllowsTransparency="True"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
-        Background="{DynamicResource AppBackgroundBrush}"
+        Background="Transparent"
         FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
@@ -109,7 +109,7 @@
                 </Grid>
             </Border>
 
-            <Grid Grid.Row="1" Margin="24,18,24,24">
+            <Grid Grid.Row="1" Margin="24,18,24,18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="12"/>

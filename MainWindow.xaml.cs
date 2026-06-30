@@ -131,4 +131,18 @@ public partial class MainWindow : Window
         item.SubProcess.Arguments = string.Empty;
         item.SubProcess.RunAsAdmin = null;
     }
+
+    private void OpenScriptEditorFromEditor_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not CreateProcessViewModel vm) return;
+
+        var editorVm = new ScriptEditorViewModel(vm);
+        var editor = new ScriptEditorWindow(editorVm)
+        {
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+
+        editor.ShowDialog();
+    }
 }

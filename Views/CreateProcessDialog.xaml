@@ -445,41 +445,69 @@
                             </Grid>
                         </StackPanel>
 
-                        <TextBlock Text="Modalità Installer EXE"
-                                   Style="{StaticResource Win11TextBody}"
-                                   FontWeight="SemiBold"
-                                   Margin="0,0,0,6"/>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="Modalità Installer EXE"
+                                       Style="{StaticResource Win11TextBody}"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                            <Button Grid.Column="1"
+                                    Content="Auto-genera"
+                                    Command="{Binding AutoGenerateInstallerFlowCommand}"
+                                    Style="{StaticResource Win11Button}"
+                                    Height="32"
+                                    Padding="12,4"
+                                    Margin="10,0,0,0"/>
+                        </Grid>
                         <ComboBox ItemsSource="{Binding AvailableExeInstallerModes}"
                                   SelectedItem="{Binding SelectedExeInstallerMode, Mode=TwoWay}"
                                   Style="{StaticResource Win11ComboBox}"
+                                  behaviors:ComboBoxMouseWheelToScrollViewerBehavior.IsEnabled="True"
                                   Margin="0,0,0,6">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
-                                    <TextBlock>
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Text" Value="Manuale"/>
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.Manual}">
-                                                        <Setter Property="Text" Value="Manuale (nessun placeholder)"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.Silent}">
-                                                        <Setter Property="Text" Value="Silent (inserisce {SILENT})"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.AutoExtractMainMsi}">
-                                                        <Setter Property="Text" Value="Autoextract (MSI principale)"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.AutoExtractAllMsis}">
-                                                        <Setter Property="Text" Value="Autoextract (tutti gli MSI)"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
+                                    <StackPanel>
+                                        <TextBlock x:Name="ModeTitle"
+                                                   Style="{StaticResource Win11TextBody}"
+                                                   FontWeight="SemiBold"
+                                                   Text="Manuale"/>
+                                        <TextBlock x:Name="ModeSubtitle"
+                                                   Style="{StaticResource Win11TextSecondary}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,2,0,0"
+                                                   Text="Esegue l’EXE così com’è. Se non hai parametri silent può aprire finestre."/>
+                                    </StackPanel>
+
+                                    <DataTemplate.Triggers>
+                                        <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.Manual}">
+                                            <Setter TargetName="ModeTitle" Property="Text" Value="Manuale"/>
+                                            <Setter TargetName="ModeSubtitle" Property="Text" Value="Esegue l’EXE così com’è. Se non hai parametri silent può aprire finestre."/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.Auto}">
+                                            <Setter TargetName="ModeTitle" Property="Text" Value="Auto ({AUTO})"/>
+                                            <Setter TargetName="ModeSubtitle" Property="Text" Value="Decide automaticamente: se trova MSI dentro → AutoExtract; altrimenti prova silent; se non riconosce → manuale."/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.Silent}">
+                                            <Setter TargetName="ModeTitle" Property="Text" Value="Silent ({SILENT})"/>
+                                            <Setter TargetName="ModeSubtitle" Property="Text" Value="Inserisce {SILENT}: tenta di riconoscere l’installer (Inno/NSIS/…) e aggiunge i flag quiet."/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.AutoExtractMainMsi}">
+                                            <Setter TargetName="ModeTitle" Property="Text" Value="AutoExtract (MSI principale)"/>
+                                            <Setter TargetName="ModeSubtitle" Property="Text" Value="Estrae l’EXE e installa l’MSI principale (e prerequisiti), in silent."/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.AutoExtractAllMsis}">
+                                            <Setter TargetName="ModeTitle" Property="Text" Value="AutoExtract (tutti gli MSI)"/>
+                                            <Setter TargetName="ModeSubtitle" Property="Text" Value="Estrae e installa tutti gli MSI trovati. Utile per bundle che contengono più componenti."/>
+                                        </DataTrigger>
+                                    </DataTemplate.Triggers>
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <TextBlock Text="Questa opzione modifica automaticamente gli argomenti inserendo/rimuovendo i marker {SILENT} o {AUTOEXTRACT_*}. Si applica solo ai file .exe."
+                        <TextBlock Text="Questa opzione modifica automaticamente gli argomenti inserendo/rimuovendo i marker {AUTO}, {SILENT} o {AUTOEXTRACT_*} (solo .exe). I file .msi vengono già eseguiti senza UI."
                                    Style="{StaticResource Win11TextSecondary}"
                                    TextWrapping="Wrap"
                                    Margin="0,0,0,12"/>
@@ -503,20 +531,49 @@
 
                     <!-- Script Mode Fields -->
                     <StackPanel Visibility="{Binding IsScriptMode, Converter={StaticResource BoolToVis}}">
-                        <!-- Script Content -->
-                        <TextBlock Text="Contenuto Script (inline)"
-                                   Style="{StaticResource Win11TextBody}"
-                                   FontWeight="SemiBold"
-                                   Margin="0,0,0,6"/>
-                        <TextBox Text="{Binding ScriptContent, UpdateSourceTrigger=PropertyChanged}"
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Comando Inline"
+                                       Style="{StaticResource Win11TextBody}"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                            <Button Grid.Column="1"
+                                    Content="Open Editor"
+                                    Click="OpenScriptEditor_Click"
+                                    Style="{StaticResource Win11Button}"
+                                    Padding="12,6"/>
+                        </Grid>
+                        <TextBox Text="{Binding InlineScriptCommand, UpdateSourceTrigger=PropertyChanged}"
                                  Style="{StaticResource Win11TextBox}"
-                                 AcceptsReturn="True"
-                                 TextWrapping="Wrap"
-                                 Height="120"
-                                 VerticalScrollBarVisibility="Auto"
-                                 FontFamily="Cascadia Code, Consolas, monospace"
-                                 FontSize="11"
-                                 Margin="0,0,0,8"/>
+                                 Margin="0,0,0,8"
+                                 Visibility="{Binding HasMultiLineScriptContent, Converter={StaticResource InverseBoolToVisibility}}"/>
+                        <Border Style="{StaticResource Win11Card}"
+                                Padding="10"
+                                Margin="0,0,0,8"
+                                Visibility="{Binding HasMultiLineScriptContent, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="Multi-line script preview"
+                                           Style="{StaticResource Win11TextBody}"
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,0,6"/>
+                                <TextBox Text="{Binding ScriptPreview, Mode=OneWay}"
+                                         Style="{StaticResource Win11TextBox}"
+                                         IsReadOnly="True"
+                                         AcceptsReturn="True"
+                                         TextWrapping="Wrap"
+                                         Height="120"
+                                         VerticalScrollBarVisibility="Auto"
+                                         FontFamily="Cascadia Code, Consolas, monospace"
+                                         FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="{Binding ScriptEditorHint}"
+                                   Style="{StaticResource Win11TextSecondary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,8"/>
                         <TextBlock Text="— OPPURE —"
                                    Style="{StaticResource Win11TextSecondary}"
                                    HorizontalAlignment="Center"

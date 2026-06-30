@@ -163,4 +163,16 @@ public partial class CreateProcessDialog : Window
         item.SubProcess.Arguments = string.Empty;
         item.SubProcess.RunAsAdmin = null;
     }
+
+    private void OpenScriptEditor_Click(object sender, RoutedEventArgs e)
+    {
+        var editorVm = new ScriptEditorViewModel(_viewModel);
+        var editor = new ScriptEditorWindow(editorVm)
+        {
+            Owner = this,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+
+        editor.ShowDialog();
+    }
 }

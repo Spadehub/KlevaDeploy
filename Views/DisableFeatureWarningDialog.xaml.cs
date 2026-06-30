@@ -11,7 +11,7 @@ public partial class DisableFeatureWarningDialog : Window
         InitializeComponent();
 
         BodyText.Text =
-            $"La funzionalità \"{featureName}\" è richiesta dal preset selezionato.\n" +
+            $"La funzionalità \"{featureName}\" è richiesta dal pacchetto selezionato.\n" +
             "Disattivarla potrebbe causare un'installazione incompleta o non funzionante.\n\n" +
             "Sei sicuro di voler continuare?";
 

@@ -1,0 +1,620 @@
+<Window x:Class="KlevaDeploy.Views.ScriptEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:avalonedit="http://icsharpcode.net/sharpdevelop/avalonedit"
+        xmlns:vm="clr-namespace:KlevaDeploy.ViewModels"
+        mc:Ignorable="d"
+        Title="Script Editor"
+        Width="1500"
+        Height="920"
+        MinWidth="960"
+        MinHeight="700"
+        WindowStartupLocation="CenterOwner"
+        FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
+        Background="{DynamicResource AppBackgroundBrush}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/Themes/EditorStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
+            <HierarchicalDataTemplate DataType="{x:Type vm:ScriptEditorViewModel+EditorProcessNode}" ItemsSource="{Binding Children}">
+                <Grid Margin="0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Style="{StaticResource EditorBadgeBorder}"
+                                Background="{DynamicResource EditorInfoSurfaceBrush}"
+                                Margin="0,0,8,0">
+                            <TextBlock Text="{Binding Kind}"
+                                       Style="{StaticResource EditorBadgeText}"/>
+                        </Border>
+                        <TextBlock Text="{Binding DisplayName}"
+                                   Style="{StaticResource Win11TextBody}"
+                                   FontWeight="SemiBold"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Content="Run"
+                                Command="{Binding DataContext.RunNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}"
+                                Style="{StaticResource EditorMiniButton}"
+                                AutomationProperties.Name="Run selected process node"/>
+                        <Button Content="Stop"
+                                Command="{Binding DataContext.StopNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}"
+                                Style="{StaticResource EditorMiniButton}"
+                                AutomationProperties.Name="Stop selected process node"/>
+                        <Button Content="Restart"
+                                Command="{Binding DataContext.RestartNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}"
+                                Style="{StaticResource EditorMiniButton}"
+                                Margin="0"
+                                AutomationProperties.Name="Restart selected process node"/>
+                    </StackPanel>
+                </Grid>
+            </HierarchicalDataTemplate>
+
+            <HierarchicalDataTemplate DataType="{x:Type vm:ScriptEditorViewModel+EditorFileNode}" ItemsSource="{Binding Children}">
+                <Grid Margin="0,2">
+                    <TextBlock Text="{Binding Name}"
+                               Style="{StaticResource Win11TextBody}"/>
+                </Grid>
+            </HierarchicalDataTemplate>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="8"/>
+            <RowDefinition Height="260"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Style="{StaticResource EditorShellCard}"
+                Margin="0,0,0,12">
+            <Grid Margin="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel>
+                        <TextBlock Text="Script Editor"
+                                   Style="{StaticResource EditorHeaderTitle}"/>
+                        <TextBlock Text="{Binding CurrentDocumentHint}"
+                                   Style="{StaticResource EditorHeaderSubtitle}"
+                                   MaxWidth="760"/>
+                    </StackPanel>
+
+                    <WrapPanel Grid.Column="1"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Top">
+                        <Border Style="{StaticResource EditorBadgeBorder}"
+                                Background="{DynamicResource EditorInfoSurfaceBrush}">
+                            <TextBlock Text="{Binding CurrentDocumentKindLabel}"
+                                       Style="{StaticResource EditorBadgeText}"/>
+                        </Border>
+                        <Border Style="{StaticResource EditorBadgeBorder}"
+                                Background="{DynamicResource EditorPanelAltBrush}">
+                            <TextBlock Text="{Binding LanguageName}"
+                                       Style="{StaticResource EditorBadgeText}"/>
+                        </Border>
+                        <Border Style="{StaticResource EditorActivityBadgeBorder}">
+                            <TextBlock Text="{Binding ActivityStateLabel}"
+                                       Style="{StaticResource EditorBadgeText}"/>
+                        </Border>
+                        <Border Style="{StaticResource EditorDiagnosticsBadgeBorder}">
+                            <TextBlock Text="{Binding DiagnosticsStateLabel}"
+                                       Style="{StaticResource EditorBadgeText}"/>
+                        </Border>
+                        <Border Style="{StaticResource EditorBadgeBorder}"
+                                Background="{DynamicResource EditorPanelAltBrush}"
+                                Margin="0,0,0,8">
+                            <TextBlock Text="{Binding LayoutModeLabel}"
+                                       Style="{StaticResource EditorBadgeText}"/>
+                        </Border>
+                    </WrapPanel>
+                </Grid>
+
+                <WrapPanel Grid.Row="1"
+                           Margin="0,14,0,0">
+                    <Border Style="{StaticResource EditorToolGroup}"
+                            Visibility="{Binding ShowExecutionToolbar, Converter={StaticResource BoolToVisibility}}">
+                        <WrapPanel>
+                            <Button Content="Run"
+                                    Command="{Binding RunCommand}"
+                                    Style="{StaticResource EditorToolbarAccentButton}"
+                                    ToolTip="Run the current document"
+                                    AutomationProperties.Name="Run current document"/>
+                            <Button Content="Stop"
+                                    Command="{Binding StopCommand}"
+                                    Style="{StaticResource EditorToolbarButton}"
+                                    ToolTip="Stop the current run session"
+                                    AutomationProperties.Name="Stop current run session"/>
+                            <Button Content="Restart"
+                                    Command="{Binding RestartCommand}"
+                                    Style="{StaticResource EditorToolbarButton}"
+                                    Margin="0"
+                                    ToolTip="Restart the current document"
+                                    AutomationProperties.Name="Restart current document"/>
+                        </WrapPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource EditorToolGroup}"
+                            Visibility="{Binding IsProcessDocumentActive, Converter={StaticResource BoolToVisibility}}">
+                        <WrapPanel>
+                            <Button Content="Apply to Process"
+                                    Command="{Binding SaveCommand}"
+                                    Style="{StaticResource EditorToolbarButton}"
+                                    ToolTip="Apply editor changes back to the current KDP process"
+                                    AutomationProperties.Name="Apply editor changes to current process"/>
+                            <Button Content="New Scratch"
+                                    Command="{Binding NewCommand}"
+                                    Style="{StaticResource EditorToolbarButton}"
+                                    ToolTip="Create a new scratch document"
+                                    AutomationProperties.Name="Create scratch document"/>
+                            <Button Content="Open File"
+                                    Command="{Binding OpenCommand}"
+                                    Style="{StaticResource EditorToolbarButton}"
+                                    Margin="0"
+                                    ToolTip="Open a file into the editor"
+                                    AutomationProperties.Name="Open file in editor"/>
+                        </WrapPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource EditorToolGroup}"
+                            Visibility="{Binding IsFileDocumentActive, Converter={StaticResource BoolToVisibility}}">
+                        <WrapPanel>
+                            <Button Content="Save File"
+                                    Command="{Binding SaveCommand}"
+                                    Style="{StaticResource EditorToolbarButton}"
+                                    ToolTip="Save the active file to disk"
+                                    AutomationProperties.Name="Save current file"/>
+                            <Button Content="Refresh Explorer"
+                                    Command="{Binding RefreshFilesCommand}"
+                                    Style="{StaticResource EditorToolbarButton}"
+                                    ToolTip="Refresh the file explorer for the current working folder"
+                                    AutomationProperties.Name="Refresh file explorer"/>
+                            <Button Content="Open File"
+                                    Command="{Binding OpenCommand}"
+                                    Style="{StaticResource EditorToolbarButton}"
+                                    Margin="0"
+                                    ToolTip="Open another file into the editor"
+                                    AutomationProperties.Name="Open another file in editor"/>
+                        </WrapPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource EditorToolGroup}"
+                            Visibility="{Binding IsScratchDocumentActive, Converter={StaticResource BoolToVisibility}}">
+                        <WrapPanel>
+                            <Button Content="Save As"
+                                    Command="{Binding SaveCommand}"
+                                    Style="{StaticResource EditorToolbarButton}"
+                                    ToolTip="Save the scratch document as a new file"
+                                    AutomationProperties.Name="Save scratch document as file"/>
+                            <Button Content="New Scratch"
+                                    Command="{Binding NewCommand}"
+                                    Style="{StaticResource EditorToolbarButton}"
+                                    ToolTip="Create another scratch document"
+                                    AutomationProperties.Name="Create another scratch document"/>
+                            <Button Content="Open File"
+                                    Command="{Binding OpenCommand}"
+                                    Style="{StaticResource EditorToolbarButton}"
+                                    Margin="0"
+                                    ToolTip="Open a file into the editor"
+                                    AutomationProperties.Name="Open file in editor from scratch context"/>
+                        </WrapPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource EditorToolGroup}"
+                            Visibility="{Binding ShowDiagnosticsToolbar, Converter={StaticResource BoolToVisibility}}">
+                        <WrapPanel>
+                            <Button Content="Prev Issue"
+                                    Click="PrevIssueButton_Click"
+                                    Style="{StaticResource EditorToolbarButton}"
+                                    ToolTip="Jump to the previous diagnostic"
+                                    AutomationProperties.Name="Navigate to previous issue"/>
+                            <Button Content="Next Issue"
+                                    Click="NextIssueButton_Click"
+                                    Style="{StaticResource EditorToolbarButton}"
+                                    Margin="0"
+                                    ToolTip="Jump to the next diagnostic"
+                                    AutomationProperties.Name="Navigate to next issue"/>
+                        </WrapPanel>
+                    </Border>
+                </WrapPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280" MinWidth="220"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*" MinWidth="420"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="320" MinWidth="240"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0"
+                    Style="{StaticResource EditorShellCard}">
+                <Grid Margin="14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Margin="0,0,0,12">
+                        <TextBlock Text="Process Navigator"
+                                   Style="{StaticResource EditorSectionTitle}"/>
+                        <TextBlock Text="Browse the main process and subprocess hierarchy. Each node exposes direct run controls."
+                                   Style="{StaticResource EditorSectionCaption}"/>
+                    </StackPanel>
+
+                    <TreeView Grid.Row="1"
+                              x:Name="ProcessTree"
+                              ItemsSource="{Binding ProcessNodes}"
+                              SelectedItemChanged="ProcessTree_SelectedItemChanged"
+                              Style="{StaticResource EditorSidebarTree}"
+                              ItemContainerStyle="{StaticResource EditorSidebarTreeItem}"
+                              AutomationProperties.Name="Process hierarchy"/>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="1"
+                          Width="8"
+                          Style="{StaticResource EditorGridSplitter}"/>
+
+            <Border Grid.Column="2"
+                    Style="{StaticResource EditorShellCard}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0"
+                            Background="{DynamicResource EditorPanelAltBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="16,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="{Binding DocumentName}"
+                                           Style="{StaticResource EditorSectionTitle}"
+                                           FontSize="16"/>
+                                <TextBlock Text="{Binding DocumentPath}"
+                                           Style="{StaticResource EditorSectionCaption}"
+                                           Margin="0,4,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center">
+                                <Border Style="{StaticResource EditorBadgeBorder}"
+                                        Background="{DynamicResource EditorPanelBrush}">
+                                    <TextBlock Text="{Binding CurrentDocumentKindLabel}"
+                                               Style="{StaticResource EditorBadgeText}"/>
+                                </Border>
+                                <Border Style="{StaticResource EditorBadgeBorder}"
+                                        Background="{DynamicResource EditorPanelBrush}"
+                                        Margin="0">
+                                    <TextBlock Text="{Binding LanguageName}"
+                                               Style="{StaticResource EditorBadgeText}"/>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <TabControl Grid.Row="1"
+                                x:Name="DocumentsTabControl"
+                                ItemsSource="{Binding OpenDocuments}"
+                                Style="{StaticResource EditorTabControl}"
+                                ItemContainerStyle="{StaticResource EditorDocumentTabItem}"
+                                SelectionChanged="DocumentsTabControl_SelectionChanged"
+                                PreviewMouseLeftButtonDown="DocumentsTabControl_PreviewMouseLeftButtonDown"
+                                MouseMove="DocumentsTabControl_MouseMove"
+                                AllowDrop="True"
+                                Drop="DocumentsTabControl_Drop"
+                                DragOver="DocumentsTabControl_DragOver"
+                                AutomationProperties.Name="Open editor documents">
+                        <TabControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding HeaderText}"
+                                               Margin="0,0,8,0"
+                                               Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}"/>
+                                    <Button Content="x"
+                                            Tag="{Binding}"
+                                            Click="CloseDocumentButton_Click"
+                                            Style="{StaticResource EditorGlyphButton}"
+                                            Width="24"
+                                            Height="24"
+                                            ToolTip="Close document tab"
+                                            AutomationProperties.Name="Close document tab"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </TabControl.ItemTemplate>
+                        <TabControl.ContentTemplate>
+                            <DataTemplate>
+                                <Grid Height="0"/>
+                            </DataTemplate>
+                        </TabControl.ContentTemplate>
+                    </TabControl>
+
+                    <Border Grid.Row="2"
+                            Background="{DynamicResource EditorChromeBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="0,1,0,1"
+                            Padding="12,10">
+                        <WrapPanel VerticalAlignment="Center">
+                            <Border Style="{StaticResource EditorBadgeBorder}"
+                                    Background="{DynamicResource EditorPanelBrush}">
+                                <TextBlock Text="{Binding ActivityStateLabel}"
+                                           Style="{StaticResource EditorBadgeText}"/>
+                            </Border>
+                            <Border Style="{StaticResource EditorBadgeBorder}"
+                                    Background="{DynamicResource EditorPanelBrush}">
+                                <TextBlock Text="{Binding DiagnosticsSummary}"
+                                           Style="{StaticResource EditorBadgeText}"/>
+                            </Border>
+                            <TextBlock Text="Use Ctrl+Space for completion, F8 / Shift+F8 for issue navigation, and drag tabs to reorder."
+                                       Style="{StaticResource EditorSectionCaption}"
+                                       VerticalAlignment="Center"/>
+                        </WrapPanel>
+                    </Border>
+
+                    <Border Grid.Row="3"
+                            Background="{DynamicResource EditorCodeSurfaceBrush}">
+                        <avalonedit:TextEditor x:Name="EditorView"
+                                               ShowLineNumbers="True"
+                                               FontFamily="Cascadia Code, Consolas, monospace"
+                                               FontSize="13"
+                                               Background="{DynamicResource AppBackgroundBrush}"
+                                               Foreground="{DynamicResource TextPrimaryBrush}"
+                                               HorizontalScrollBarVisibility="Auto"
+                                               VerticalScrollBarVisibility="Auto"
+                                               AutomationProperties.Name="Script editor surface"
+                                               AutomationProperties.HelpText="Long-format script editor with syntax feedback, completion, and execution tooling."/>
+                    </Border>
+
+                    <Border Grid.Row="4"
+                            Background="{DynamicResource EditorPanelAltBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="0,1,0,1"
+                            Padding="12,10"
+                            Visibility="{Binding HasDiagnostics, Converter={StaticResource BoolToVisibility}}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Margin="0,0,0,8">
+                                <TextBlock Text="Diagnostics"
+                                           Style="{StaticResource EditorSectionTitle}"/>
+                                <TextBlock Text="Errors and warnings remain inline, but you can also click any item here to jump directly to the exact location."
+                                           Style="{StaticResource EditorSectionCaption}"/>
+                            </StackPanel>
+                            <ListBox Grid.Row="1"
+                                     x:Name="DiagnosticsList"
+                                     ItemsSource="{Binding Diagnostics}"
+                                     Style="{StaticResource EditorDiagnosticsList}"
+                                     SelectionChanged="DiagnosticsList_SelectionChanged"
+                                     AutomationProperties.Name="Diagnostics list">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0"
+                                                    Style="{StaticResource EditorSeverityBadgeBorder}"
+                                                    Margin="0,0,8,0">
+                                                <TextBlock Text="{Binding Severity}"
+                                                           Style="{StaticResource EditorBadgeText}"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1"
+                                                       TextWrapping="Wrap"
+                                                       Style="{StaticResource Win11TextBody}">
+                                                <Run Text="Line "/>
+                                                <Run Text="{Binding Line}"/>
+                                                <Run Text=", Col "/>
+                                                <Run Text="{Binding Column}"/>
+                                                <Run Text=": "/>
+                                                <Run Text="{Binding Message}"/>
+                                            </TextBlock>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Row="5"
+                            Background="{DynamicResource EditorPanelAltBrush}"
+                            Padding="12,10">
+                        <TextBlock x:Name="StatusTextBlock"
+                                   Text="{Binding StatusText}"
+                                   Style="{StaticResource EditorStatusBarText}"/>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <GridSplitter Grid.Column="3"
+                          Width="8"
+                          Style="{StaticResource EditorGridSplitter}"
+                          Visibility="{Binding ShowExplorerPane, Converter={StaticResource BoolToVisibility}}"/>
+
+            <Border Grid.Column="4"
+                    Style="{StaticResource EditorShellCard}"
+                    Visibility="{Binding ShowExplorerPane, Converter={StaticResource BoolToVisibility}}">
+                <Grid Margin="14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Margin="0,0,0,12">
+                        <StackPanel DockPanel.Dock="Left">
+                            <TextBlock Text="File Explorer"
+                                       Style="{StaticResource EditorSectionTitle}"/>
+                            <TextBlock Text="Mirrors the working folder used by the current script context. Double-click a file to open it in a tab."
+                                       Style="{StaticResource EditorSectionCaption}"
+                                       MaxWidth="260"/>
+                        </StackPanel>
+                        <Button Content="Refresh"
+                                Command="{Binding RefreshFilesCommand}"
+                                Style="{StaticResource EditorMiniButton}"
+                                DockPanel.Dock="Right"
+                                Margin="8,0,0,0"
+                                AutomationProperties.Name="Refresh file explorer"/>
+                    </DockPanel>
+
+                    <TreeView Grid.Row="1"
+                              x:Name="FileTree"
+                              ItemsSource="{Binding FileNodes}"
+                              SelectedItemChanged="FileTree_SelectedItemChanged"
+                              MouseDoubleClick="FileTree_MouseDoubleClick"
+                              Style="{StaticResource EditorSidebarTree}"
+                              ItemContainerStyle="{StaticResource EditorSidebarTreeItem}"
+                              AutomationProperties.Name="File explorer tree"/>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <GridSplitter Grid.Row="2"
+                      Height="8"
+                      HorizontalAlignment="Stretch"
+                      Style="{StaticResource EditorGridSplitter}"/>
+
+        <Border Grid.Row="3"
+                Style="{StaticResource EditorShellCard}"
+                Padding="0"
+                Margin="0,0,0,12">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border Background="{DynamicResource EditorPanelAltBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="0,0,0,1"
+                        Padding="14">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Left">
+                            <TextBlock Text="Terminal"
+                                       Style="{StaticResource EditorSectionTitle}"/>
+                            <TextBlock Text="Verbose output, timestamps, level filtering, and session separation for test runs."
+                                       Style="{StaticResource EditorSectionCaption}"/>
+                        </StackPanel>
+
+                        <WrapPanel DockPanel.Dock="Right"
+                                   VerticalAlignment="Center">
+                            <CheckBox Content="Auto-follow"
+                                      IsChecked="{Binding AutoFollowTerminal}"
+                                      Style="{StaticResource Win11CheckBox}"
+                                      Margin="0,0,12,0"
+                                      AutomationProperties.Name="Toggle terminal auto follow"/>
+                            <Button Content="Clear"
+                                    Command="{Binding ClearTerminalCommand}"
+                                    Style="{StaticResource EditorMiniButton}"
+                                    ToolTip="Clear terminal output"
+                                    AutomationProperties.Name="Clear terminal output"/>
+                            <Button Content="Export"
+                                    Command="{Binding ExportTerminalCommand}"
+                                    Style="{StaticResource EditorMiniButton}"
+                                    ToolTip="Export terminal output"
+                                    AutomationProperties.Name="Export terminal output"/>
+                            <ComboBox Width="120"
+                                      ItemsSource="{Binding TerminalLevels}"
+                                      SelectedItem="{Binding TerminalLevelFilter}"
+                                      Style="{StaticResource Win11ComboBox}"
+                                      Margin="0,0,8,0"
+                                      AutomationProperties.Name="Terminal level filter"/>
+                            <TextBox Width="220"
+                                     Text="{Binding TerminalSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource Win11TextBox}"
+                                     AutomationProperties.Name="Search terminal output"/>
+                        </WrapPanel>
+                    </DockPanel>
+                </Border>
+
+                <ListView Grid.Row="1"
+                          x:Name="TerminalList"
+                          ItemsSource="{Binding TerminalView}"
+                          Style="{StaticResource EditorTerminalList}"
+                          AutomationProperties.Name="Terminal output list">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="4,2"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsSessionHeader}" Value="True">
+                                    <Setter Property="FontWeight" Value="SemiBold"/>
+                                    <Setter Property="Background" Value="{DynamicResource EditorTabActiveBrush}"/>
+                                </DataTrigger>
+                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource FocusRingBrush}"/>
+                                    <Setter Property="BorderThickness" Value="1"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Time" Width="84" DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss}"/>
+                            <GridViewColumn Header="Session" Width="86" DisplayMemberBinding="{Binding Session}"/>
+                            <GridViewColumn Header="Level" Width="76" DisplayMemberBinding="{Binding Level}"/>
+                            <GridViewColumn Header="Source" Width="170" DisplayMemberBinding="{Binding Source}"/>
+                            <GridViewColumn Header="Message" Width="900" DisplayMemberBinding="{Binding Message}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="4"
+                Background="{DynamicResource EditorPanelAltBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Padding="12">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left"
+                           Text="Inline commands stay in the process form. Use this editor for long-format scripts, diagnostics, repeated execution, and file-context browsing."
+                           Style="{StaticResource EditorSectionCaption}"/>
+                <TextBlock DockPanel.Dock="Right"
+                           Text="WCAG-aware focus, keyboard shortcuts, and resizable panes are active."
+                           Style="{StaticResource EditorSectionCaption}"/>
+            </DockPanel>
+        </Border>
+    </Grid>
+</Window>

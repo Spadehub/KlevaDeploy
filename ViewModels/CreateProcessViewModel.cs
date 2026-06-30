@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KlevaDeploy.Models;
 using KlevaDeploy.Services.Interfaces;
+using KlevaDeploy.Utilities;
 using Microsoft.Win32;
 using System.Collections.Specialized;
 
@@ -92,6 +93,7 @@ public sealed class CreateProcessViewModel : ObservableObject
             OnPropertyChanged(nameof(IsRequiresInternetLocked));
             OnPropertyChanged(nameof(IsRequiresInternetUserEditable));
             OpenAutoConfigCommand.NotifyCanExecuteChanged();
+            AutoGenerateInstallerFlowCommand.NotifyCanExecuteChanged();
             ValidationError = null;
         }
     }
@@ -104,6 +106,7 @@ public sealed class CreateProcessViewModel : ObservableObject
         {
             if (!SetProperty(ref _filePath, value)) return;
             OpenAutoConfigCommand.NotifyCanExecuteChanged();
+            AutoGenerateInstallerFlowCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -249,6 +252,7 @@ public sealed class CreateProcessViewModel : ObservableObject
         FilteredAutoConfigMsiProperties.Where(p => !p.IsEnabled);
 
     private const string SilentMarker = "{SILENT}";
+    private const string AutoMarker = "{AUTO}";
     private const string AutoExtractMainMarker = "{AUTOEXTRACT_MAIN_MSI}";
     private const string AutoExtractAllMarker = "{AUTOEXTRACT_ALL_MSI}";
 
@@ -259,6 +263,8 @@ public sealed class CreateProcessViewModel : ObservableObject
             return ExeInstallerMode.AutoExtractAllMsis;
         if (text.Contains(AutoExtractMainMarker, StringComparison.OrdinalIgnoreCase))
             return ExeInstallerMode.AutoExtractMainMsi;
+        if (text.Contains(AutoMarker, StringComparison.OrdinalIgnoreCase))
+            return ExeInstallerMode.Auto;
         if (text.Contains(SilentMarker, StringComparison.OrdinalIgnoreCase))
             return ExeInstallerMode.Silent;
         return ExeInstallerMode.Manual;
@@ -272,6 +278,7 @@ public sealed class CreateProcessViewModel : ObservableObject
 
         var marker = mode switch
         {
+            ExeInstallerMode.Auto => AutoMarker,
             ExeInstallerMode.Silent => SilentMarker,
             ExeInstallerMode.AutoExtractMainMsi => AutoExtractMainMarker,
             ExeInstallerMode.AutoExtractAllMsis => AutoExtractAllMarker,
@@ -293,6 +300,7 @@ public sealed class CreateProcessViewModel : ObservableObject
         if (text.Length == 0) return string.Empty;
 
         text = text.Replace(SilentMarker, string.Empty, StringComparison.OrdinalIgnoreCase);
+        text = text.Replace(AutoMarker, string.Empty, StringComparison.OrdinalIgnoreCase);
         text = text.Replace(AutoExtractMainMarker, string.Empty, StringComparison.OrdinalIgnoreCase);
         text = text.Replace(AutoExtractAllMarker, string.Empty, StringComparison.OrdinalIgnoreCase);
 
@@ -317,8 +325,53 @@ public sealed class CreateProcessViewModel : ObservableObject
     public string ScriptContent
     {
         get => _scriptContent;
-        set => SetProperty(ref _scriptContent, value);
+        set
+        {
+            if (!SetProperty(ref _scriptContent, value)) return;
+            OnPropertyChanged(nameof(InlineScriptCommand));
+            OnPropertyChanged(nameof(HasScriptContent));
+            OnPropertyChanged(nameof(HasMultiLineScriptContent));
+            OnPropertyChanged(nameof(HasSingleLineScriptContent));
+            OnPropertyChanged(nameof(ScriptPreview));
+            OnPropertyChanged(nameof(ScriptEditorHint));
+        }
     }
+
+    public string InlineScriptCommand
+    {
+        get => HasMultiLineScriptContent ? string.Empty : (_scriptContent ?? string.Empty).ReplaceLineEndings(" ").Trim();
+        set
+        {
+            var normalized = (value ?? string.Empty).Replace("\r", " ", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal);
+            while (normalized.Contains("  ", StringComparison.Ordinal))
+                normalized = normalized.Replace("  ", " ", StringComparison.Ordinal);
+            ScriptContent = normalized.Trim();
+        }
+    }
+
+    public bool HasScriptContent => !string.IsNullOrWhiteSpace(_scriptContent);
+    public bool HasMultiLineScriptContent => !string.IsNullOrWhiteSpace(_scriptContent) && _scriptContent.Contains('\n', StringComparison.Ordinal);
+    public bool HasSingleLineScriptContent => HasScriptContent && !HasMultiLineScriptContent;
+
+    public string ScriptPreview
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_scriptContent))
+                return string.Empty;
+
+            var lines = _scriptContent.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n');
+            var preview = string.Join(Environment.NewLine, lines.Take(8));
+            if (lines.Length > 8)
+                preview += Environment.NewLine + "...";
+            return preview;
+        }
+    }
+
+    public string ScriptEditorHint =>
+        HasMultiLineScriptContent
+            ? "Multi-line script loaded. Use the editor window for full editing."
+            : "Use the editor window for long-format scripts.";
 
     private string _installDirectory = string.Empty;
     public string InstallDirectory
@@ -487,6 +540,7 @@ public sealed class CreateProcessViewModel : ObservableObject
             OnPropertyChanged(nameof(IsRequiresInternetUserEditable));
             RefreshRemoteInstallerFilesCommand.NotifyCanExecuteChanged();
             OpenAutoConfigCommand.NotifyCanExecuteChanged();
+            AutoGenerateInstallerFlowCommand.NotifyCanExecuteChanged();
             ValidationError = null;
 
             if (IsInstallerMode && _installerSourceMode != InstallerSourceMode.StaticLocal)
@@ -661,6 +715,7 @@ public sealed class CreateProcessViewModel : ObservableObject
 
     public bool IsRequiresInternetLocked => IsInstallerMode && InstallerSourceMode != InstallerSourceMode.StaticLocal;
     public bool IsRequiresInternetUserEditable => !IsRequiresInternetLocked;
+    public IProcessExecutionService? ProcessExecutionService => _processExecutionService;
 
     public DeploymentProcess? CreatedProcess { get; private set; }
     private bool? _dialogResult;
@@ -675,6 +730,7 @@ public sealed class CreateProcessViewModel : ObservableObject
     public IRelayCommand CancelCommand { get; }
     public IRelayCommand DeleteCommand { get; }
     public IAsyncRelayCommand OpenAutoConfigCommand { get; }
+    public IAsyncRelayCommand AutoGenerateInstallerFlowCommand { get; }
     public IRelayCommand ApplyAutoConfigCommand { get; }
     public IRelayCommand CloseAutoConfigCommand { get; }
     public IRelayCommand ClearAutoConfigSearchCommand { get; }
@@ -738,6 +794,7 @@ public sealed class CreateProcessViewModel : ObservableObject
         CancelCommand = new RelayCommand(Cancel);
         DeleteCommand = new RelayCommand(RequestDelete);
         OpenAutoConfigCommand = new AsyncRelayCommand(OpenAutoConfigAsync, CanOpenAutoConfig);
+        AutoGenerateInstallerFlowCommand = new AsyncRelayCommand(AutoGenerateInstallerFlowAsync, CanAutoGenerateInstallerFlow);
         ApplyAutoConfigCommand = new RelayCommand(ApplyAutoConfig, CanApplyAutoConfig);
         CloseAutoConfigCommand = new RelayCommand(CloseAutoConfig);
         ClearAutoConfigSearchCommand = new RelayCommand(() => AutoConfigSearchText = string.Empty);
@@ -1251,6 +1308,65 @@ public sealed class CreateProcessViewModel : ObservableObject
 
         path = abs;
         return true;
+    }
+
+    private bool CanAutoGenerateInstallerFlow()
+    {
+        if (!IsInstallerMode) return false;
+        if (_processExecutionService is null) return false;
+        if (!TryResolveLocalInstallerPathForAutoConfig(out var path)) return false;
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        return ext is ".msi" or ".exe";
+    }
+
+    private async Task AutoGenerateInstallerFlowAsync()
+    {
+        ValidationError = null;
+
+        if (!TryResolveLocalInstallerPathForAutoConfig(out var localPath))
+            return;
+
+        var ext = Path.GetExtension(localPath).ToLowerInvariant();
+
+        if (ext == ".msi")
+        {
+            SelectedExeInstallerMode = ExeInstallerMode.Manual;
+            return;
+        }
+
+        if (_processExecutionService is null)
+            return;
+
+        try
+        {
+            if (string.Equals(ExeInstallerAnalysis.TryDetectExeInstallerFamily(localPath), "WiX Burn", StringComparison.OrdinalIgnoreCase))
+            {
+                SelectedExeInstallerMode = ExeInstallerMode.AutoExtractMainMsi;
+                return;
+            }
+
+            var sevenZipExe = await _processExecutionService.Ensure7ZipInstalledAsync();
+            var listArgs = $"l -slt \"{localPath}\"";
+            var listResult = await _processExecutionService.RunAsync(sevenZipExe, listArgs, runAsAdmin: false);
+
+            if (listResult.ExitCode != 0)
+            {
+                SelectedExeInstallerMode = ExeInstallerMode.Auto;
+                return;
+            }
+
+            var msiCount = ExeInstallerAnalysis.CountMsiPathsFrom7ZipSlt(listResult.StdOut);
+            SelectedExeInstallerMode = msiCount switch
+            {
+                > 1 => ExeInstallerMode.AutoExtractAllMsis,
+                1 => ExeInstallerMode.AutoExtractMainMsi,
+                _ => ExeInstallerMode.Auto
+            };
+        }
+        catch (Exception ex)
+        {
+            ValidationError = $"Auto-genera non disponibile: {ex.Message}";
+        }
     }
 
     private string GetAutoConfigProcessId()
@@ -2026,6 +2142,8 @@ public sealed class CreateProcessViewModel : ObservableObject
                     .ToList()
             };
 
+            process = MaterializeExternalScriptsForExport(process);
+
             var dto = new ProcessBundleDto { SchemaVersion = 1, Process = process };
             var json = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(dlg.FileName, json);
@@ -2034,6 +2152,68 @@ public sealed class CreateProcessViewModel : ObservableObject
         {
             ValidationError = $"Export fallito: {ex.Message}";
         }
+    }
+
+    private static DeploymentProcess MaterializeExternalScriptsForExport(DeploymentProcess process)
+    {
+        var clone = CloneProcess(process);
+
+        if (ShouldInlineScriptContent(clone) &&
+            TryReadExportableResourceText(clone.RelativePath, out var scriptText))
+        {
+            clone.ScriptContent = scriptText;
+        }
+
+        if (clone.SubProcesses is null || clone.SubProcesses.Count == 0)
+            return clone;
+
+        clone.SubProcesses = clone.SubProcesses
+            .Select(sp =>
+            {
+                var clonedSub = new DeploymentSubProcess
+                {
+                    Name = sp.Name,
+                    RelativePath = sp.RelativePath,
+                    Arguments = sp.Arguments,
+                    RunAsAdmin = sp.RunAsAdmin,
+                    Process = sp.Process is null ? null : MaterializeExternalScriptsForExport(sp.Process)
+                };
+                return clonedSub;
+            })
+            .ToList();
+
+        return clone;
+    }
+
+    private static bool ShouldInlineScriptContent(DeploymentProcess process) =>
+        process.Kind is ProcessKind.PowerShellScript or ProcessKind.BatchScript or ProcessKind.BashScript &&
+        string.IsNullOrWhiteSpace(process.ScriptContent) &&
+        !string.IsNullOrWhiteSpace(process.RelativePath);
+
+    private static bool TryReadExportableResourceText(string relativePath, out string content)
+    {
+        content = string.Empty;
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return false;
+
+        var storageDir = Environment.GetEnvironmentVariable("KLEVADEPLOY_STORAGE_DIR");
+        if (string.IsNullOrWhiteSpace(storageDir))
+            storageDir = Path.Combine(AppContext.BaseDirectory, "Data");
+
+        var candidates = new[]
+        {
+            Path.IsPathRooted(relativePath) ? relativePath : Path.Combine(storageDir, relativePath),
+            Path.IsPathRooted(relativePath) ? relativePath : Path.Combine(AppContext.BaseDirectory, relativePath)
+        };
+
+        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!File.Exists(candidate)) continue;
+            content = File.ReadAllText(candidate);
+            return true;
+        }
+
+        return false;
     }
 
     private static string FormatMsiPropertyValue(string value)
