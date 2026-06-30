@@ -2,25 +2,20 @@
 
 [English](README.md) | [Italiano](README.it.md)
 
-KlevaDeploy is a portable Windows deployment configurator that helps you run repeatable installation and configuration steps ("presets") across lab / IT environments. It is a .NET 8 WPF desktop app built around MVVM, portable storage, and reusable process/package definitions.
+KlevaDeploy is a portable Windows deployment configurator that helps you run repeatable installation and configuration steps (“presets”) across lab / IT environments. It’s built as a .NET 8 WPF desktop app with an MVVM architecture and a focus on USB-friendly, no-install operation.
 
 ## Highlights
 
-- Portable by default: all app data lives next to the executable in `.\Data`
-- KDP import/export: processes and packages can be moved between machines as `.kdp.json` and `.kdp.package.json`
-- Inline script portability: exported KDPs now keep long PowerShell behavior inline instead of depending on external `.ps1` files
-- Installer intelligence: supports EXE installer mode detection, MSI extraction flows, and cache-first deployment workflows
-- Detached script editor: includes a new beta editor for long-form script authoring, diagnostics, and repeated execution
+- Portable by default: all app data lives next to the executable in `.\Data` (no `%LocalAppData%` dependency)
+- Presets & processes: organize software installs and configuration steps into reusable bundles
+- Installer updates: optionally download/update installer files from direct URLs or HTML directory listings
+- Auth-capable downloads: supports authenticated vendor portals (e.g., Keycloak-based login flows) for scraping and downloads
 - Self-update: checks GitHub Releases and can download/apply updates on restart
 
 ## For Users
 
-- Download the latest prerelease or release from GitHub Releases.
-- Releases are expected to include:
-  - `KlevaDeploy.exe`
-  - `KlevaDeploy-win-x64.zip`
-- By default the app creates/uses a `Data\` folder next to the executable.
-- The repository no longer ships a tracked `Kdp\` library. Create processes/packages in the app or import your own `.kdp.json` / `.kdp.package.json` files.
+- Download the latest version from GitHub Releases (asset `KlevaDeploy.exe`) and run it.
+- By default the app creates/uses a `Data\` folder next to the executable (USB-friendly).
 
 ## For Developers
 
@@ -50,25 +45,6 @@ dotnet publish .\KlevaDeploy.csproj -c Release -r win-x64 --self-contained true 
   /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
-## KDP Workflow
-
-KlevaDeploy uses portable JSON formats for deployment definitions:
-
-- Process files: `.kdp.json`
-- Package files: `.kdp.package.json`
-
-These files are intended to be created, edited, exported, and imported through the app. They are not treated as a tracked sample library in this repository anymore.
-
-### Script Portability
-
-Long PowerShell behavior is now stored inline in the KDP payload during export, so moving a KDP to another machine does not break because of missing external helper scripts.
-
-### Script Editing
-
-- Single-line commands stay inline in the process editor.
-- Long-form scripts use the detached script editor window.
-- The detached editor is currently beta/WIP: usable, but still under active refinement.
-
 ## Data & Portability
 
 By default, KlevaDeploy stores everything in a `Data` folder next to the executable:
@@ -78,7 +54,7 @@ KlevaDeploy.exe
 Data\
 ```
 
-This includes user preferences, imported/exported KDP files, update state, debug bundles, and optional persisted auth session data.
+This includes user preferences, custom presets/processes, update state, debug bundles, and (optionally) persisted auth session data.
 
 ### Storage Override
 
@@ -119,9 +95,7 @@ Update application is performed by launching the downloaded build in “apply up
 ### Versioning & Release Workflow
 
 - Git tags in the format `vMAJOR.MINOR.PATCH[-prerelease.N]` trigger the release workflow in `.github/workflows/release.yml`.
-- The workflow publishes a self-contained, single-file `win-x64` build.
-- Beta/prerelease builds are tagged with suffixes such as `v0.1.0-beta.1`.
-- Release assets are expected to include both `KlevaDeploy.exe` and `KlevaDeploy-win-x64.zip`.
+- The workflow publishes a self-contained, single-file `win-x64` build and uploads it as `KlevaDeploy.exe`.
 
 ## Debug Bundles
 
@@ -142,7 +116,6 @@ These are intended to help diagnose authentication and directory-listing scrapin
 - `Views/` – WPF views (XAML)
 - `ViewModels/` – MVVM ViewModels (CommunityToolkit.Mvvm)
 - `Themes/` – Win11-styled resources (colors, icons, control styles)
-- `Editor/` – detached script editor helpers (highlighting, diagnostics, gutter markers)
 - `Services/` – download/auth/update/services and file persistence
 - `Models/` – presets/process models and persisted state
 - `KlevaDeploy.Tests/` – xUnit tests
