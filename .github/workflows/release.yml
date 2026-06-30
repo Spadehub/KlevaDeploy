@@ -4,6 +4,16 @@ on:
   push:
     tags:
       - "v*"
+  release:
+    types:
+      - published
+      - prereleased
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish (example: v0.1.0-beta.2)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -11,8 +21,33 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    concurrency:
+      group: release-${{ github.event.release.tag_name || github.ref_name || github.event.inputs.tag || github.run_id }}
+      cancel-in-progress: false
     steps:
+      - name: Resolve Tag
+        id: tag
+        shell: pwsh
+        run: |
+          $tag = ""
+          if ("${{ github.event_name }}" -eq "release") {
+            $tag = "${{ github.event.release.tag_name }}"
+          } elseif ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tag = "${{ github.event.inputs.tag }}"
+          } else {
+            $tag = "${env:GITHUB_REF_NAME}"
+          }
+
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            throw "Unable to determine release tag."
+          }
+
+          "value=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ steps.tag.outputs.value }}
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -22,7 +57,7 @@ jobs:
         id: ver
         shell: pwsh
         run: |
-          $tag = "${env:GITHUB_REF_NAME}"
+          $tag = "${{ steps.tag.outputs.value }}"
           $v = $tag.TrimStart('v','V')
           $prefix = $v
           $suffix = ""
@@ -37,6 +72,12 @@ jobs:
 
       - name: Restore
         run: dotnet restore .\KlevaDeploy.sln
+
+      - name: Build Tests
+        run: dotnet build .\KlevaDeploy.Tests\KlevaDeploy.Tests.csproj -c Release -p:UseAppHost=false
+
+      - name: Run Tests
+        run: dotnet test .\KlevaDeploy.Tests\KlevaDeploy.Tests.csproj -c Release --no-build
 
       - name: Publish
         shell: pwsh
@@ -72,22 +113,21 @@ jobs:
       - name: Upload Workflow Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KlevaDeploy-win-x64-beta
+          name: KlevaDeploy-${{ steps.tag.outputs.value }}-win-x64
           path: |
             bin\Release\net8.0-windows\win-x64\publish\KlevaDeploy.exe
             bin\Release\net8.0-windows\win-x64\publish\KlevaDeploy-win-x64.zip
 
-      - name: Create Release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          $tag = "${env:GITHUB_REF_NAME}"
-          $suffix = "${{ steps.ver.outputs.suffix }}"
-          $exe = "bin\\Release\\net8.0-windows\\win-x64\\publish\\KlevaDeploy.exe"
-          $zip = "bin\\Release\\net8.0-windows\\win-x64\\publish\\KlevaDeploy-win-x64.zip"
-          if (!(Test-Path $exe)) { throw "Publish output not found: $exe" }
-          if (!(Test-Path $zip)) { throw "Publish output not found: $zip" }
-          $args = @("release", "create", $tag, $exe, $zip, "--title", $tag, "--generate-notes")
-          if (![string]::IsNullOrWhiteSpace($suffix)) { $args += "--prerelease" }
-          gh @args
+      - name: Create Or Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.value }}
+          name: ${{ steps.tag.outputs.value }}
+          generate_release_notes: true
+          prerelease: ${{ steps.ver.outputs.suffix != '' }}
+          fail_on_unmatched_files: true
+          append_body: false
+          make_latest: ${{ steps.ver.outputs.suffix == '' }}
+          files: |
+            bin\Release\net8.0-windows\win-x64\publish\KlevaDeploy.exe
+            bin\Release\net8.0-windows\win-x64\publish\KlevaDeploy-win-x64.zip
