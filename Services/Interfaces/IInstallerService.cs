@@ -4,8 +4,8 @@ namespace KlevaDeploy.Services.Interfaces;
 
 public interface IInstallerService
 {
-    Task<IReadOnlyList<DeploymentPreset>> LoadPresetsAsync(bool isDemoMode);
-    Task<IReadOnlyList<DeploymentProcess>> LoadProcessesAsync(bool isDemoMode);
+    Task<IReadOnlyList<DeploymentPreset>> LoadPresetsAsync();
+    Task<IReadOnlyList<DeploymentProcess>> LoadProcessesAsync();
     /// <summary>
     /// Given selected presets, returns the merged, deduplicated, ordered list of process steps.
     /// If a process appears in multiple presets, use the lowest Order value.

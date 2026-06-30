@@ -9,12 +9,14 @@ using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Microsoft.Win32;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KlevaDeploy.Models;
 using KlevaDeploy.Services.Interfaces;
+using KlevaDeploy.Utilities;
 using KlevaDeploy.Views;
 
 namespace KlevaDeploy.ViewModels;
@@ -124,18 +126,6 @@ public sealed class MainViewModel : ObservableObject
         set => SetProperty(ref _isDarkTheme, value);
     }
 
-    private bool _isDemoMode = true;
-    public bool IsDemoMode
-    {
-        get => _isDemoMode;
-        set
-        {
-            if (!SetProperty(ref _isDemoMode, value)) return;
-            _log.Info($"Demo mode changed to: {value}");
-            _ = LoadDataAsync();
-        }
-    }
-
     private string _presetSearchText = string.Empty;
     public string PresetSearchText
     {
@@ -234,6 +224,11 @@ public sealed class MainViewModel : ObservableObject
     public IRelayCommand OpenCreatePresetCommand { get; }
     public IRelayCommand<PresetViewModel?> EditPresetCommand { get; }
     public IRelayCommand<PresetViewModel?> DeletePresetCommand { get; }
+    public IAsyncRelayCommand ImportPackageCommand { get; }
+    public IAsyncRelayCommand<PresetViewModel?> ExportPackageCommand { get; }
+    public IAsyncRelayCommand ImportPackageIntoEditorCommand { get; }
+    public IAsyncRelayCommand ExportPackageFromEditorCommand { get; }
+    public IRelayCommand ImportProcessLibraryCommand { get; }
     public IRelayCommand ClearPresetSearchCommand { get; }
     public IRelayCommand ClearProcessSearchCommand { get; }
     public IAsyncRelayCommand RunQueueCommand { get; }
@@ -322,6 +317,11 @@ public sealed class MainViewModel : ObservableObject
         OpenCreatePresetCommand = new RelayCommand(OpenCreatePreset);
         EditPresetCommand = new RelayCommand<PresetViewModel?>(EditPreset);
         DeletePresetCommand = new RelayCommand<PresetViewModel?>(DeletePreset);
+        ImportPackageCommand = new AsyncRelayCommand(ImportPackageAsync);
+        ExportPackageCommand = new AsyncRelayCommand<PresetViewModel?>(ExportPackageAsync);
+        ImportPackageIntoEditorCommand = new AsyncRelayCommand(ImportPackageIntoEditorAsync);
+        ExportPackageFromEditorCommand = new AsyncRelayCommand(ExportPackageFromEditorAsync);
+        ImportProcessLibraryCommand = new RelayCommand(ImportProcessLibrary);
         ClearPresetSearchCommand = new RelayCommand(ClearPresetSearch);
         ClearProcessSearchCommand = new RelayCommand(ClearProcessSearch);
         RunQueueCommand = new AsyncRelayCommand(RunQueueAsync, CanRunQueue);
@@ -347,6 +347,157 @@ public sealed class MainViewModel : ObservableObject
             MoveQueueStepUpCommand.NotifyCanExecuteChanged();
             MoveQueueStepDownCommand.NotifyCanExecuteChanged();
         };
+    }
+
+    private async Task ImportPackageIntoEditorAsync()
+    {
+        var dlg = new OpenFileDialog
+        {
+            Title = "Importa pacchetto (nel pannello)",
+            Filter = "Pacchetto KlevaDeploy (*.kdp.package.json;*.json)|*.kdp.package.json;*.json|Tutti i file (*.*)|*.*",
+            CheckFileExists = true,
+            CheckPathExists = true,
+            Multiselect = false
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(dlg.FileName);
+            using var doc = JsonDocument.Parse(json, new JsonDocumentOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling = JsonCommentHandling.Skip
+            });
+
+            JsonElement presetElem;
+            if (doc.RootElement.TryGetProperty("package", out var pkgElem))
+                presetElem = pkgElem;
+            else if (doc.RootElement.TryGetProperty("preset", out var legacyPresetElem))
+                presetElem = legacyPresetElem;
+            else
+                throw new InvalidOperationException("File pacchetto non valido. Manca la proprietà 'package'.");
+
+            var preset = JsonSerializer.Deserialize<DeploymentPreset>(presetElem.GetRawText(), new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                AllowTrailingCommas = true,
+                ReadCommentHandling = JsonCommentHandling.Skip
+            });
+
+            if (preset is null)
+                throw new InvalidOperationException("File pacchetto non valido.");
+
+            var bundledProcesses = new List<DeploymentProcess>();
+            if (doc.RootElement.TryGetProperty("processes", out var processesElem) &&
+                processesElem.ValueKind == JsonValueKind.Array)
+            {
+                bundledProcesses = JsonSerializer.Deserialize<List<DeploymentProcess>>(processesElem.GetRawText(), new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    AllowTrailingCommas = true,
+                    ReadCommentHandling = JsonCommentHandling.Skip
+                }) ?? new List<DeploymentProcess>();
+            }
+
+            if (bundledProcesses.Count > 0)
+            {
+                var importProcesses = _dialogService.Confirm(
+                    "Importa processi associati",
+                    $"Il file contiene {bundledProcesses.Count} processi associati.\n\nVuoi importarli insieme al pacchetto?");
+
+                if (importProcesses)
+                {
+                    foreach (var process in bundledProcesses.Where(p => !string.IsNullOrWhiteSpace(p.Id)))
+                    {
+                        var existingProcess = _installerService.GetAllAvailableProcesses()
+                            .FirstOrDefault(p => string.Equals(p.Id, process.Id, StringComparison.OrdinalIgnoreCase));
+
+                        if (existingProcess is null)
+                            _installerService.AddUserProcess(process);
+                        else
+                            _installerService.UpdateProcess(process);
+                    }
+                }
+            }
+
+            preset.Id = string.IsNullOrWhiteSpace(preset.Id) ? BuildPackageId(preset.Name) : preset.Id.Trim();
+            preset.Steps ??= new List<PresetProcessStep>();
+
+            var allProcesses = _installerService.GetAllAvailableProcesses();
+            CreatePresetViewModel.InitializeForEdit(preset, allProcesses);
+            IsCreatePresetPanelOpen = true;
+
+            RefreshPresetProcessAvailability();
+            OverallStatus = $"Pacchetto caricato nel pannello: {preset.Name}";
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Import pacchetto nel pannello fallito", ex);
+            OverallStatus = $"Errore: import pacchetto fallito — {ex.Message}";
+        }
+    }
+
+    private async Task ExportPackageFromEditorAsync()
+    {
+        try
+        {
+            if (!CreatePresetViewModel.TryBuildPreset(out var preset, out var error) || preset is null)
+            {
+                OverallStatus = $"Errore: export pacchetto fallito — {error ?? "dati non validi"}";
+                return;
+            }
+
+            var safeName = string.Join("_", (preset.Name ?? "Pacchetto")
+                    .Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries))
+                .Trim();
+            if (string.IsNullOrWhiteSpace(safeName)) safeName = "Pacchetto";
+
+            var dlg = new SaveFileDialog
+            {
+                Title = "Esporta pacchetto (dal pannello)",
+                Filter = "Pacchetto KlevaDeploy (*.kdp.package.json)|*.kdp.package.json|JSON (*.json)|*.json",
+                FileName = $"{safeName}.kdp.package.json",
+                AddExtension = true,
+                OverwritePrompt = true
+            };
+            if (dlg.ShowDialog() != true) return;
+
+            var includeProcesses = _dialogService.Confirm(
+                "Esporta processi associati",
+                "Vuoi includere nel file anche i processi associati al pacchetto?\n\nScegliendo \"No\" verrà esportato solo il pacchetto.");
+
+            List<DeploymentProcess>? processes = null;
+            if (includeProcesses)
+            {
+                var processIds = preset.Steps
+                    .Select(step => step.ProcessId)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                processes = _installerService.GetAllAvailableProcesses()
+                    .Where(process => processIds.Contains(process.Id))
+                    .Select(MaterializeExternalScriptsForExport)
+                    .ToList();
+            }
+
+            var dto = new PackageBundleDto
+            {
+                SchemaVersion = 1,
+                Package = preset,
+                Processes = processes is { Count: > 0 } ? processes : null
+            };
+
+            var json = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(dlg.FileName, json);
+            OverallStatus = $"Pacchetto esportato: {preset.Name}";
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Export pacchetto dal pannello fallito", ex);
+            OverallStatus = $"Errore: export pacchetto fallito — {ex.Message}";
+        }
     }
 
     public async Task InitializeAsync()
@@ -401,8 +552,8 @@ public sealed class MainViewModel : ObservableObject
         IsInitializing = true;
         try
         {
-            _allProcesses = await _installerService.LoadProcessesAsync(IsDemoMode);
-            _allPresets = await _installerService.LoadPresetsAsync(IsDemoMode);
+            _allProcesses = await _installerService.LoadProcessesAsync();
+            _allPresets = await _installerService.LoadPresetsAsync();
             
             Presets.Clear();
             foreach (var p in _allPresets)
@@ -416,12 +567,238 @@ public sealed class MainViewModel : ObservableObject
                 Presets.Add(vm);
             }
 
+            RefreshPresetProcessAvailability(_allProcesses);
+
             ApplyPresetFilter();
-            _log.Info($"Loaded {_allPresets.Count} presets and {_allProcesses.Count} processes (Demo Mode: {IsDemoMode}).");
+            _log.Info($"Loaded {_allPresets.Count} packages and {_allProcesses.Count} processes.");
 
             _ = Task.Run(() => _updateService.CheckAndUpdateInstallersAsync(_allProcesses));
         }
         finally { IsInitializing = false; }
+    }
+
+    private sealed class PackageBundleDto
+    {
+        [JsonPropertyName("schemaVersion")]
+        public int SchemaVersion { get; set; } = 1;
+
+        [JsonPropertyName("package")]
+        public DeploymentPreset? Package { get; set; }
+
+        [JsonPropertyName("processes")]
+        public List<DeploymentProcess>? Processes { get; set; }
+    }
+
+    private static string BuildPackageId(string name)
+    {
+        var raw = (name ?? string.Empty).Trim().ToLowerInvariant();
+        if (raw.Length == 0) return Guid.NewGuid().ToString("N");
+        var sb = new StringBuilder(raw.Length);
+        foreach (var ch in raw)
+        {
+            if (char.IsLetterOrDigit(ch)) { sb.Append(ch); continue; }
+            if (ch is ' ' or '_' or '-') { sb.Append('-'); continue; }
+        }
+        var id = sb.ToString().Trim('-');
+        while (id.Contains("--", StringComparison.Ordinal)) id = id.Replace("--", "-", StringComparison.Ordinal);
+        if (id.Length == 0) return Guid.NewGuid().ToString("N");
+        return id;
+    }
+
+    private void RefreshPresetProcessAvailability(IReadOnlyList<DeploymentProcess>? availableProcesses = null)
+    {
+        var processIds = (availableProcesses ?? _installerService.GetAllAvailableProcesses())
+            .Select(p => p.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var presetVm in Presets)
+            presetVm.UpdateProcessAvailability(processIds);
+    }
+
+    private async Task ImportPackageAsync()
+    {
+        var dlg = new OpenFileDialog
+        {
+            Title = "Importa pacchetto",
+            Filter = "Pacchetto KlevaDeploy (*.kdp.package.json;*.json)|*.kdp.package.json;*.json|Tutti i file (*.*)|*.*",
+            CheckFileExists = true,
+            CheckPathExists = true,
+            Multiselect = false
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(dlg.FileName);
+            using var doc = JsonDocument.Parse(json, new JsonDocumentOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling = JsonCommentHandling.Skip
+            });
+
+            JsonElement presetElem;
+            if (doc.RootElement.TryGetProperty("package", out var pkgElem))
+                presetElem = pkgElem;
+            else if (doc.RootElement.TryGetProperty("preset", out var legacyPresetElem))
+                presetElem = legacyPresetElem;
+            else
+                throw new InvalidOperationException("File pacchetto non valido. Manca la proprietà 'package'.");
+
+            var preset = JsonSerializer.Deserialize<DeploymentPreset>(presetElem.GetRawText(), new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                AllowTrailingCommas = true,
+                ReadCommentHandling = JsonCommentHandling.Skip
+            });
+
+            if (preset is null)
+                throw new InvalidOperationException("File pacchetto non valido.");
+
+            var bundledProcesses = new List<DeploymentProcess>();
+            if (doc.RootElement.TryGetProperty("processes", out var processesElem) &&
+                processesElem.ValueKind == JsonValueKind.Array)
+            {
+                bundledProcesses = JsonSerializer.Deserialize<List<DeploymentProcess>>(processesElem.GetRawText(), new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    AllowTrailingCommas = true,
+                    ReadCommentHandling = JsonCommentHandling.Skip
+                }) ?? new List<DeploymentProcess>();
+            }
+
+            if (bundledProcesses.Count > 0)
+            {
+                var importProcesses = _dialogService.Confirm(
+                    "Importa processi associati",
+                    $"Il file contiene {bundledProcesses.Count} processi associati.\n\nVuoi importarli insieme al pacchetto?");
+
+                if (importProcesses)
+                {
+                    foreach (var process in bundledProcesses.Where(p => !string.IsNullOrWhiteSpace(p.Id)))
+                    {
+                        var existingProcess = _installerService.GetAllAvailableProcesses()
+                            .FirstOrDefault(p => string.Equals(p.Id, process.Id, StringComparison.OrdinalIgnoreCase));
+
+                        if (existingProcess is null)
+                            _installerService.AddUserProcess(process);
+                        else
+                            _installerService.UpdateProcess(process);
+                    }
+                }
+            }
+
+            preset.Id = string.IsNullOrWhiteSpace(preset.Id) ? BuildPackageId(preset.Name) : preset.Id.Trim();
+            preset.Steps ??= new List<PresetProcessStep>();
+
+            var existing = _installerService.GetAllPresets()
+                .FirstOrDefault(p => string.Equals(p.Id, preset.Id, StringComparison.OrdinalIgnoreCase));
+            if (existing is null)
+                _installerService.AddUserPreset(preset);
+            else
+                _installerService.UpdatePreset(preset);
+
+            await LoadDataAsync();
+            RebuildExecutionQueue();
+
+            var availableIds = _installerService.GetAllAvailableProcesses()
+                .Select(p => p.Id)
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var missingIds = preset.Steps
+                .Where(step => !string.IsNullOrWhiteSpace(step.ProcessId) && !availableIds.Contains(step.ProcessId))
+                .Select(step => step.ProcessId)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (missingIds.Count > 0)
+            {
+                _log.Warning($"Package \"{preset.Name}\" imported with missing process references: {string.Join(", ", missingIds)}");
+                OverallStatus = $"Pacchetto importato con {missingIds.Count} riferimento/i a processi mancanti.";
+            }
+            else
+            {
+                OverallStatus = $"Pacchetto importato: {preset.Name}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Import pacchetto fallito", ex);
+            OverallStatus = $"Errore: import pacchetto fallito — {ex.Message}";
+        }
+    }
+
+    private async Task ExportPackageAsync(PresetViewModel? presetVm)
+    {
+        if (presetVm is null) return;
+        var preset = presetVm.Preset;
+        if (preset is null) return;
+
+        var safeName = string.Join("_", (preset.Name ?? "Pacchetto")
+                .Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries))
+            .Trim();
+        if (string.IsNullOrWhiteSpace(safeName)) safeName = "Pacchetto";
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Esporta pacchetto",
+            Filter = "Pacchetto KlevaDeploy (*.kdp.package.json)|*.kdp.package.json|JSON (*.json)|*.json",
+            FileName = $"{safeName}.kdp.package.json",
+            AddExtension = true,
+            OverwritePrompt = true
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            var includeProcesses = _dialogService.Confirm(
+                "Esporta processi associati",
+                "Vuoi includere nel file anche i processi associati al pacchetto?\n\nScegliendo \"No\" verrà esportato solo il pacchetto.");
+
+            List<DeploymentProcess>? processes = null;
+            if (includeProcesses)
+            {
+                var processIds = preset.Steps
+                    .Select(step => step.ProcessId)
+                    .Where(id => !string.IsNullOrWhiteSpace(id))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                processes = _installerService.GetAllAvailableProcesses()
+                    .Where(process => processIds.Contains(process.Id))
+                    .Select(MaterializeExternalScriptsForExport)
+                    .ToList();
+            }
+
+            var dto = new PackageBundleDto
+            {
+                SchemaVersion = 1,
+                Package = preset,
+                Processes = processes is { Count: > 0 } ? processes : null
+            };
+            var json = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
+            await File.WriteAllTextAsync(dlg.FileName, json);
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Export pacchetto fallito", ex);
+            OverallStatus = $"Errore: export pacchetto fallito — {ex.Message}";
+        }
+    }
+
+    private void ImportProcessLibrary()
+    {
+        try
+        {
+            CreateProcess();
+            if (CreateProcessViewModel.ImportProcessCommand.CanExecute(null))
+                CreateProcessViewModel.ImportProcessCommand.Execute(null);
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Import processo fallito", ex);
+            OverallStatus = $"Errore: import processo fallito — {ex.Message}";
+        }
     }
 
     private void ApplyPresetFilter()
@@ -505,6 +882,11 @@ public sealed class MainViewModel : ObservableObject
         
         // Combine all available processes
         var allAvailableProcesses = _installerService.GetAllAvailableProcesses();
+        RefreshPresetProcessAvailability(allAvailableProcesses);
+        var availableProcessIds = allAvailableProcesses
+            .Select(process => process.Id)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         
         // Determine which processes are in selected presets
         HashSet<string> processesInSelectedPresets = new();
@@ -512,6 +894,20 @@ public sealed class MainViewModel : ObservableObject
         Dictionary<string, bool> processRequiredInPreset = new();
         if (selected.Count > 0)
         {
+            foreach (var preset in selected)
+            {
+                var missing = preset.Steps
+                    .Where(step => !string.IsNullOrWhiteSpace(step.ProcessId) && !availableProcessIds.Contains(step.ProcessId))
+                    .Select(step => step.ProcessId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                if (missing.Count > 0)
+                {
+                    _log.Warning($"Package \"{preset.Name}\" contains missing process references ignored in queue: {string.Join(", ", missing)}");
+                }
+            }
+
             var queue = _installerService.BuildExecutionQueue(selected, allAvailableProcesses);
             var order = 10;
             foreach (var item in queue)
@@ -567,7 +963,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         ApplyProcessFilter();
-        _log.Info($"Execution queue rebuilt: {ExecutionQueue.Count} total processes ({processesInSelectedPresets.Count} in selected presets).");
+        _log.Info($"Execution queue rebuilt: {ExecutionQueue.Count} total processes ({processesInSelectedPresets.Count} in selected packages).");
         MoveQueueStepUpCommand.NotifyCanExecuteChanged();
         MoveQueueStepDownCommand.NotifyCanExecuteChanged();
     }
@@ -808,6 +1204,7 @@ public sealed class MainViewModel : ObservableObject
                     _log.Info($"User created process: {vm.CreatedProcess!.Name}");
                 }
 
+                RefreshPresetProcessAvailability();
                 RebuildExecutionQueue();
             }
         }
@@ -843,6 +1240,7 @@ public sealed class MainViewModel : ObservableObject
             foreach (var presetVm in Presets)
                 presetVm.Refresh();
 
+            RefreshPresetProcessAvailability();
             RebuildExecutionQueue();
             IsCreateProcessPanelOpen = false;
         }
@@ -867,11 +1265,11 @@ public sealed class MainViewModel : ObservableObject
 
             CreatePresetViewModel.Initialize(allProcesses);
             IsCreatePresetPanelOpen = true;
-            _log.Info("Apertura pannello creazione preset.");
+            _log.Info("Apertura pannello creazione pacchetto.");
         }
         catch (Exception ex)
         {
-            _log.Error("Errore durante l'apertura del pannello creazione preset", ex);
+            _log.Error("Errore durante l'apertura del pannello creazione pacchetto", ex);
         }
     }
 
@@ -886,17 +1284,17 @@ public sealed class MainViewModel : ObservableObject
             
             if (allProcesses == null)
             {
-                _log.Error("Impossibile modificare il preset: lista processi non disponibile.");
+                _log.Error("Impossibile modificare il pacchetto: lista processi non disponibile.");
                 return;
             }
 
             CreatePresetViewModel.InitializeForEdit(presetVm.Preset, allProcesses);
             IsCreatePresetPanelOpen = true;
-            _log.Info($"Apertura pannello modifica preset: {presetVm.Name}");
+            _log.Info($"Apertura pannello modifica pacchetto: {presetVm.Name}");
         }
         catch (Exception ex)
         {
-            _log.Error($"Errore durante l'apertura della modifica per il preset {presetVm?.Name}", ex);
+            _log.Error($"Errore durante l'apertura della modifica per il pacchetto {presetVm?.Name}", ex);
         }
     }
 
@@ -907,14 +1305,14 @@ public sealed class MainViewModel : ObservableObject
             if (presetVm is null) return;
 
             var confirmed = _dialogService.Confirm(
-                "Elimina preset",
-                $"Sei sicuro di voler eliminare il preset \"{presetVm.Name}\"?");
+                "Elimina pacchetto",
+                $"Sei sicuro di voler eliminare il pacchetto \"{presetVm.Name}\"?");
             if (!confirmed) return;
 
             var deleted = _installerService.DeletePreset(presetVm.Preset.Id);
             if (!deleted)
             {
-                _log.Error($"Impossibile eliminare il preset: {presetVm.Name}");
+                _log.Error($"Impossibile eliminare il pacchetto: {presetVm.Name}");
                 return;
             }
 
@@ -927,7 +1325,7 @@ public sealed class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _log.Error("Errore durante l'eliminazione del preset", ex);
+            _log.Error("Errore durante l'eliminazione del pacchetto", ex);
         }
     }
 
@@ -939,7 +1337,7 @@ public sealed class MainViewModel : ObservableObject
 
             var confirmed = _dialogService.Confirm(
                 "Elimina processo",
-                $"Sei sicuro di voler eliminare il processo \"{stepVm.Name}\"?\n\nQuesta operazione influirà su tutti i preset che lo utilizzano.");
+                $"Sei sicuro di voler eliminare il processo \"{stepVm.Name}\"?\n\nQuesta operazione influirà su tutti i pacchetti che lo utilizzano.");
             if (!confirmed) return;
 
             var deleted = _installerService.DeleteProcess(stepVm.Process.Id);
@@ -977,6 +1375,7 @@ public sealed class MainViewModel : ObservableObject
                 {
                     bool wasSelected = existingVm.IsSelected;
                     existingVm.Refresh();
+                    RefreshPresetProcessAvailability();
                     ApplyPresetFilter();
                     
                     if (wasSelected)
@@ -984,7 +1383,7 @@ public sealed class MainViewModel : ObservableObject
                         RebuildExecutionQueue();
                     }
                     
-                    _log.Info($"Updated preset: {CreatePresetViewModel.CreatedPreset.Name}");
+                    _log.Info($"Updated package: {CreatePresetViewModel.CreatedPreset.Name}");
                 }
             }
             else
@@ -999,14 +1398,15 @@ public sealed class MainViewModel : ObservableObject
                         RebuildExecutionQueue();
                 };
                 Presets.Add(presetVm);
+                RefreshPresetProcessAvailability();
                 ApplyPresetFilter();
                 
-                _log.Info($"Created new preset: {CreatePresetViewModel.CreatedPreset.Name}");
+                _log.Info($"Created new package: {CreatePresetViewModel.CreatedPreset.Name}");
             }
         }
         else
         {
-            _log.Info("Preset operation cancelled.");
+            _log.Info("Package operation cancelled.");
         }
     }
 
@@ -1018,14 +1418,14 @@ public sealed class MainViewModel : ObservableObject
             if (!vm.IsEditMode) return;
 
             var confirmed = _dialogService.Confirm(
-                "Elimina preset",
-                $"Sei sicuro di voler eliminare il preset \"{vm.Name}\"?");
+                "Elimina pacchetto",
+                $"Sei sicuro di voler eliminare il pacchetto \"{vm.Name}\"?");
             if (!confirmed) return;
 
             var deleted = _installerService.DeletePreset(vm.PresetId);
             if (!deleted)
             {
-                vm.ValidationError = "Impossibile eliminare questo preset.";
+                vm.ValidationError = "Impossibile eliminare questo pacchetto.";
                 return;
             }
 
@@ -1044,7 +1444,7 @@ public sealed class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _log.Error("Errore durante l'eliminazione del preset", ex);
+            _log.Error("Errore durante l'eliminazione del pacchetto", ex);
         }
     }
 
@@ -1283,17 +1683,19 @@ public sealed class MainViewModel : ObservableObject
                 return ensured.EarlyReturn;
             argScope = ensured.Scope;
 
-            expandedArguments = Environment.ExpandEnvironmentVariables(rawArgs);
+            var extractionMode = process.Kind == ProcessKind.Installer ? GetExeExtractionMode(rawArgs) : ExeExtractionMode.None;
+            var argsForChildren = extractionMode == ExeExtractionMode.None ? rawArgs : StripExeExecutionMarkers(rawArgs);
+            expandedArguments = Environment.ExpandEnvironmentVariables(argsForChildren);
+
+            var parentInstallerPath = string.IsNullOrWhiteSpace(process.RelativePath)
+                ? string.Empty
+                : (Path.IsPathRooted(process.RelativePath)
+                    ? process.RelativePath
+                    : Path.Combine(AppContext.BaseDirectory, process.RelativePath));
 
             if (process.Kind == ProcessKind.Installer &&
                 process.InstallerSourceMode != InstallerSourceMode.StaticLocal)
             {
-                var parentInstallerPath = string.IsNullOrWhiteSpace(process.RelativePath)
-                    ? string.Empty
-                    : (Path.IsPathRooted(process.RelativePath)
-                        ? process.RelativePath
-                        : Path.Combine(AppContext.BaseDirectory, process.RelativePath));
-
                 if (string.IsNullOrWhiteSpace(parentInstallerPath) || !File.Exists(parentInstallerPath))
                 {
                     string? downloadError = null;
@@ -1326,6 +1728,36 @@ public sealed class MainViewModel : ObservableObject
                         step.SetStatus("❌", "Download fallito");
                         return new ProcessResult(1, string.Empty, err);
                     }
+                }
+            }
+            else if (process.Kind == ProcessKind.Installer)
+            {
+                if (string.IsNullOrWhiteSpace(parentInstallerPath) || !File.Exists(parentInstallerPath))
+                {
+                    var err = $"Installer non trovato prima dei sottoprocessi: {parentInstallerPath}";
+                    step.SetStatus("❌", "Installer non trovato");
+                    return new ProcessResult(1, string.Empty, err);
+                }
+            }
+
+            if (process.Kind == ProcessKind.Installer &&
+                extractionMode != ExeExtractionMode.None)
+            {
+                var ext = Path.GetExtension(parentInstallerPath).ToLowerInvariant();
+                if (ext == ".exe")
+                {
+                    step.SetStatus("⏳", "Extracting installer...");
+                    var extracted = await ExtractBootstrapperAsync(step, process, parentInstallerPath, ct);
+
+                    var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["KLEVADEPLOY_EXTRACT_DIR"] = extracted.ExtractedDir,
+                        ["KLEVADEPLOY_EXTRACT_MAIN_INSTALLER"] = extracted.MainInstallerPath,
+                        ["KLEVADEPLOY_EXTRACT_ALL_MSIS"] = extracted.AllMsis.Length == 0 ? string.Empty : string.Join(';', extracted.AllMsis),
+                        ["KLEVADEPLOY_EXTRACT_MODE"] = extractionMode.ToString()
+                    };
+
+                    argScope = new CompositeScope(argScope, new EnvironmentVariableScope(values));
                 }
             }
 
@@ -1475,6 +1907,79 @@ public sealed class MainViewModel : ObservableObject
                     expandedArguments = Environment.ExpandEnvironmentVariables(rawArgs);
                     return await RunExtractedBootstrapperAsync(step, process, installerPath, expandedArguments, installDir, extractionMode, ct);
                 }
+                if (ext != ".exe" && (rawArgs.Contains("{AUTO}", StringComparison.OrdinalIgnoreCase) ||
+                                      rawArgs.Contains("{SILENT}", StringComparison.OrdinalIgnoreCase) ||
+                                      rawArgs.Contains("{AUTOEXTRACT_MAIN_MSI}", StringComparison.OrdinalIgnoreCase) ||
+                                      rawArgs.Contains("{AUTOEXTRACT_ALL_MSI}", StringComparison.OrdinalIgnoreCase)))
+                {
+                    rawArgs = StripExeExecutionMarkers(rawArgs);
+                }
+                if (ext == ".exe" && rawArgs.Contains("{AUTO}", StringComparison.OrdinalIgnoreCase))
+                {
+                    var family = ExeInstallerAnalysis.TryDetectExeInstallerFamily(installerPath);
+                    var argsNoMarkers = StripExeExecutionMarkers(rawArgs);
+
+                    if (string.Equals(family, "WiX Burn", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var (layoutDir, extractedMsiFromBurn) = await TryExtractMsiFromBurnBundleAsync(installerPath, ct);
+                        try
+                        {
+                            if (!string.IsNullOrWhiteSpace(extractedMsiFromBurn) && File.Exists(extractedMsiFromBurn))
+                            {
+                                var ensuredMsi = await EnsureArgumentInputsAsync(step, process, argsNoMarkers, installerArtifactPath: installerPath, msiPath: extractedMsiFromBurn, ct);
+                                if (ensuredMsi.EarlyReturn is not null)
+                                    return ensuredMsi.EarlyReturn;
+                                argScope = ensuredMsi.Scope;
+
+                                expandedArguments = Environment.ExpandEnvironmentVariables(argsNoMarkers);
+                                var msiArgs = string.IsNullOrWhiteSpace(installDir)
+                                    ? expandedArguments
+                                    : AppendMsiInstallDirIfMissing(expandedArguments, installDir);
+                                return await RunMsiWithAppProgressAsync(step, extractedMsiFromBurn, msiArgs, process.RunAsAdmin, ct);
+                            }
+                        }
+                        finally
+                        {
+                            if (!string.IsNullOrWhiteSpace(layoutDir))
+                                TryDeleteDirectory(layoutDir);
+                        }
+                    }
+
+                    try
+                    {
+                        var sevenZipExe = await _processExecutionService.Ensure7ZipInstalledAsync(ct);
+                        var listArgs = $"l -slt \"{installerPath}\"";
+                        var listResult = await _processExecutionService.RunAsync(sevenZipExe, listArgs, runAsAdmin: false, ct);
+                        if (listResult.ExitCode == 0)
+                        {
+                            var msiCount = ExeInstallerAnalysis.CountMsiPathsFrom7ZipSlt(listResult.StdOut);
+                            if (msiCount > 0)
+                            {
+                                var mode = msiCount > 1 ? ExeExtractionMode.AllMsis : ExeExtractionMode.MainMsiOnly;
+
+                                var ensuredExtracted = await EnsureArgumentInputsAsync(step, process, argsNoMarkers, installerArtifactPath: installerPath, msiPath: null, ct);
+                                if (ensuredExtracted.EarlyReturn is not null)
+                                    return ensuredExtracted.EarlyReturn;
+                                argScope = ensuredExtracted.Scope;
+
+                                expandedArguments = Environment.ExpandEnvironmentVariables(argsNoMarkers);
+                                return await RunExtractedBootstrapperAsync(step, process, installerPath, expandedArguments, installDir, mode, ct);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Warning($"Auto mode: 7-Zip MSI probe failed for {Path.GetFileName(installerPath)}: {ex.Message}");
+                    }
+
+                    if (TryResolveSilentArgsForExeInstallerKnown(installerPath, out var silent))
+                        rawArgs = rawArgs.Replace("{AUTO}", silent, StringComparison.OrdinalIgnoreCase).Trim();
+                    else
+                    {
+                        rawArgs = rawArgs.Replace("{AUTO}", string.Empty, StringComparison.OrdinalIgnoreCase).Trim();
+                        _log.Warning($"Auto mode: no MSI detected and EXE family not recognized, running as manual: {Path.GetFileName(installerPath)}");
+                    }
+                }
                 if (ext == ".exe" && rawArgs.Contains("{SILENT}", StringComparison.OrdinalIgnoreCase))
                 {
                     var silent = ResolveSilentArgsForExeInstaller(installerPath);
@@ -1556,9 +2061,7 @@ public sealed class MainViewModel : ObservableObject
                     if (string.IsNullOrWhiteSpace(process.RelativePath))
                         throw new InvalidOperationException($"PowerShell script path missing for process: {process.Name}");
 
-                    var scriptPath = Path.IsPathRooted(process.RelativePath)
-                        ? process.RelativePath
-                        : Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+                    var scriptPath = ResolveExecutableResourcePath(process.RelativePath);
                     return await _processExecutionService.RunPowerShellAsync(scriptPath, isInlineScript: false, process.RunAsAdmin, ct);
                 }
                 finally
@@ -1582,9 +2085,7 @@ public sealed class MainViewModel : ObservableObject
                 if (string.IsNullOrWhiteSpace(process.RelativePath))
                     throw new InvalidOperationException($"Batch script path missing for process: {process.Name}");
 
-                var scriptPath = Path.IsPathRooted(process.RelativePath)
-                    ? process.RelativePath
-                    : Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+                var scriptPath = ResolveExecutableResourcePath(process.RelativePath);
                 return await _processExecutionService.RunBatchAsync(scriptPath, isInlineScript: false, process.RunAsAdmin, ct);
             }
             case ProcessKind.BashScript:
@@ -1602,9 +2103,7 @@ public sealed class MainViewModel : ObservableObject
                 if (string.IsNullOrWhiteSpace(process.RelativePath))
                     throw new InvalidOperationException($"Bash script path missing for process: {process.Name}");
 
-                var scriptPath = Path.IsPathRooted(process.RelativePath)
-                    ? process.RelativePath
-                    : Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+                var scriptPath = ResolveExecutableResourcePath(process.RelativePath);
                 return await _processExecutionService.RunBashAsync(scriptPath, isInlineScript: false, ct);
             }
             case ProcessKind.RegistryFile:
@@ -1617,9 +2116,7 @@ public sealed class MainViewModel : ObservableObject
                 if (string.IsNullOrWhiteSpace(process.RelativePath))
                     throw new InvalidOperationException($"Registry file path missing for process: {process.Name}");
 
-                var regPath = Path.IsPathRooted(process.RelativePath)
-                    ? process.RelativePath
-                    : Path.Combine(AppContext.BaseDirectory, process.RelativePath);
+                var regPath = ResolveExecutableResourcePath(process.RelativePath);
                 var args = $"import \"{regPath}\"";
                 return await _processExecutionService.RunAsync("reg.exe", args, process.RunAsAdmin, ct);
             }
@@ -1890,7 +2387,7 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
-            var family = TryDetectExeInstallerFamily(installerArtifactPath);
+            var family = ExeInstallerAnalysis.TryDetectExeInstallerFamily(installerArtifactPath);
 
             if (string.Equals(family, "WiX Burn", StringComparison.OrdinalIgnoreCase))
             {
@@ -2025,7 +2522,7 @@ public sealed class MainViewModel : ObservableObject
 
     private static string BuildUnsupportedInstallerNotice(string installerPath)
     {
-        var kind = TryDetectExeInstallerFamily(installerPath);
+        var kind = ExeInstallerAnalysis.TryDetectExeInstallerFamily(installerPath);
         if (!string.IsNullOrWhiteSpace(kind))
             return $"Tipo installer rilevato: {kind}. Impossibile leggere in modo automatico i valori predefiniti: verifica i campi.";
         return "Impossibile leggere in modo automatico i valori predefiniti dell'installer: verifica i campi.";
@@ -2044,6 +2541,8 @@ public sealed class MainViewModel : ObservableObject
     private static string StripExeExecutionMarkers(string rawArgs)
     {
         var text = rawArgs ?? string.Empty;
+        text = text.Replace("{AUTO}", string.Empty, StringComparison.OrdinalIgnoreCase);
+        text = text.Replace("{SILENT}", string.Empty, StringComparison.OrdinalIgnoreCase);
         text = text.Replace("{AUTOEXTRACT_ALL_MSI}", string.Empty, StringComparison.OrdinalIgnoreCase);
         text = text.Replace("{AUTOEXTRACT_MAIN_MSI}", string.Empty, StringComparison.OrdinalIgnoreCase);
         return text.Trim();
@@ -2051,7 +2550,7 @@ public sealed class MainViewModel : ObservableObject
 
     private static string ResolveSilentArgsForExeInstaller(string installerPath)
     {
-        var kind = TryDetectExeInstallerFamily(installerPath);
+        var kind = ExeInstallerAnalysis.TryDetectExeInstallerFamily(installerPath);
         if (string.Equals(kind, "Inno Setup", StringComparison.OrdinalIgnoreCase))
             return "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART";
         if (string.Equals(kind, "NSIS", StringComparison.OrdinalIgnoreCase))
@@ -2061,6 +2560,60 @@ public sealed class MainViewModel : ObservableObject
         if (string.Equals(kind, "WiX Burn", StringComparison.OrdinalIgnoreCase))
             return "/quiet /norestart";
         return "/quiet /norestart";
+    }
+
+    private static bool TryResolveSilentArgsForExeInstallerKnown(string installerPath, out string args)
+    {
+        var kind = ExeInstallerAnalysis.TryDetectExeInstallerFamily(installerPath);
+        if (string.Equals(kind, "Inno Setup", StringComparison.OrdinalIgnoreCase))
+        {
+            args = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART";
+            return true;
+        }
+        if (string.Equals(kind, "NSIS", StringComparison.OrdinalIgnoreCase))
+        {
+            args = "/S";
+            return true;
+        }
+        if (string.Equals(kind, "InstallShield", StringComparison.OrdinalIgnoreCase))
+        {
+            args = "/s /v\"/qn /norestart\"";
+            return true;
+        }
+        if (string.Equals(kind, "WiX Burn", StringComparison.OrdinalIgnoreCase))
+        {
+            args = "/quiet /norestart";
+            return true;
+        }
+
+        args = string.Empty;
+        return false;
+    }
+
+    private sealed record BootstrapperExtractionResult(string ExtractedDir, string MainInstallerPath, string[] AllMsis);
+
+    private async Task<BootstrapperExtractionResult> ExtractBootstrapperAsync(
+        ProcessStepViewModel step,
+        DeploymentProcess process,
+        string installerPath,
+        System.Threading.CancellationToken ct)
+    {
+        var extractedDir = CreateProcessExtractionDir(process.Name);
+
+        step.SetStatus("⏳", "Downloading 7-Zip...");
+        var sevenZipExe = await _processExecutionService.Ensure7ZipInstalledAsync(ct);
+
+        var extractArgs = $"x \"{installerPath}\" -o\"{extractedDir}\" -y";
+        var extractResult = await _processExecutionService.RunAsync(sevenZipExe, extractArgs, runAsAdmin: false, ct);
+        if (extractResult.ExitCode != 0)
+            throw new InvalidOperationException($"7-Zip extraction failed (exit {extractResult.ExitCode}).");
+
+        var mainInstaller = ResolveInstallerFromExtractedDir(extractedDir);
+        if (string.IsNullOrWhiteSpace(mainInstaller) || !File.Exists(mainInstaller))
+            throw new InvalidOperationException($"Installer non trovato dopo l'estrazione: {installerPath}");
+
+        var allMsis = FindExtractedMsis(extractedDir).ToArray();
+        return new BootstrapperExtractionResult(extractedDir, mainInstaller, allMsis);
     }
 
     private async Task<ProcessResult> RunExtractedBootstrapperAsync(
@@ -2143,6 +2696,16 @@ public sealed class MainViewModel : ObservableObject
         }
 
         var finalArgs = expandedArguments;
+        if (finalArgs.Contains("{AUTO}", StringComparison.OrdinalIgnoreCase))
+        {
+            if (TryResolveSilentArgsForExeInstallerKnown(mainInstaller, out var silent))
+                finalArgs = finalArgs.Replace("{AUTO}", silent, StringComparison.OrdinalIgnoreCase).Trim();
+            else
+            {
+                finalArgs = finalArgs.Replace("{AUTO}", string.Empty, StringComparison.OrdinalIgnoreCase).Trim();
+                _log.Warning($"Auto mode: extracted EXE installer family not recognized, running without silent args: {Path.GetFileName(mainInstaller)}");
+            }
+        }
         if (finalArgs.Contains("{SILENT}", StringComparison.OrdinalIgnoreCase))
         {
             var silent = ResolveSilentArgsForExeInstaller(mainInstaller);
@@ -2164,35 +2727,6 @@ public sealed class MainViewModel : ObservableObject
         }
 
         return args.Trim();
-    }
-
-    private static string? TryDetectExeInstallerFamily(string installerPath)
-    {
-        try
-        {
-            using var fs = File.OpenRead(installerPath);
-            var max = 1024 * 1024;
-            var buf = new byte[Math.Min(max, (int)Math.Min(fs.Length, max))];
-            var read = fs.Read(buf, 0, buf.Length);
-            if (read <= 0) return null;
-            var s = Encoding.ASCII.GetString(buf, 0, read);
-
-            if (s.Contains("Inno Setup Setup Data", StringComparison.OrdinalIgnoreCase))
-                return "Inno Setup";
-            if (s.Contains("Nullsoft", StringComparison.OrdinalIgnoreCase) ||
-                s.Contains("NSIS", StringComparison.OrdinalIgnoreCase))
-                return "NSIS";
-            if (s.Contains("InstallShield", StringComparison.OrdinalIgnoreCase))
-                return "InstallShield";
-            if (s.Contains("WixBundle", StringComparison.OrdinalIgnoreCase) ||
-                s.Contains("Burn", StringComparison.OrdinalIgnoreCase))
-                return "WiX Burn";
-            return null;
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     private static Dictionary<string, string> TryGetEnvVarDefaultsFromMsi(string msiPath, string rawArgs)
@@ -2406,6 +2940,29 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    private static string ResolveExecutableResourcePath(string relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+            throw new ArgumentException("Path is required.", nameof(relativePath));
+
+        if (Path.IsPathRooted(relativePath))
+            return relativePath;
+
+        var storageDir = Environment.GetEnvironmentVariable("KLEVADEPLOY_STORAGE_DIR");
+        if (string.IsNullOrWhiteSpace(storageDir))
+            storageDir = Path.Combine(AppContext.BaseDirectory, "Data");
+
+        var storagePath = Path.Combine(storageDir, relativePath);
+        if (File.Exists(storagePath))
+            return storagePath;
+
+        var basePath = Path.Combine(AppContext.BaseDirectory, relativePath);
+        if (File.Exists(basePath))
+            return basePath;
+
+        return storagePath;
+    }
+
     private void UpdateArgumentProfileAfterRun(DeploymentProcess process, bool success)
     {
         var inputs = (process.ArgumentInputs ?? new List<ArgumentInputDefinition>())
@@ -2520,6 +3077,27 @@ public sealed class MainViewModel : ObservableObject
             _disposed = true;
             foreach (var kvp in _original)
                 Environment.SetEnvironmentVariable(kvp.Key, kvp.Value);
+        }
+    }
+
+    private sealed class CompositeScope : IDisposable
+    {
+        private readonly IDisposable? _a;
+        private readonly IDisposable? _b;
+        private bool _disposed;
+
+        public CompositeScope(IDisposable? a, IDisposable? b)
+        {
+            _a = a;
+            _b = b;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            try { _b?.Dispose(); } catch { }
+            try { _a?.Dispose(); } catch { }
         }
     }
 
@@ -2786,6 +3364,64 @@ public sealed class MainViewModel : ObservableObject
         IsUserCreated = p.IsUserCreated,
         SubProcesses = p.SubProcesses?.ToList() ?? new()
     };
+
+    private static DeploymentProcess MaterializeExternalScriptsForExport(DeploymentProcess process)
+    {
+        var clone = CloneProcess(process);
+
+        if (ShouldInlineScriptContent(clone) &&
+            TryReadExportableResourceText(clone.RelativePath, out var scriptText))
+        {
+            clone.ScriptContent = scriptText;
+        }
+
+        if (clone.SubProcesses is null || clone.SubProcesses.Count == 0)
+            return clone;
+
+        clone.SubProcesses = clone.SubProcesses
+            .Select(sp => new DeploymentSubProcess
+            {
+                Name = sp.Name,
+                RelativePath = sp.RelativePath,
+                Arguments = sp.Arguments,
+                RunAsAdmin = sp.RunAsAdmin,
+                Process = sp.Process is null ? null : MaterializeExternalScriptsForExport(sp.Process)
+            })
+            .ToList();
+
+        return clone;
+    }
+
+    private static bool ShouldInlineScriptContent(DeploymentProcess process) =>
+        process.Kind is ProcessKind.PowerShellScript or ProcessKind.BatchScript or ProcessKind.BashScript &&
+        string.IsNullOrWhiteSpace(process.ScriptContent) &&
+        !string.IsNullOrWhiteSpace(process.RelativePath);
+
+    private static bool TryReadExportableResourceText(string relativePath, out string content)
+    {
+        content = string.Empty;
+        if (string.IsNullOrWhiteSpace(relativePath))
+            return false;
+
+        var storageDir = Environment.GetEnvironmentVariable("KLEVADEPLOY_STORAGE_DIR");
+        if (string.IsNullOrWhiteSpace(storageDir))
+            storageDir = Path.Combine(AppContext.BaseDirectory, "Data");
+
+        var candidates = new[]
+        {
+            Path.IsPathRooted(relativePath) ? relativePath : Path.Combine(storageDir, relativePath),
+            Path.IsPathRooted(relativePath) ? relativePath : Path.Combine(AppContext.BaseDirectory, relativePath)
+        };
+
+        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (!File.Exists(candidate)) continue;
+            content = File.ReadAllText(candidate);
+            return true;
+        }
+
+        return false;
+    }
 
     private static string CreateProcessExtractionDir(string processName)
     {

@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using KlevaDeploy.Models;
 
@@ -5,6 +8,9 @@ namespace KlevaDeploy.ViewModels;
 
 public sealed class PresetViewModel : ObservableObject
 {
+    private int _missingStepCount;
+    private string _missingProcessSummary = string.Empty;
+
     public DeploymentPreset Preset { get; }
 
     private bool _isSelected;
@@ -24,8 +30,31 @@ public sealed class PresetViewModel : ObservableObject
     public bool HasEmojiIcon => !HasCustomIcon && !string.IsNullOrWhiteSpace(Icon);
     public bool ShowDefaultIcon => !HasCustomIcon && string.IsNullOrWhiteSpace(Icon);
     public int StepCount => Preset.Steps.Count;
+    public int MissingStepCount => _missingStepCount;
+    public bool HasMissingProcesses => _missingStepCount > 0;
+    public int ResolvedStepCount => Math.Max(0, StepCount - _missingStepCount);
+    public string MissingProcessSummary => _missingProcessSummary;
 
     public PresetViewModel(DeploymentPreset preset) => Preset = preset;
+
+    public void UpdateProcessAvailability(IReadOnlySet<string> availableProcessIds)
+    {
+        var missingSteps = Preset.Steps
+            .Where(step => !string.IsNullOrWhiteSpace(step.ProcessId) && !availableProcessIds.Contains(step.ProcessId))
+            .ToList();
+
+        _missingStepCount = missingSteps.Count;
+        _missingProcessSummary = missingSteps.Count == 0
+            ? string.Empty
+            : string.Join(", ", missingSteps
+                .Select(step => step.ProcessId)
+                .Distinct(StringComparer.OrdinalIgnoreCase));
+
+        OnPropertyChanged(nameof(MissingStepCount));
+        OnPropertyChanged(nameof(HasMissingProcesses));
+        OnPropertyChanged(nameof(ResolvedStepCount));
+        OnPropertyChanged(nameof(MissingProcessSummary));
+    }
 
     public void Refresh()
     {
@@ -39,5 +68,9 @@ public sealed class PresetViewModel : ObservableObject
         OnPropertyChanged(nameof(HasEmojiIcon));
         OnPropertyChanged(nameof(ShowDefaultIcon));
         OnPropertyChanged(nameof(StepCount));
+        OnPropertyChanged(nameof(MissingStepCount));
+        OnPropertyChanged(nameof(HasMissingProcesses));
+        OnPropertyChanged(nameof(ResolvedStepCount));
+        OnPropertyChanged(nameof(MissingProcessSummary));
     }
 }

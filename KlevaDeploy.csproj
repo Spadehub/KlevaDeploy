@@ -12,12 +12,13 @@
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
     <CompilerGeneratedFilesOutputPath>obj/Generated</CompilerGeneratedFilesOutputPath>
     <VersionPrefix>0.1.0</VersionPrefix>
-    <VersionSuffix>alpha.4</VersionSuffix>
+    <VersionSuffix>beta.1</VersionSuffix>
     <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
     <FileVersion>$(VersionPrefix).0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="HtmlAgilityPack" Version="1.11.71" />
@@ -35,7 +36,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Defaults\portals.json" />
-    <EmbeddedResource Include="Defaults\Imports\*.kdp.json" />
+    <EmbeddedResource Include="Kdp\Processes\*.kdp.json" />
+    <EmbeddedResource Include="Kdp\Packages\*.kdp.package.json" />
     <EmbeddedResource Include="appsettings.json" />
 
     <Resource Include="Assets\Brand\*.png" />

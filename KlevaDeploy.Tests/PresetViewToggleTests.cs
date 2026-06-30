@@ -78,10 +78,10 @@ public sealed class PresetViewToggleTests
 
     private sealed class FakeInstallerService : IInstallerService
     {
-        public Task<IReadOnlyList<DeploymentPreset>> LoadPresetsAsync(bool isDemoMode) =>
+        public Task<IReadOnlyList<DeploymentPreset>> LoadPresetsAsync() =>
             Task.FromResult<IReadOnlyList<DeploymentPreset>>(Array.Empty<DeploymentPreset>());
 
-        public Task<IReadOnlyList<DeploymentProcess>> LoadProcessesAsync(bool isDemoMode) =>
+        public Task<IReadOnlyList<DeploymentProcess>> LoadProcessesAsync() =>
             Task.FromResult<IReadOnlyList<DeploymentProcess>>(Array.Empty<DeploymentProcess>());
 
         public IReadOnlyList<(DeploymentProcess Process, int Order, bool IsRequired)> BuildExecutionQueue(

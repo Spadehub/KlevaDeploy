@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -52,6 +54,10 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<ProcessSelectionItem> SelectedProcesses { get; } = new();
 
+    public ObservableCollection<MissingPresetProcessReference> MissingProcesses { get; } = new();
+
+    public ObservableCollection<DeploymentProcess> ReplacementProcesses { get; } = new();
+
     /// <summary>
     /// Gets the filtered view of <see cref="SelectedProcesses"/>, based on <see cref="SelectedSearchText"/>.
     /// </summary>
@@ -92,6 +98,8 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     public CreatePresetViewModel(IPresetIconService? presetIconService = null)
     {
         _presetIconService = presetIconService;
+        SelectedProcesses.CollectionChanged += OnSelectedProcessesCollectionChanged;
+        MissingProcesses.CollectionChanged += OnMissingProcessesCollectionChanged;
     }
 
     /// <summary>
@@ -103,6 +111,8 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     /// Gets a value indicating whether a custom icon is set for either theme variant.
     /// </summary>
     public bool HasCustomIcon => !string.IsNullOrWhiteSpace(CustomIconLightPath) || !string.IsNullOrWhiteSpace(CustomIconDarkPath);
+
+    public bool HasMissingProcesses => MissingProcesses.Count > 0;
 
     /// <summary>
     /// Gets a value indicating whether reordering is enabled for the selected list.
@@ -124,11 +134,14 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             
             AvailableProcesses.Clear();
             SelectedProcesses.Clear();
+            MissingProcesses.Clear();
+            ReplacementProcesses.Clear();
 
             if (availableProcesses != null)
             {
-                foreach (var process in availableProcesses)
+                foreach (var process in availableProcesses.OrderBy(p => p.Name))
                 {
+                    ReplacementProcesses.Add(process);
                     var item = new ProcessSelectionItem(process);
                     AvailableProcesses.Add(item);
                 }
@@ -157,24 +170,42 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             if (preset == null) return;
 
             _editingPreset = preset;
-            PresetId = preset.Id;
-            Name = preset.Name;
-            Icon = preset.Icon;
+            PresetId = string.IsNullOrWhiteSpace(preset.Id) ? Guid.NewGuid().ToString("N") : preset.Id;
+            Name = preset.Name ?? string.Empty;
+            Icon = string.IsNullOrWhiteSpace(preset.Icon) ? "📦" : preset.Icon;
             CustomIconLightPath = preset.CustomIconLightPath;
             CustomIconDarkPath = preset.CustomIconDarkPath;
             ResetIconState();
-            Description = preset.Description;
-            Category = preset.Category;
+            Description = preset.Description ?? string.Empty;
+            Category = preset.Category ?? string.Empty;
             
             AvailableProcesses.Clear();
             SelectedProcesses.Clear();
+            MissingProcesses.Clear();
+            ReplacementProcesses.Clear();
             
-            var stepsByProcessId = preset.Steps?.ToDictionary(s => s.ProcessId) ?? new();
-            var orderedSteps = preset.Steps?.OrderBy(s => s.Order).ToList() ?? new();
+            preset.Steps ??= new List<PresetProcessStep>();
+            var orderedSteps = preset.Steps.OrderBy(s => s.Order).ToList();
+
+            var processList = (availableProcesses ?? Enumerable.Empty<DeploymentProcess>()).ToList();
+            foreach (var process in processList.OrderBy(p => p.Name))
+                ReplacementProcesses.Add(process);
+
+            var stepProcessIds = preset.Steps
+                .Select(s => (s.ProcessId ?? string.Empty).Trim())
+                .Where(id => id.Length > 0)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
             
             foreach (var step in orderedSteps)
             {
-                var process = availableProcesses?.FirstOrDefault(p => p.Id == step.ProcessId);
+                var stepId = (step.ProcessId ?? string.Empty).Trim();
+                if (stepId.Length == 0)
+                {
+                    ValidationError = "Il pacchetto contiene uno step con ProcessId vuoto. Verrà ignorato.";
+                    continue;
+                }
+
+                var process = processList.FirstOrDefault(p => string.Equals(p.Id, stepId, StringComparison.OrdinalIgnoreCase));
                 if (process != null)
                 {
                     var item = new ProcessSelectionItem(process)
@@ -185,13 +216,19 @@ public sealed partial class CreatePresetViewModel : ObservableObject
                     };
                     SelectedProcesses.Add(item);
                 }
+                else
+                {
+                    MissingProcesses.Add(new MissingPresetProcessReference(stepId, step.Order, step.IsRequired));
+                }
             }
 
-            if (availableProcesses != null)
+            if (processList.Count > 0)
             {
-                foreach (var process in availableProcesses)
+                foreach (var process in processList)
                 {
-                    if (!stepsByProcessId.ContainsKey(process.Id))
+                    if (string.IsNullOrWhiteSpace(process.Id)) continue;
+
+                    if (!stepProcessIds.Contains(process.Id))
                     {
                         var item = new ProcessSelectionItem(process);
                         AvailableProcesses.Add(item);
@@ -202,11 +239,12 @@ public sealed partial class CreatePresetViewModel : ObservableObject
             ApplyAvailableFilter();
             ApplySelectedFilter();
             OnPropertyChanged(nameof(IsEditMode));
-            ValidationError = null;
+            if (string.IsNullOrWhiteSpace(ValidationError))
+                ValidationError = null;
         }
         catch (Exception)
         {
-            ValidationError = "Errore durante il caricamento del preset per la modifica.";
+            ValidationError = "Errore durante il caricamento del pacchetto per la modifica.";
         }
     }
 
@@ -274,6 +312,16 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         return descLower.Contains(searchLower);
     }
 
+    private void OnSelectedProcessesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(IsSelectedReorderEnabled));
+    }
+
+    private void OnMissingProcessesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(HasMissingProcesses));
+    }
+
     [RelayCommand]
     private void ActivateProcess(ProcessSelectionItem item)
     {
@@ -316,6 +364,62 @@ public sealed partial class CreatePresetViewModel : ObservableObject
         
         ApplyAvailableFilter();
         ApplySelectedFilter();
+    }
+
+    [RelayCommand]
+    private void ResolveMissingProcess(MissingPresetProcessReference? missing)
+    {
+        if (missing is null) return;
+
+        var replacementId = missing.SelectedReplacementProcessId;
+        if (string.IsNullOrWhiteSpace(replacementId))
+        {
+            ValidationError = "Seleziona un processo esistente da associare allo step mancante.";
+            return;
+        }
+
+        var process = ReplacementProcesses.FirstOrDefault(p => string.Equals(p.Id, replacementId, StringComparison.OrdinalIgnoreCase));
+        if (process is null)
+        {
+            ValidationError = "Il processo selezionato non esiste più.";
+            return;
+        }
+
+        var existingSelected = SelectedProcesses.FirstOrDefault(p => string.Equals(p.Process.Id, process.Id, StringComparison.OrdinalIgnoreCase));
+        if (existingSelected != null)
+        {
+            existingSelected.IsRequired = existingSelected.IsRequired || missing.IsRequired;
+            existingSelected.Order = existingSelected.Order == 0
+                ? missing.Order
+                : Math.Min(existingSelected.Order, missing.Order);
+        }
+        else
+        {
+            var fromAvailable = AvailableProcesses.FirstOrDefault(p => string.Equals(p.Process.Id, process.Id, StringComparison.OrdinalIgnoreCase));
+            if (fromAvailable != null)
+            {
+                AvailableProcesses.Remove(fromAvailable);
+                fromAvailable.IsSelected = true;
+                fromAvailable.IsRequired = missing.IsRequired;
+                fromAvailable.Order = missing.Order;
+                SelectedProcesses.Add(fromAvailable);
+            }
+            else
+            {
+                SelectedProcesses.Add(new ProcessSelectionItem(process)
+                {
+                    IsSelected = true,
+                    IsRequired = missing.IsRequired,
+                    Order = missing.Order
+                });
+            }
+        }
+
+        MissingProcesses.Remove(missing);
+        UpdateProcessOrdering();
+        ApplyAvailableFilter();
+        ApplySelectedFilter();
+        ValidationError = null;
     }
 
     private void UpdateProcessOrdering()
@@ -409,6 +513,20 @@ public sealed partial class CreatePresetViewModel : ObservableObject
 
         CreatedPreset = CreatePreset();
         CloseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    public bool TryBuildPreset(out DeploymentPreset? preset, out string? error)
+    {
+        if (!ValidateInput())
+        {
+            preset = null;
+            error = ValidationError;
+            return false;
+        }
+
+        preset = CreatePreset();
+        error = null;
+        return true;
     }
 
     [RelayCommand]
@@ -545,13 +663,13 @@ public sealed partial class CreatePresetViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(Name))
         {
-            ValidationError = "Il nome del preset è obbligatorio.";
+            ValidationError = "Il nome del pacchetto è obbligatorio.";
             return false;
         }
 
-        if (SelectedProcesses.Count == 0)
+        if (SelectedProcesses.Count == 0 && MissingProcesses.Count == 0)
         {
-            ValidationError = "Seleziona almeno un processo per il preset.";
+            ValidationError = "Seleziona almeno un processo o mantieni almeno un riferimento valido nel pacchetto.";
             return false;
         }
 
@@ -569,6 +687,26 @@ public sealed partial class CreatePresetViewModel : ObservableObject
                 Order = p.Order,
                 EnabledOverride = null,
                 IsRequired = p.IsRequired
+            })
+            .ToList();
+
+        foreach (var missing in MissingProcesses.OrderBy(p => p.Order))
+        {
+            steps.Add(new PresetProcessStep
+            {
+                ProcessId = missing.ProcessId,
+                Order = missing.Order,
+                EnabledOverride = null,
+                IsRequired = missing.IsRequired
+            });
+        }
+
+        steps = steps
+            .OrderBy(p => p.Order)
+            .Select((step, index) =>
+            {
+                step.Order = (index + 1) * 10;
+                return step;
             })
             .ToList();
 

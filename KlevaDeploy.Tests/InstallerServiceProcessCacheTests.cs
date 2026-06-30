@@ -18,7 +18,7 @@ public sealed class InstallerServiceProcessCacheTests
         var (svc, cleanup) = CreateServiceWithTempStorage();
         try
         {
-            await svc.LoadProcessesAsync(isDemoMode: true);
+            await svc.LoadProcessesAsync();
 
             svc.AddUserProcess(new DeploymentProcess
             {
@@ -42,12 +42,23 @@ public sealed class InstallerServiceProcessCacheTests
     }
 
     [Fact]
-    public async Task UpdateProcess_OverridesBuiltInProcessWithoutDuplicatingId()
+    public async Task UpdateProcess_UpdatesExistingCustomProcessWithoutDuplicatingId()
     {
         var (svc, cleanup) = CreateServiceWithTempStorage();
         try
         {
-            await svc.LoadProcessesAsync(isDemoMode: true);
+            await svc.LoadProcessesAsync();
+
+            svc.AddUserProcess(new DeploymentProcess
+            {
+                Id = "chrome",
+                Name = "Google Chrome",
+                Description = "Initial",
+                Kind = ProcessKind.Installer,
+                RelativePath = @"Installers\ChromeSetup.exe",
+                Arguments = "/silent /install",
+                EnabledByDefault = true,
+            });
 
             svc.UpdateProcess(new DeploymentProcess
             {
@@ -76,7 +87,7 @@ public sealed class InstallerServiceProcessCacheTests
         var (svc, cleanup) = CreateServiceWithTempStorage();
         try
         {
-            await svc.LoadProcessesAsync(isDemoMode: true);
+            await svc.LoadProcessesAsync();
 
             svc.AddUserProcess(new DeploymentProcess
             {
@@ -100,41 +111,12 @@ public sealed class InstallerServiceProcessCacheTests
     }
 
     [Fact]
-    public async Task DeleteProcess_RemovesOverrideAndRevertsToBuiltIn()
-    {
-        var (svc, cleanup) = CreateServiceWithTempStorage();
-        try
-        {
-            await svc.LoadProcessesAsync(isDemoMode: true);
-
-            svc.UpdateProcess(new DeploymentProcess
-            {
-                Id = "chrome",
-                Name = "Chrome Override",
-                Description = "Overridden",
-                Kind = ProcessKind.Installer,
-                RelativePath = @"Installers\ChromeSetup.exe",
-                Arguments = "/silent /install",
-                EnabledByDefault = true,
-            });
-
-            Assert.Equal("Chrome Override", svc.GetAllAvailableProcesses().Single(p => p.Id == "chrome").Name);
-            Assert.True(svc.DeleteProcess("chrome"));
-            Assert.Equal("Google Chrome", svc.GetAllAvailableProcesses().Single(p => p.Id == "chrome").Name);
-        }
-        finally
-        {
-            cleanup();
-        }
-    }
-
-    [Fact]
     public async Task DeletePreset_RemovesCustomPreset()
     {
         var (svc, cleanup) = CreateServiceWithTempStorage();
         try
         {
-            await svc.LoadPresetsAsync(isDemoMode: true);
+            await svc.LoadPresetsAsync();
 
             svc.AddUserPreset(new DeploymentPreset
             {
@@ -148,6 +130,34 @@ public sealed class InstallerServiceProcessCacheTests
             Assert.Contains(svc.GetAllPresets(), p => p.Id == "custom-preset");
             Assert.True(svc.DeletePreset("custom-preset"));
             Assert.DoesNotContain(svc.GetAllPresets(), p => p.Id == "custom-preset");
+        }
+        finally
+        {
+            cleanup();
+        }
+    }
+
+    [Fact]
+    public async Task LoadPresetsAsync_ReturnsCustomPresetsAfterTheyAreAdded()
+    {
+        var (svc, cleanup) = CreateServiceWithTempStorage();
+        try
+        {
+            await svc.LoadPresetsAsync();
+
+            svc.AddUserPreset(new DeploymentPreset
+            {
+                Id = "imported-package",
+                Name = "Imported Package",
+                Category = "Test",
+                Description = "Imported from bundle",
+                Steps = new() { new PresetProcessStep { ProcessId = "retail-server", Order = 10 } }
+            });
+
+            var loaded = await svc.LoadPresetsAsync();
+
+            Assert.Contains(loaded, p => p.Id == "imported-package");
+            Assert.Equal(1, loaded.Count(p => p.Id == "imported-package"));
         }
         finally
         {
