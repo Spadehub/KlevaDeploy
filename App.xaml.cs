@@ -268,17 +268,32 @@ public partial class App : Application
             }
             catch { }
 
+            Exception? lastCopyError = null;
+            var copied = false;
             for (var i = 0; i < 30; i++)
             {
                 try
                 {
                     File.Copy(source, target, overwrite: true);
+                    copied = true;
                     break;
                 }
-                catch
+                catch (Exception ex)
                 {
+                    lastCopyError = ex;
                     await Task.Delay(200);
                 }
+            }
+
+            if (!copied)
+            {
+                MessageBox.Show(
+                    $"Unable to apply the downloaded update to:\n{target}\n\n{lastCopyError?.Message ?? "Unknown copy error."}",
+                    "KlevaDeploy update failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                Current?.Shutdown(-1);
+                return true;
             }
 
             Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });

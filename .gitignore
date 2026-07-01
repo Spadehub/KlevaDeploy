@@ -34,4 +34,6 @@ Defaults/*.kac.json
 Defaults/**/*.kac.json
 
 .trae/
+.dbg/
 Kdp/
+Exports/

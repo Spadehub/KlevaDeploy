@@ -2031,56 +2031,7 @@ public sealed class CreateProcessViewModel : ObservableObject
                 throw new InvalidOperationException("File processo non valido.");
 
             var imported = dto.Process;
-            ProcessName = imported.Name ?? string.Empty;
-            Description = imported.Description ?? string.Empty;
-            SelectedProcessKind = imported.Kind;
-            RunAsAdmin = imported.RunAsAdmin;
-            RequiresInternet = imported.RequiresInternet;
-            PortalAccessEnabled = imported.RequiresAuth;
-            SelectedPortalId = imported.PortalId;
-            InstallerSourceMode = InferInstallerSourceMode(imported);
-            FilePath = InstallerSourceMode == InstallerSourceMode.StaticLocal ? (imported.RelativePath ?? string.Empty) : string.Empty;
-            DownloadUrl = imported.DownloadUrl ?? string.Empty;
-            DownloadBaseFolderUrl = imported.DownloadBaseFolderUrl ?? string.Empty;
-            DownloadSelectedFileName = imported.DownloadSelectedFileName ?? string.Empty;
-            IsInstallerAutoUpdateEnabled = imported.DownloadUseLatestVersion;
-            DownloadSelectedVersion = imported.DownloadVersionFolderName ?? string.Empty;
-            ScriptContent = imported.ScriptContent ?? string.Empty;
-            InstallDirectory = imported.InstallDirectory ?? string.Empty;
-            Arguments = imported.Arguments ?? string.Empty;
-
-            SubProcesses.Clear();
-            if (imported.SubProcesses is not null && imported.SubProcesses.Count > 0)
-            {
-                foreach (var sp in imported.SubProcesses)
-                {
-                    if (sp.Process is not null)
-                    {
-                        var cloned = CloneProcess(sp.Process);
-                        if (!string.IsNullOrWhiteSpace(sp.Name)) cloned.Name = sp.Name.Trim();
-                        if (!string.IsNullOrWhiteSpace(sp.RelativePath)) cloned.RelativePath = sp.RelativePath.Trim();
-                        if (!string.IsNullOrWhiteSpace(sp.Arguments)) cloned.Arguments = sp.Arguments.Trim();
-                        if (sp.RunAsAdmin.HasValue) cloned.RunAsAdmin = sp.RunAsAdmin.Value;
-                        SubProcesses.Add(new SubProcessItem { Process = cloned });
-                        continue;
-                    }
-
-                    var legacy = BuildLegacySubProcess(sp);
-                    if (legacy is not null)
-                    {
-                        SubProcesses.Add(new SubProcessItem { Process = legacy });
-                        continue;
-                    }
-
-                    var legacyItem = new SubProcessItem();
-                    legacyItem.Name = sp.Name ?? string.Empty;
-                    legacyItem.RelativePath = sp.RelativePath ?? string.Empty;
-                    legacyItem.Arguments = sp.Arguments ?? string.Empty;
-                    legacyItem.SubProcess.RunAsAdmin = sp.RunAsAdmin;
-                    SubProcesses.Add(legacyItem);
-                }
-            }
-            SelectedSubProcess = SubProcesses.FirstOrDefault();
+            InitializeForEdit(imported);
         }
         catch (Exception ex)
         {
@@ -2111,7 +2062,7 @@ public sealed class CreateProcessViewModel : ObservableObject
         {
             var process = new DeploymentProcess
             {
-                Id = string.Empty,
+                Id = _existingProcessId ?? Guid.NewGuid().ToString("N"),
                 Name = (ProcessName ?? string.Empty).Trim(),
                 Description = (Description ?? string.Empty).Trim(),
                 Kind = SelectedProcessKind,
@@ -2331,7 +2282,6 @@ public sealed class CreateProcessViewModel : ObservableObject
             IsUserCreated = true,
             EnabledByDefault = true
         };
-
         process.SubProcesses = IsSubProcessEditor
             ? new List<DeploymentSubProcess>()
             : SubProcesses

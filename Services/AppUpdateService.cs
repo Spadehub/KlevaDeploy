@@ -2,6 +2,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using KlevaDeploy.Models;
@@ -32,6 +33,9 @@ public sealed class AppUpdateService : IAppUpdateService
         var assetName = GetSetting("KLEVADEPLOY_GITHUB_ASSET_NAME", _cfg.AssetName);
         var includePrereleases = GetBoolSetting("KLEVADEPLOY_GITHUB_INCLUDE_PRERELEASES", false);
         var token = Environment.GetEnvironmentVariable(_cfg.TokenEnvVar);
+        var currentVersionString = GetCurrentVersionString();
+        if (!SemVersion.TryParse(currentVersionString, out var currentVersion))
+            return null;
 
         EnsureDefaultHeaders();
 
@@ -59,36 +63,18 @@ public sealed class AppUpdateService : IAppUpdateService
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
 
-            var release = TryGetReleaseElement(doc.RootElement, includePrereleases);
-            if (release is null) return null;
-
-            var tag = release.Value.TryGetProperty("tag_name", out var tagEl) ? tagEl.GetString() : null;
-            if (string.IsNullOrWhiteSpace(tag)) return null;
-
-            var remoteVersionString = tag.Trim().TrimStart('v', 'V');
-
-            if (!SemVersion.TryParse(remoteVersionString, out var remoteVersion))
-                return null;
-
-            var currentVersionString = GetCurrentVersionString();
-            if (!SemVersion.TryParse(currentVersionString, out var currentVersion))
-                return null;
-
-            if (remoteVersion.CompareTo(currentVersion) <= 0)
-                return null;
-
-            if (!release.Value.TryGetProperty("assets", out var assetsEl) || assetsEl.ValueKind != JsonValueKind.Array)
-                return null;
-
-            foreach (var asset in assetsEl.EnumerateArray())
+            foreach (var release in EnumerateCandidateReleases(doc.RootElement, includePrereleases))
             {
-                var name = asset.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
-                if (!string.Equals(name, assetName, StringComparison.OrdinalIgnoreCase)) continue;
+                var tag = release.TryGetProperty("tag_name", out var tagEl) ? tagEl.GetString() : null;
+                if (string.IsNullOrWhiteSpace(tag)) continue;
 
-                var dl = asset.TryGetProperty("browser_download_url", out var dlEl) ? dlEl.GetString() : null;
-                if (string.IsNullOrWhiteSpace(dl)) return null;
+                var remoteVersionString = tag.Trim().TrimStart('v', 'V');
+                if (!SemVersion.TryParse(remoteVersionString, out var remoteVersion)) continue;
+                if (remoteVersion.CompareTo(currentVersion) <= 0) continue;
 
-                return new AppUpdateInfo(remoteVersion.ToString(), dl, name ?? assetName);
+                var info = TryBuildAppUpdateInfo(release, remoteVersion, assetName);
+                if (info is not null)
+                    return info;
             }
         }
 
@@ -116,6 +102,16 @@ public sealed class AppUpdateService : IAppUpdateService
         var destPath = Path.Combine(dir, fileName);
         var tempPath = destPath + ".download";
 
+        if (File.Exists(destPath))
+        {
+            if (info.AssetSizeBytes is null)
+                return destPath;
+
+            var existingLength = new FileInfo(destPath).Length;
+            if (existingLength == info.AssetSizeBytes.Value)
+                return destPath;
+        }
+
         using var request = new HttpRequestMessage(HttpMethod.Get, info.DownloadUrl);
         ApplyGitHubAuth(request, token);
         using var response = await SendWithRedirectsAsync(request, token, ct);
@@ -133,6 +129,31 @@ public sealed class AppUpdateService : IAppUpdateService
 
         File.Move(tempPath, destPath, overwrite: true);
         return destPath;
+    }
+
+    public string? LaunchUpdater(string downloadedUpdatePath)
+    {
+        if (string.IsNullOrWhiteSpace(downloadedUpdatePath) || !File.Exists(downloadedUpdatePath))
+            return "Downloaded update executable not found.";
+
+        var target = Environment.ProcessPath;
+        if (string.IsNullOrWhiteSpace(target))
+            return "Current application path is not available.";
+
+        try
+        {
+            var pid = Environment.ProcessId;
+            Process.Start(new ProcessStartInfo(downloadedUpdatePath, $"--apply-update --pid {pid} --target \"{target}\"")
+            {
+                UseShellExecute = true
+            });
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Failed to launch app updater", ex);
+            return ex.Message;
+        }
     }
 
     private void EnsureDefaultHeaders()
@@ -217,19 +238,68 @@ public sealed class AppUpdateService : IAppUpdateService
         return v is null ? "0.0.0" : $"{v.Major}.{v.Minor}.{v.Build}";
     }
 
-    private static JsonElement? TryGetReleaseElement(JsonElement root, bool includePrereleases)
+    private static IEnumerable<JsonElement> EnumerateCandidateReleases(JsonElement root, bool includePrereleases)
     {
-        if (!includePrereleases)
-            return root;
+        if (root.ValueKind == JsonValueKind.Object)
+        {
+            if (ShouldConsiderRelease(root, includePrereleases))
+                yield return root;
+            yield break;
+        }
 
         if (root.ValueKind != JsonValueKind.Array)
+            yield break;
+
+        foreach (var release in root.EnumerateArray())
+        {
+            if (!ShouldConsiderRelease(release, includePrereleases)) continue;
+            yield return release;
+        }
+    }
+
+    private static bool ShouldConsiderRelease(JsonElement release, bool includePrereleases)
+    {
+        var isDraft = release.TryGetProperty("draft", out var draftEl) && draftEl.ValueKind == JsonValueKind.True;
+        if (isDraft) return false;
+
+        var isPrerelease = release.TryGetProperty("prerelease", out var prereleaseEl) && prereleaseEl.ValueKind == JsonValueKind.True;
+        if (!includePrereleases && isPrerelease) return false;
+
+        return true;
+    }
+
+    private static AppUpdateInfo? TryBuildAppUpdateInfo(JsonElement release, SemVersion remoteVersion, string assetName)
+    {
+        if (!release.TryGetProperty("assets", out var assetsEl) || assetsEl.ValueKind != JsonValueKind.Array)
             return null;
 
-        foreach (var r in root.EnumerateArray())
+        foreach (var asset in assetsEl.EnumerateArray())
         {
-            var isDraft = r.TryGetProperty("draft", out var draftEl) && draftEl.ValueKind == JsonValueKind.True;
-            if (isDraft) continue;
-            return r;
+            var name = asset.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
+            if (!string.Equals(name, assetName, StringComparison.OrdinalIgnoreCase)) continue;
+
+            var dl = asset.TryGetProperty("browser_download_url", out var dlEl) ? dlEl.GetString() : null;
+            if (string.IsNullOrWhiteSpace(dl)) return null;
+
+            var releaseName = release.TryGetProperty("name", out var releaseNameEl) ? releaseNameEl.GetString() : null;
+            var releaseNotes = release.TryGetProperty("body", out var bodyEl) ? bodyEl.GetString() : null;
+            var releasePageUrl = release.TryGetProperty("html_url", out var htmlEl) ? htmlEl.GetString() : null;
+            var isPrerelease = release.TryGetProperty("prerelease", out var prereleaseEl) && prereleaseEl.ValueKind == JsonValueKind.True;
+            var publishedAtUtc = TryGetDateTimeOffset(release, "published_at") ?? TryGetDateTimeOffset(release, "created_at");
+            long? assetSizeBytes = null;
+            if (asset.TryGetProperty("size", out var sizeEl) && sizeEl.ValueKind == JsonValueKind.Number && sizeEl.TryGetInt64(out var size))
+                assetSizeBytes = size;
+
+            return new AppUpdateInfo(
+                remoteVersion.ToString(),
+                dl,
+                name ?? assetName,
+                string.IsNullOrWhiteSpace(releaseName) ? $"v{remoteVersion}" : releaseName.Trim(),
+                releaseNotes?.Trim() ?? string.Empty,
+                releasePageUrl?.Trim() ?? string.Empty,
+                isPrerelease,
+                publishedAtUtc,
+                assetSizeBytes);
         }
 
         return null;
@@ -325,6 +395,17 @@ public sealed class AppUpdateService : IAppUpdateService
                 return $"{Major}.{Minor}.{Patch}";
             return $"{Major}.{Minor}.{Patch}-{string.Join('.', PreReleaseIdentifiers)}";
         }
+    }
+
+    private static DateTimeOffset? TryGetDateTimeOffset(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var valueElement))
+            return null;
+        if (valueElement.ValueKind != JsonValueKind.String)
+            return null;
+
+        var raw = valueElement.GetString();
+        return DateTimeOffset.TryParse(raw, out var value) ? value : null;
     }
 }
 

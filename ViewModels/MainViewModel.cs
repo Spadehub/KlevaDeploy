@@ -3958,13 +3958,12 @@ public sealed class MainViewModel : ObservableObject
             if (string.IsNullOrWhiteSpace(path)) return;
 
             _downloadedAppUpdatePath = path;
-            var pid = Environment.ProcessId;
-            var target = Environment.ProcessPath!;
-
-            Process.Start(new ProcessStartInfo(path, $"--apply-update --pid {pid} --target \"{target}\"")
+            var launchError = _appUpdateService.LaunchUpdater(path);
+            if (!string.IsNullOrWhiteSpace(launchError))
             {
-                UseShellExecute = true
-            });
+                _log.Warning($"App update launcher failed: {launchError}");
+                return;
+            }
 
             var app = System.Windows.Application.Current;
             if (app is not null) app.Shutdown();

@@ -135,6 +135,7 @@ public sealed class PresetViewToggleTests
     {
         public Task<AppUpdateInfo?> CheckForUpdateAsync(CancellationToken ct = default) => Task.FromResult<AppUpdateInfo?>(null);
         public Task<string?> DownloadUpdateAsync(AppUpdateInfo info, CancellationToken ct = default) => Task.FromResult<string?>(null);
+        public string? LaunchUpdater(string downloadedUpdatePath) => null;
     }
 
     private sealed class FakeAuthService : IAuthService

@@ -28,6 +28,8 @@ public sealed class SettingsViewModel : ObservableObject
     private readonly ILogService _log;
     private readonly IDialogService _dialogService;
     private readonly IPresetIconService _presetIconService;
+    private readonly Action _requestAppShutdown;
+    private AppUpdateInfo? _pendingAppUpdate;
 
     public ObservableCollection<PortalEditorItemViewModel> Portals { get; } = new();
     public ObservableCollection<InstallerCacheItemViewModel> Installers { get; } = new();
@@ -61,6 +63,7 @@ public sealed class SettingsViewModel : ObservableObject
         {
             if (!SetProperty(ref _isCheckingForUpdate, value)) return;
             CheckForUpdateCommand.NotifyCanExecuteChanged();
+            DownloadAndInstallUpdateCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -68,7 +71,11 @@ public sealed class SettingsViewModel : ObservableObject
     public bool IsUpdateAvailable
     {
         get => _isUpdateAvailable;
-        set => SetProperty(ref _isUpdateAvailable, value);
+        set
+        {
+            if (!SetProperty(ref _isUpdateAvailable, value)) return;
+            DownloadAndInstallUpdateCommand.NotifyCanExecuteChanged();
+        }
     }
 
     private string _availableVersion = string.Empty;
@@ -84,6 +91,58 @@ public sealed class SettingsViewModel : ObservableObject
         get => _updateStatusText;
         set => SetProperty(ref _updateStatusText, value);
     }
+
+    private bool _isDownloadingUpdate;
+    public bool IsDownloadingUpdate
+    {
+        get => _isDownloadingUpdate;
+        set
+        {
+            if (!SetProperty(ref _isDownloadingUpdate, value)) return;
+            CheckForUpdateCommand.NotifyCanExecuteChanged();
+            DownloadAndInstallUpdateCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private string _updateReleaseName = string.Empty;
+    public string UpdateReleaseName
+    {
+        get => _updateReleaseName;
+        set => SetProperty(ref _updateReleaseName, value);
+    }
+
+    private string _updatePublishedText = string.Empty;
+    public string UpdatePublishedText
+    {
+        get => _updatePublishedText;
+        set => SetProperty(ref _updatePublishedText, value);
+    }
+
+    private string _updateReleaseNotes = string.Empty;
+    public string UpdateReleaseNotes
+    {
+        get => _updateReleaseNotes;
+        set
+        {
+            if (!SetProperty(ref _updateReleaseNotes, value)) return;
+            OnPropertyChanged(nameof(HasUpdateReleaseNotes));
+        }
+    }
+
+    private string _updateReleasePageUrl = string.Empty;
+    public string UpdateReleasePageUrl
+    {
+        get => _updateReleasePageUrl;
+        set
+        {
+            if (!SetProperty(ref _updateReleasePageUrl, value)) return;
+            OnPropertyChanged(nameof(CanOpenUpdateReleasePage));
+            OpenUpdateReleasePageCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    public bool HasUpdateReleaseNotes => !string.IsNullOrWhiteSpace(UpdateReleaseNotes);
+    public bool CanOpenUpdateReleasePage => !string.IsNullOrWhiteSpace(UpdateReleasePageUrl);
 
     public string AppVersion { get; }
     public string StorageDirectory { get; }
@@ -110,6 +169,8 @@ public sealed class SettingsViewModel : ObservableObject
     }
 
     public IAsyncRelayCommand CheckForUpdateCommand { get; }
+    public IAsyncRelayCommand DownloadAndInstallUpdateCommand { get; }
+    public IRelayCommand OpenUpdateReleasePageCommand { get; }
     public IRelayCommand SelectInfoEAggiornamentiCommand { get; }
     public IRelayCommand SelectPortaliCommand { get; }
     public IRelayCommand SelectInstallerCommand { get; }
@@ -265,7 +326,7 @@ public sealed class SettingsViewModel : ObservableObject
 
     public event EventHandler? CloseRequested;
 
-    public SettingsViewModel(IAppUpdateService appUpdateService, IPreferencesService prefsService, IThemeService themeService, ILogService log, IDialogService dialogService, IPresetIconService presetIconService)
+    public SettingsViewModel(IAppUpdateService appUpdateService, IPreferencesService prefsService, IThemeService themeService, ILogService log, IDialogService dialogService, IPresetIconService presetIconService, Action? requestAppShutdown = null)
     {
         _appUpdateService = appUpdateService;
         _prefsService = prefsService;
@@ -273,12 +334,15 @@ public sealed class SettingsViewModel : ObservableObject
         _log = log;
         _dialogService = dialogService;
         _presetIconService = presetIconService;
+        _requestAppShutdown = requestAppShutdown ?? RequestAppShutdown;
 
         AppVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.0.0";
         StorageDirectory = ResolveStorageDirectory();
         InstallerCacheDirectory = ResolveInstallerCacheRootDirectory();
 
         CheckForUpdateCommand = new AsyncRelayCommand(CheckForUpdateAsync, CanCheckForUpdate);
+        DownloadAndInstallUpdateCommand = new AsyncRelayCommand(DownloadAndInstallUpdateAsync, CanDownloadAndInstallUpdate);
+        OpenUpdateReleasePageCommand = new RelayCommand(OpenUpdateReleasePage, () => CanOpenUpdateReleasePage);
         SelectInfoEAggiornamentiCommand = new RelayCommand(() => SelectedSection = SettingsSection.InfoEAggiornamenti);
         SelectPortaliCommand = new RelayCommand(() => SelectedSection = SettingsSection.Portali);
         SelectInstallerCommand = new RelayCommand(() => SelectedSection = SettingsSection.Installer);
@@ -313,28 +377,19 @@ public sealed class SettingsViewModel : ObservableObject
     private async Task CheckForUpdateAsync()
     {
         IsCheckingForUpdate = true;
-        UpdateStatusText = string.Empty;
+        UpdateStatusText = "Controllo aggiornamenti in corso...";
         try
         {
             var info = await _appUpdateService.CheckForUpdateAsync();
-            if (info is null)
-            {
-                IsUpdateAvailable = false;
-                AvailableVersion = string.Empty;
-                UpdateStatusText = "Nessun aggiornamento disponibile.";
-            }
-            else
-            {
-                IsUpdateAvailable = true;
-                AvailableVersion = info.Version;
-                UpdateStatusText = $"Aggiornamento disponibile: {info.Version}";
-            }
+            ApplyUpdateInfo(info);
+            UpdateStatusText = info is null
+                ? "Nessun aggiornamento disponibile."
+                : $"Aggiornamento disponibile: {info.Version}";
         }
         catch (Exception ex)
         {
             _log.Error("Settings update check failed", ex);
-            IsUpdateAvailable = false;
-            AvailableVersion = string.Empty;
+            ApplyUpdateInfo(null);
             UpdateStatusText = "Errore durante il controllo aggiornamenti.";
         }
         finally
@@ -343,7 +398,100 @@ public sealed class SettingsViewModel : ObservableObject
         }
     }
 
-    private bool CanCheckForUpdate() => !IsCheckingForUpdate;
+    private bool CanCheckForUpdate() => !IsCheckingForUpdate && !IsDownloadingUpdate;
+
+    private bool CanDownloadAndInstallUpdate() =>
+        IsUpdateAvailable && _pendingAppUpdate is not null && !IsCheckingForUpdate && !IsDownloadingUpdate;
+
+    private async Task DownloadAndInstallUpdateAsync()
+    {
+        if (_pendingAppUpdate is null) return;
+
+        var shouldProceed = _dialogService.Confirm(
+            "Installa aggiornamento",
+            $"Scaricare KlevaDeploy {_pendingAppUpdate.Version} da GitHub Releases e riavviare l'applicazione?");
+        if (!shouldProceed) return;
+
+        IsDownloadingUpdate = true;
+        UpdateStatusText = $"Download aggiornamento {_pendingAppUpdate.Version} in corso...";
+
+        try
+        {
+            var downloadedPath = await _appUpdateService.DownloadUpdateAsync(_pendingAppUpdate);
+            if (string.IsNullOrWhiteSpace(downloadedPath))
+            {
+                UpdateStatusText = "Download aggiornamento non riuscito.";
+                return;
+            }
+
+            var launchError = _appUpdateService.LaunchUpdater(downloadedPath);
+            if (!string.IsNullOrWhiteSpace(launchError))
+            {
+                UpdateStatusText = $"Impossibile avviare l'aggiornamento: {launchError}";
+                return;
+            }
+
+            UpdateStatusText = $"Aggiornamento {_pendingAppUpdate.Version} pronto. Riavvio in corso...";
+            _requestAppShutdown();
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Settings update install failed", ex);
+            UpdateStatusText = "Errore durante download o installazione dell'aggiornamento.";
+        }
+        finally
+        {
+            IsDownloadingUpdate = false;
+        }
+    }
+
+    private void OpenUpdateReleasePage()
+    {
+        if (!CanOpenUpdateReleasePage) return;
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(UpdateReleasePageUrl) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            _log.Error("Open update release page failed", ex);
+            UpdateStatusText = "Impossibile aprire la pagina della release.";
+        }
+    }
+
+    private void ApplyUpdateInfo(AppUpdateInfo? info)
+    {
+        _pendingAppUpdate = info;
+        if (info is null)
+        {
+            IsUpdateAvailable = false;
+            AvailableVersion = string.Empty;
+            UpdateReleaseName = string.Empty;
+            UpdatePublishedText = string.Empty;
+            UpdateReleaseNotes = string.Empty;
+            UpdateReleasePageUrl = string.Empty;
+            return;
+        }
+
+        IsUpdateAvailable = true;
+        AvailableVersion = info.Version;
+        UpdateReleaseName = info.ReleaseName;
+        UpdatePublishedText = info.PublishedAtUtc is DateTimeOffset published
+            ? $"Pubblicato: {published.LocalDateTime:dd/MM/yyyy HH:mm}"
+            : string.Empty;
+        UpdateReleaseNotes = info.ReleaseNotes;
+        UpdateReleasePageUrl = info.ReleasePageUrl;
+    }
+
+    private static void RequestAppShutdown()
+    {
+        var app = System.Windows.Application.Current;
+        if (app is not null)
+            app.Shutdown();
+        else
+            Environment.Exit(0);
+    }
 
     private void ApriCartellaInstaller()
     {
