@@ -10,6 +10,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.Win32;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -24,6 +25,18 @@ namespace KlevaDeploy.ViewModels;
 
 public sealed class MainViewModel : ObservableObject
 {
+    private static readonly HashSet<string> InternalPromptEnvironmentVariables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "KLEVADEPLOY_STORAGE_DIR",
+        "KLEVADEPLOY_DATA_DIR",
+        "KLEVADEPLOY_TEMP_DIR",
+        "KLEVADEPLOY_EXTRACT_DIR",
+        "KLEVADEPLOY_EXTRACT_MAIN_INSTALLER",
+        "KLEVADEPLOY_EXTRACT_ALL_MSIS",
+        "KLEVADEPLOY_EXTRACT_MODE",
+        "KLEVADEPLOY_MSI_SECURECUSTOMPROPERTIES_KEY"
+    };
+
     private enum ExeExtractionMode
     {
         None,
@@ -2123,33 +2136,7 @@ public sealed class MainViewModel : ObservableObject
         string? msiPath,
         System.Threading.CancellationToken ct)
     {
-        var inputs = new List<ArgumentInputDefinition>();
-        if (process.ArgumentInputs is not null && process.ArgumentInputs.Count > 0)
-        {
-            inputs.AddRange(
-                process.ArgumentInputs
-                    .Where(x => !string.IsNullOrWhiteSpace((x.Key ?? string.Empty).Trim()))
-                    .Select(x => new ArgumentInputDefinition
-                    {
-                        Key = (x.Key ?? string.Empty).Trim(),
-                        Label = x.Label ?? string.Empty,
-                        Description = x.Description ?? string.Empty,
-                        DefaultValue = x.DefaultValue ?? string.Empty,
-                        IsSecret = x.IsSecret,
-                        IsRequired = x.IsRequired
-                    }));
-        }
-
-        var inferred = InferArgumentInputsFromArguments(rawArgs);
-        if (inferred.Count > 0)
-        {
-            var existingKeys = new HashSet<string>(inputs.Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
-            foreach (var d in inferred)
-            {
-                if (existingKeys.Contains(d.Key)) continue;
-                inputs.Add(d);
-            }
-        }
+        var inputs = CollectArgumentInputs(process, rawArgs, includeSubProcesses: process.SubProcesses is { Count: > 0 });
 
         if (inputs.Count == 0)
             return (null, null);
@@ -2181,7 +2168,8 @@ public sealed class MainViewModel : ObservableObject
         var mergedPrefill = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var d in inputs)
         {
-            mergedPrefill[d.Key] = d.DefaultValue ?? string.Empty;
+            var envValue = Environment.GetEnvironmentVariable(d.Key);
+            mergedPrefill[d.Key] = string.IsNullOrWhiteSpace(envValue) ? (d.DefaultValue ?? string.Empty) : envValue;
         }
 
         if (profile?.Values is not null)
@@ -2215,6 +2203,13 @@ public sealed class MainViewModel : ObservableObject
             }
             prefillNotice = defaults.Notice;
         }
+
+        var hasAllRequiredValues = inputs
+            .Where(d => d.IsRequired)
+            .All(d => mergedPrefill.TryGetValue(d.Key, out var value) && !string.IsNullOrWhiteSpace(value));
+
+        if (profile is null && hasAllRequiredValues)
+            shouldPrompt = false;
 
         ArgumentPromptResponse response;
         var subtitle = schemaMismatch
@@ -2277,6 +2272,60 @@ public sealed class MainViewModel : ObservableObject
         return (new EnvironmentVariableScope(chosenValues), null);
     }
 
+    private static List<ArgumentInputDefinition> CollectArgumentInputs(DeploymentProcess process, string? rawArgs, bool includeSubProcesses)
+    {
+        var inputs = new List<ArgumentInputDefinition>();
+        var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddDefinitions(IEnumerable<ArgumentInputDefinition> defs)
+        {
+            foreach (var d in defs)
+            {
+                var key = (d.Key ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(key) || !seenKeys.Add(key))
+                    continue;
+
+                inputs.Add(new ArgumentInputDefinition
+                {
+                    Key = key,
+                    Label = d.Label ?? string.Empty,
+                    Description = d.Description ?? string.Empty,
+                    DefaultValue = d.DefaultValue ?? string.Empty,
+                    IsSecret = d.IsSecret,
+                    IsRequired = d.IsRequired
+                });
+            }
+        }
+
+        void CollectForProcess(DeploymentProcess current, string? args, bool recurse)
+        {
+            if (current.ArgumentInputs is not null && current.ArgumentInputs.Count > 0)
+                AddDefinitions(current.ArgumentInputs);
+
+            AddDefinitions(InferArgumentInputsFromArguments(args));
+            AddDefinitions(InferArgumentInputsFromScriptContent(current.ScriptContent));
+
+            if (!recurse || current.SubProcesses is null || current.SubProcesses.Count == 0)
+                return;
+
+            foreach (var sp in current.SubProcesses)
+            {
+                if (sp.Process is not null)
+                {
+                    var childArgs = string.IsNullOrWhiteSpace(sp.Arguments) ? sp.Process.Arguments : sp.Arguments;
+                    CollectForProcess(sp.Process, childArgs, recurse: true);
+                }
+                else if (!string.IsNullOrWhiteSpace(sp.Arguments))
+                {
+                    AddDefinitions(InferArgumentInputsFromArguments(sp.Arguments));
+                }
+            }
+        }
+
+        CollectForProcess(process, rawArgs, includeSubProcesses);
+        return inputs;
+    }
+
     private static List<ArgumentInputDefinition> InferArgumentInputsFromArguments(string? arguments)
     {
         var text = arguments ?? string.Empty;
@@ -2301,6 +2350,7 @@ public sealed class MainViewModel : ObservableObject
             var name = text.Substring(i + 1, end - i - 1).Trim();
             if (name.Length == 0) { i = end; continue; }
             if (!name.StartsWith("KLEVADEPLOY_", StringComparison.OrdinalIgnoreCase)) { i = end; continue; }
+            if (InternalPromptEnvironmentVariables.Contains(name)) { i = end; continue; }
             if (!IsNameChar(name[0]) || char.IsDigit(name[0])) { i = end; continue; }
             var ok = true;
             for (var k = 1; k < name.Length; k++)
@@ -2318,6 +2368,9 @@ public sealed class MainViewModel : ObservableObject
         var result = new List<ArgumentInputDefinition>();
         foreach (var v in vars.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
         {
+            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(v)))
+                continue;
+
             var isSecret = LooksSecret(v);
             var envDefault = isSecret ? string.Empty : (Environment.GetEnvironmentVariable(v) ?? string.Empty);
 
@@ -2334,6 +2387,61 @@ public sealed class MainViewModel : ObservableObject
                 Key = v,
                 Label = label,
                 Description = description,
+                DefaultValue = envDefault,
+                IsSecret = isSecret,
+                IsRequired = true
+            });
+        }
+
+        return result;
+    }
+
+    private static List<ArgumentInputDefinition> InferArgumentInputsFromScriptContent(string? scriptContent)
+    {
+        var text = scriptContent ?? string.Empty;
+        if (text.Length == 0) return new List<ArgumentInputDefinition>();
+
+        static bool LooksSecret(string key) =>
+            key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("PASS", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("PWD", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase) ||
+            key.Contains("SECRET", StringComparison.OrdinalIgnoreCase);
+
+        static string BuildDescription(string key) => $"Value required by script variable '{key}'.";
+
+        var vars = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (Match match in Regex.Matches(text, @"\$env:(KLEVADEPLOY_[A-Z0-9_]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+        {
+            var key = (match.Groups[1].Value ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(key) || InternalPromptEnvironmentVariables.Contains(key))
+                continue;
+            vars.Add(key);
+        }
+
+        foreach (Match match in Regex.Matches(text, @"GetEnvironmentVariable\(\s*['""](?<name>KLEVADEPLOY_[A-Z0-9_]+)['""]\s*\)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+        {
+            var key = (match.Groups["name"].Value ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(key) || InternalPromptEnvironmentVariables.Contains(key))
+                continue;
+            vars.Add(key);
+        }
+
+        var result = new List<ArgumentInputDefinition>();
+        foreach (var key in vars.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key)))
+                continue;
+
+            var isSecret = LooksSecret(key);
+            var envDefault = isSecret ? string.Empty : (Environment.GetEnvironmentVariable(key) ?? string.Empty);
+
+            result.Add(new ArgumentInputDefinition
+            {
+                Key = key,
+                Label = key,
+                Description = BuildDescription(key),
                 DefaultValue = envDefault,
                 IsSecret = isSecret,
                 IsRequired = true
@@ -2946,9 +3054,7 @@ public sealed class MainViewModel : ObservableObject
 
     private void UpdateArgumentProfileAfterRun(DeploymentProcess process, bool success)
     {
-        var inputs = (process.ArgumentInputs ?? new List<ArgumentInputDefinition>())
-            .Where(x => !string.IsNullOrWhiteSpace((x.Key ?? string.Empty).Trim()))
-            .ToList();
+        var inputs = CollectArgumentInputs(process, process.Arguments, includeSubProcesses: process.SubProcesses is { Count: > 0 });
 
         if (inputs.Count == 0)
             return;

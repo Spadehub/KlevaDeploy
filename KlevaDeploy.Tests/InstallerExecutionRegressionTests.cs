@@ -109,6 +109,84 @@ public sealed class InstallerExecutionRegressionTests
         }
     }
 
+    [Fact]
+    public async Task RunSingleProcessHeadless_PromptsForRequiredEnvVarUsedBySubProcessScript()
+    {
+        var process = new DeploymentProcess
+        {
+            Id = "sql-parent",
+            Name = "SQL Parent",
+            Kind = ProcessKind.PowerShellScript,
+            SubProcesses =
+            [
+                new DeploymentSubProcess
+                {
+                    Name = "Install SQLPASS",
+                    Process = new DeploymentProcess
+                    {
+                        Id = "sql-child",
+                        Name = "Install SQLPASS",
+                        Kind = ProcessKind.PowerShellScript,
+                        ScriptContent = "$saPwd = $env:KLEVADEPLOY_SQLPASS_SA_PASSWORD`nif ([string]::IsNullOrWhiteSpace($saPwd)) { throw 'missing' }"
+                    }
+                }
+            ]
+        };
+
+        var installer = new SingleProcessInstallerService(process);
+        string promptedProcessName = string.Empty;
+        IReadOnlyList<ArgumentInputDefinition> promptedInputs = Array.Empty<ArgumentInputDefinition>();
+        var dialog = new FakeDialogService
+        {
+            ArgumentPromptHandler = (processName, _, inputs, _) =>
+            {
+                promptedProcessName = processName;
+                promptedInputs = inputs.ToList();
+                return new ArgumentPromptResponse(
+                    ArgumentPromptChoice.RunOnce,
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["KLEVADEPLOY_SQLPASS_SA_PASSWORD"] = "Secret123!"
+                    });
+            }
+        };
+
+        var execution = new RecordingProcessExecutionService(null)
+        {
+            PowerShellHandler = _ =>
+            {
+                Assert.Equal("Secret123!", Environment.GetEnvironmentVariable("KLEVADEPLOY_SQLPASS_SA_PASSWORD"));
+                return new ProcessResult(0, string.Empty, string.Empty);
+            }
+        };
+
+        var log = new FakeLogService();
+        var prefs = new FakePreferencesService(new UserPreferences());
+        var vm = new MainViewModel(
+            installer,
+            new RecordingUpdateService(null),
+            new FakeAuthService(),
+            new FakeDownloadDirectoryListingService(),
+            new FakeAppUpdateService(),
+            execution,
+            new FakeLicenseScraperService(),
+            log,
+            new FakeThemeService(),
+            dialog,
+            new FakePresetIconService(),
+            prefs,
+            loginVmFactory: () => new LoginViewModel(new FakeAuthService(), prefs),
+            logViewModel: new LogViewModel(log, new FakeClipboardService()));
+
+        var exitCode = await vm.RunSingleProcessHeadlessAsync(process.Id);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("SQL Parent", promptedProcessName);
+        Assert.Equal(1, dialog.ArgumentPromptCount);
+        Assert.Contains(promptedInputs, x => string.Equals(x.Key, "KLEVADEPLOY_SQLPASS_SA_PASSWORD", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("child-powershell", execution.Events);
+    }
+
     private sealed class SingleProcessInstallerService(DeploymentProcess process) : IInstallerService
     {
         private readonly IReadOnlyList<DeploymentProcess> _processes = [process];
@@ -126,15 +204,18 @@ public sealed class InstallerExecutionRegressionTests
         public bool DeleteProcess(string processId) => false;
     }
 
-    private sealed class RecordingUpdateService(string installerPath) : IUpdateService
+    private sealed class RecordingUpdateService(string? installerPath) : IUpdateService
     {
         public List<string> Events { get; } = [];
         public Task CheckAndUpdateInstallersAsync(IReadOnlyList<DeploymentProcess> processes, CancellationToken ct = default) => Task.CompletedTask;
-        public bool IsStaticWebInstallerCachedForUrl(DeploymentProcess process) => File.Exists(installerPath);
+        public bool IsStaticWebInstallerCachedForUrl(DeploymentProcess process) => !string.IsNullOrWhiteSpace(installerPath) && File.Exists(installerPath);
         public Task RedownloadSingleInstallerAsync(DeploymentProcess process, CancellationToken ct = default) => UpdateSingleInstallerAsync(process, ct);
 
         public async Task UpdateSingleInstallerAsync(DeploymentProcess process, CancellationToken ct = default)
         {
+            if (string.IsNullOrWhiteSpace(installerPath))
+                return;
+
             Events.Add("update-start");
             await Task.Delay(20, ct);
             await File.WriteAllTextAsync(installerPath, "stub", ct);
@@ -142,17 +223,19 @@ public sealed class InstallerExecutionRegressionTests
         }
     }
 
-    private sealed class RecordingProcessExecutionService(string installerPath) : IProcessExecutionService
+    private sealed class RecordingProcessExecutionService(string? installerPath) : IProcessExecutionService
     {
         public List<string> Events { get; } = [];
         public bool ParentInstallerRunAttempted { get; private set; }
+        public Func<string, ProcessResult>? PowerShellHandler { get; init; }
 
         public Task<string> Ensure7ZipInstalledAsync(CancellationToken ct = default) => Task.FromResult(string.Empty);
         public Task<string> EnsureUnrarInstalledAsync(CancellationToken ct = default) => Task.FromResult(string.Empty);
 
         public Task<ProcessResult> RunAsync(string executablePath, string arguments, bool runAsAdmin = false, CancellationToken ct = default)
         {
-            if (string.Equals(executablePath, installerPath, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(installerPath) &&
+                string.Equals(executablePath, installerPath, StringComparison.OrdinalIgnoreCase))
                 ParentInstallerRunAttempted = true;
 
             Events.Add("run-async");
@@ -161,9 +244,10 @@ public sealed class InstallerExecutionRegressionTests
 
         public Task<ProcessResult> RunPowerShellAsync(string scriptPathOrContent, bool isInlineScript, bool runAsAdmin = false, CancellationToken ct = default)
         {
-            Assert.True(File.Exists(installerPath), "The parent installer should exist before the subprocess runs.");
             Events.Add("child-powershell");
-            return Task.FromResult(new ProcessResult(0, string.Empty, string.Empty));
+            if (!string.IsNullOrWhiteSpace(installerPath))
+                Assert.True(File.Exists(installerPath), "The parent installer should exist before the subprocess runs.");
+            return Task.FromResult(PowerShellHandler?.Invoke(scriptPathOrContent) ?? new ProcessResult(0, string.Empty, string.Empty));
         }
 
         public Task<ProcessResult> RunBatchAsync(string scriptPathOrContent, bool isInlineScript, bool runAsAdmin = false, CancellationToken ct = default) => Task.FromResult(new ProcessResult(0, string.Empty, string.Empty));
@@ -233,11 +317,18 @@ public sealed class InstallerExecutionRegressionTests
 
     private sealed class FakeDialogService : IDialogService
     {
+        public Func<string, string, IReadOnlyList<ArgumentInputDefinition>, IReadOnlyDictionary<string, string>, ArgumentPromptResponse>? ArgumentPromptHandler { get; init; }
+        public int ArgumentPromptCount { get; private set; }
+
         public bool ShowDisableRequiredWarning(string processName) => true;
         public bool Confirm(string title, string message) => true;
         public IDialogService.UnrarPromptResult ShowUnrarRequiredPrompt(string processName, string details) => IDialogService.UnrarPromptResult.Installa;
         public void ResetDisableRequiredWarningPreference() { }
-        public ArgumentPromptResponse ShowArgumentPrompt(string processName, string subtitle, IReadOnlyList<ArgumentInputDefinition> inputs, IReadOnlyDictionary<string, string> prefill) => new(ArgumentPromptChoice.RunOnce, prefill);
+        public ArgumentPromptResponse ShowArgumentPrompt(string processName, string subtitle, IReadOnlyList<ArgumentInputDefinition> inputs, IReadOnlyDictionary<string, string> prefill)
+        {
+            ArgumentPromptCount++;
+            return ArgumentPromptHandler?.Invoke(processName, subtitle, inputs, prefill) ?? new ArgumentPromptResponse(ArgumentPromptChoice.RunOnce, prefill);
+        }
     }
 
     private sealed class FakePresetIconService : IPresetIconService

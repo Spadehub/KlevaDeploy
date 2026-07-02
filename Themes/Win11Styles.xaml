@@ -50,6 +50,12 @@
 
     <Style TargetType="ScrollViewer">
         <Setter Property="behaviors:ScrollFadeBehavior.IsEnabled" Value="False"/>
+        <Setter Property="behaviors:TouchScrollBehavior.IsEnabled" Value="True"/>
+        <Setter Property="PanningMode" Value="VerticalFirst"/>
+        <Setter Property="PanningRatio" Value="1"/>
+        <Setter Property="PanningDeceleration" Value="0.001"/>
+        <Setter Property="Stylus.IsFlicksEnabled" Value="False"/>
+        <Setter Property="IsManipulationEnabled" Value="True"/>
     </Style>
 
     <!-- ── ButtonBase Style ── -->
