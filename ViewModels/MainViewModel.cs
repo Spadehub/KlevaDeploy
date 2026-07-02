@@ -2778,10 +2778,16 @@ public sealed class MainViewModel : ObservableObject
 
                 if (prereqResult.ExitCode != 0 && prereqResult.ExitCode != 3010 && prereqResult.ExitCode != 1641)
                 {
+                    if (CanIgnoreUnsupportedLegacyPrereqMsi(prereqMsi, prereqResult.ExitCode, prereqLogPath))
+                    {
+                        _log.Warning($"Skipping unsupported legacy MSI prerequisite on this OS: {Path.GetFileName(prereqMsi)}. Log: {prereqLogPath}");
+                        continue;
+                    }
+
                     return new ProcessResult(
                         prereqResult.ExitCode,
                         string.Empty,
-                        $"MSI prerequisite failed: {Path.GetFileName(prereqMsi)}. Log: {prereqLogPath}");
+                        BuildPrereqMsiFailureMessage(prereqMsi, prereqResult.ExitCode, prereqLogPath));
                 }
             }
         }
@@ -2829,6 +2835,98 @@ public sealed class MainViewModel : ObservableObject
         }
 
         return args.Trim();
+    }
+
+    private static bool CanIgnoreUnsupportedLegacyPrereqMsi(string prereqMsiPath, int exitCode, string? logPath)
+    {
+        if (exitCode == 0 || !LogIndicatesUnsupportedOperatingSystem(logPath))
+            return false;
+
+        var fileName = Path.GetFileName(prereqMsiPath) ?? string.Empty;
+        return fileName.Contains("sqlncli", StringComparison.OrdinalIgnoreCase) ||
+               (fileName.Contains("native", StringComparison.OrdinalIgnoreCase) &&
+                fileName.Contains("client", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string BuildPrereqMsiFailureMessage(string prereqMsiPath, int exitCode, string? logPath)
+    {
+        var fileName = Path.GetFileName(prereqMsiPath) ?? "unknown.msi";
+        if (LogIndicatesUnsupportedOperatingSystem(logPath))
+        {
+            var label = fileName.Contains("sqlncli", StringComparison.OrdinalIgnoreCase)
+                ? $"{fileName} (SQL Server Native Client legacy)"
+                : fileName;
+
+            return string.IsNullOrWhiteSpace(logPath)
+                ? $"Prerequisito MSI non supportato su questo sistema operativo: {label}."
+                : $"Prerequisito MSI non supportato su questo sistema operativo: {label}. Log: {logPath}";
+        }
+
+        var summary = TryReadMsiFailureSummary(logPath);
+        var detail = string.IsNullOrWhiteSpace(summary)
+            ? $"Prerequisito MSI non riuscito: {fileName}."
+            : $"Prerequisito MSI non riuscito: {fileName}. {summary}";
+
+        if (!string.IsNullOrWhiteSpace(logPath))
+            detail = $"{detail} Log: {logPath}";
+
+        return detail.Trim();
+    }
+
+    private static bool LogIndicatesUnsupportedOperatingSystem(string? logPath)
+    {
+        var summary = TryReadMsiFailureSummary(logPath);
+        return summary.Contains("not supported on this operating system", StringComparison.OrdinalIgnoreCase) ||
+               summary.Contains("non supportato su questo sistema operativo", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string TryReadMsiFailureSummary(string? logPath)
+    {
+        if (string.IsNullOrWhiteSpace(logPath) || !File.Exists(logPath))
+            return string.Empty;
+
+        try
+        {
+            foreach (var rawLine in File.ReadLines(logPath))
+            {
+                var line = (rawLine ?? string.Empty).Trim();
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+
+                if (line.Contains("not supported on this operating system", StringComparison.OrdinalIgnoreCase) ||
+                    line.Contains("non supportato su questo sistema operativo", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ExtractProductMessage(line);
+                }
+
+                if (line.StartsWith("Error ", StringComparison.OrdinalIgnoreCase) ||
+                    line.StartsWith("Exception", StringComparison.OrdinalIgnoreCase))
+                {
+                    return line;
+                }
+            }
+        }
+        catch
+        {
+            return string.Empty;
+        }
+
+        return string.Empty;
+    }
+
+    private static string ExtractProductMessage(string line)
+    {
+        var productIndex = line.IndexOf("Product:", StringComparison.OrdinalIgnoreCase);
+        if (productIndex >= 0)
+        {
+            var message = line[(productIndex + "Product:".Length)..].Trim();
+            var separator = message.IndexOf("--", StringComparison.Ordinal);
+            if (separator >= 0)
+                message = message[(separator + 2)..].Trim();
+            return message;
+        }
+
+        return line.Trim();
     }
 
     private static Dictionary<string, string> TryGetEnvVarDefaultsFromMsi(string msiPath, string rawArgs)

@@ -284,6 +284,62 @@ public sealed class InstallerExecutionRegressionTests
         Assert.Equal(string.Empty, promptedPrefill["KLEVADEPLOY_SQLPASS_SA_PASSWORD"]);
     }
 
+    [Fact]
+    public void MainViewModel_CanIgnoreUnsupportedLegacyPrereqMsi_IgnoresSqlNcliButNotGenericMsi()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "KlevaDeployTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var logPath = Path.Combine(tempDir, "sqlncli.log");
+            File.WriteAllText(
+                logPath,
+                "MSI (s) (70:6C): Product: Microsoft SQL Server 2012 Native Client -- Installation of this product failed because it is not supported on this operating system.");
+
+            var method = typeof(MainViewModel).GetMethod("CanIgnoreUnsupportedLegacyPrereqMsi", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var canIgnoreSqlNcli = (bool)method!.Invoke(null, ["sqlncli.msi", 1603, logPath])!;
+            var canIgnoreGeneric = (bool)method.Invoke(null, ["SetupRetail.msi", 1603, logPath])!;
+
+            Assert.True(canIgnoreSqlNcli);
+            Assert.False(canIgnoreGeneric);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void MainViewModel_BuildPrereqMsiFailureMessage_ReturnsFriendlyUnsupportedOsMessage()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "KlevaDeployTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var logPath = Path.Combine(tempDir, "sqlncli.log");
+            File.WriteAllText(
+                logPath,
+                "MSI (s) (70:6C): Product: Microsoft SQL Server 2012 Native Client -- Installation of this product failed because it is not supported on this operating system.");
+
+            var method = typeof(MainViewModel).GetMethod("BuildPrereqMsiFailureMessage", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var message = (string)method!.Invoke(null, ["sqlncli.msi", 1603, logPath])!;
+
+            Assert.Contains("Prerequisito MSI non supportato su questo sistema operativo", message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("SQL Server Native Client legacy", message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(logPath, message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
     private sealed class SingleProcessInstallerService(DeploymentProcess process) : IInstallerService
     {
         private readonly IReadOnlyList<DeploymentProcess> _processes = [process];

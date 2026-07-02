@@ -17,6 +17,8 @@ public static class ExecutionErrorFormatter
                 detail = fallback;
         }
 
+        detail = NormalizeKnownInstallerDetail(detail);
+
         var mapped = MapExitCode(processName, result.ExitCode, detail);
         if (string.IsNullOrWhiteSpace(mapped))
             return detail;
@@ -65,9 +67,39 @@ public static class ExecutionErrorFormatter
         !value.StartsWith("Errore (exit", StringComparison.OrdinalIgnoreCase) &&
         !string.Equals(value, "Errore", StringComparison.OrdinalIgnoreCase);
 
+    private static string NormalizeKnownInstallerDetail(string detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail))
+            return string.Empty;
+
+        if (detail.StartsWith("Prerequisito MSI ", StringComparison.OrdinalIgnoreCase))
+            return detail;
+
+        if (detail.Contains("not supported on this operating system", StringComparison.OrdinalIgnoreCase) ||
+            detail.Contains("non supportato su questo sistema operativo", StringComparison.OrdinalIgnoreCase))
+        {
+            if (detail.Contains("native client", StringComparison.OrdinalIgnoreCase) ||
+                detail.Contains("sqlncli", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Il prerequisito SQL Server Native Client incluso dal pacchetto non e supportato su questo sistema operativo.";
+            }
+
+            return "Il prerequisito o installer incluso dal pacchetto non e supportato su questo sistema operativo.";
+        }
+
+        return detail;
+    }
+
     private static string? MapExitCode(string processName, int exitCode, string? detail)
     {
         var normalized = unchecked((uint)exitCode);
+        if (!string.IsNullOrWhiteSpace(detail) &&
+            (detail.StartsWith("Prerequisito MSI ", StringComparison.OrdinalIgnoreCase) ||
+             detail.Contains("non e supportato su questo sistema operativo", StringComparison.OrdinalIgnoreCase)))
+        {
+            return null;
+        }
+
         var isOffice = processName.Contains("office", StringComparison.OrdinalIgnoreCase) ||
                        processName.Contains("microsoft 365", StringComparison.OrdinalIgnoreCase) ||
                        (!string.IsNullOrWhiteSpace(detail) && detail.Contains("office", StringComparison.OrdinalIgnoreCase));

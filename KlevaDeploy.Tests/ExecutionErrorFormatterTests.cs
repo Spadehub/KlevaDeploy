@@ -34,4 +34,30 @@ public sealed class ExecutionErrorFormatterTests
 
         Assert.Equal("Accesso negato. Prova a rieseguire come amministratore. — Access is denied.", detail);
     }
+
+    [Fact]
+    public void BuildDetail_UsesSpecificUnsupportedOsMessage_InsteadOfGeneric1603()
+    {
+        var result = new ProcessResult(
+            1603,
+            string.Empty,
+            "Product: Microsoft SQL Server 2012 Native Client -- Installation of this product failed because it is not supported on this operating system.");
+
+        var detail = ExecutionErrorFormatter.BuildDetail("Retail", result);
+
+        Assert.Equal("Il prerequisito SQL Server Native Client incluso dal pacchetto non e supportato su questo sistema operativo.", detail);
+    }
+
+    [Fact]
+    public void BuildDetail_PreservesFriendlyPrereqFailureDetail_WithoutPrependingGeneric1603()
+    {
+        var result = new ProcessResult(
+            1603,
+            string.Empty,
+            "Prerequisito MSI non supportato su questo sistema operativo: sqlncli.msi (SQL Server Native Client legacy). Log: C:\\temp\\sqlncli.log");
+
+        var detail = ExecutionErrorFormatter.BuildDetail("Retail", result);
+
+        Assert.Equal("Prerequisito MSI non supportato su questo sistema operativo: sqlncli.msi (SQL Server Native Client legacy). Log: C:\\temp\\sqlncli.log", detail);
+    }
 }
