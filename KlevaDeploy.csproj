@@ -11,10 +11,10 @@
     <RootNamespace>KlevaDeploy</RootNamespace>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
     <CompilerGeneratedFilesOutputPath>obj/Generated</CompilerGeneratedFilesOutputPath>
-    <VersionPrefix>0.2.2</VersionPrefix>
+    <VersionPrefix>0.2.2.1</VersionPrefix>
     <VersionSuffix></VersionSuffix>
-    <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
-    <FileVersion>$(VersionPrefix).0</FileVersion>
+    <AssemblyVersion>$(VersionPrefix)</AssemblyVersion>
+    <FileVersion>$(VersionPrefix)</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

@@ -2179,7 +2179,20 @@ public sealed class MainViewModel : ObservableObject
                 var k = (kvp.Key ?? string.Empty).Trim();
                 if (string.IsNullOrWhiteSpace(k)) continue;
                 if (!mergedPrefill.ContainsKey(k)) continue;
-                mergedPrefill[k] = kvp.Value ?? string.Empty;
+
+                var input = inputs.FirstOrDefault(d => string.Equals(d.Key, k, StringComparison.OrdinalIgnoreCase));
+                var profileValue = kvp.Value ?? string.Empty;
+
+                if (!string.IsNullOrWhiteSpace(profileValue))
+                {
+                    mergedPrefill[k] = profileValue;
+                    continue;
+                }
+
+                // Keep non-secret defaults visible when an old profile stored an empty value.
+                // Secret fields should still remain blank unless the user entered a value.
+                if (input?.IsSecret == true)
+                    mergedPrefill[k] = string.Empty;
             }
         }
 

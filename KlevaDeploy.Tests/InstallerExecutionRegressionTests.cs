@@ -187,6 +187,103 @@ public sealed class InstallerExecutionRegressionTests
         Assert.Contains("child-powershell", execution.Events);
     }
 
+    [Fact]
+    public async Task RunSingleProcessHeadless_PromptPrefill_RestoresNonSecretDefaults_WhenProfileContainsEmptyValues()
+    {
+        var process = new DeploymentProcess
+        {
+            Id = "retail-server",
+            Name = "Passepartout Retail Server",
+            Kind = ProcessKind.PowerShellScript,
+            ScriptContent = "Write-Output 'ok'",
+            ArgumentInputs =
+            [
+                new ArgumentInputDefinition
+                {
+                    Key = "KLEVADEPLOY_RETAIL_SQL_SERVER",
+                    Label = "Server SQL",
+                    DefaultValue = "%COMPUTERNAME%\\SQLPASS",
+                    IsRequired = true
+                },
+                new ArgumentInputDefinition
+                {
+                    Key = "KLEVADEPLOY_RETAIL_DB_NAME",
+                    Label = "Nome database",
+                    DefaultValue = "PassepartoutRetail",
+                    IsRequired = true
+                },
+                new ArgumentInputDefinition
+                {
+                    Key = "KLEVADEPLOY_SQLPASS_SA_PASSWORD",
+                    Label = "Password SQL (sa)",
+                    DefaultValue = "",
+                    IsSecret = true,
+                    IsRequired = true
+                }
+            ]
+        };
+
+        IReadOnlyDictionary<string, string> promptedPrefill = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var dialog = new FakeDialogService
+        {
+            ArgumentPromptHandler = (_, _, _, prefill) =>
+            {
+                promptedPrefill = new Dictionary<string, string>(prefill, StringComparer.OrdinalIgnoreCase);
+                return new ArgumentPromptResponse(
+                    ArgumentPromptChoice.RunOnce,
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["KLEVADEPLOY_RETAIL_SQL_SERVER"] = prefill["KLEVADEPLOY_RETAIL_SQL_SERVER"],
+                        ["KLEVADEPLOY_RETAIL_DB_NAME"] = prefill["KLEVADEPLOY_RETAIL_DB_NAME"],
+                        ["KLEVADEPLOY_SQLPASS_SA_PASSWORD"] = string.Empty
+                    });
+            }
+        };
+
+        var prefs = new FakePreferencesService(new UserPreferences
+        {
+            ProcessArgumentProfiles =
+            [
+                new ProcessArgumentProfile
+                {
+                    ProcessId = process.Id,
+                    SchemaHash = string.Empty,
+                    Values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["KLEVADEPLOY_RETAIL_SQL_SERVER"] = string.Empty,
+                        ["KLEVADEPLOY_RETAIL_DB_NAME"] = string.Empty,
+                        ["KLEVADEPLOY_SQLPASS_SA_PASSWORD"] = string.Empty
+                    }
+                }
+            ]
+        });
+
+        var installer = new SingleProcessInstallerService(process);
+        var log = new FakeLogService();
+        var vm = new MainViewModel(
+            installer,
+            new RecordingUpdateService(null),
+            new FakeAuthService(),
+            new FakeDownloadDirectoryListingService(),
+            new FakeAppUpdateService(),
+            new RecordingProcessExecutionService(null),
+            new FakeLicenseScraperService(),
+            log,
+            new FakeThemeService(),
+            dialog,
+            new FakePresetIconService(),
+            prefs,
+            loginVmFactory: () => new LoginViewModel(new FakeAuthService(), prefs),
+            logViewModel: new LogViewModel(log, new FakeClipboardService()));
+
+        var exitCode = await vm.RunSingleProcessHeadlessAsync(process.Id);
+
+        Assert.Equal(0, exitCode);
+        Assert.Equal("%COMPUTERNAME%\\SQLPASS", promptedPrefill["KLEVADEPLOY_RETAIL_SQL_SERVER"]);
+        Assert.Equal("PassepartoutRetail", promptedPrefill["KLEVADEPLOY_RETAIL_DB_NAME"]);
+        Assert.Equal(string.Empty, promptedPrefill["KLEVADEPLOY_SQLPASS_SA_PASSWORD"]);
+    }
+
     private sealed class SingleProcessInstallerService(DeploymentProcess process) : IInstallerService
     {
         private readonly IReadOnlyList<DeploymentProcess> _processes = [process];
