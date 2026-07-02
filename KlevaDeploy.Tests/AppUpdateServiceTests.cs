@@ -94,6 +94,78 @@ public sealed class AppUpdateServiceTests
         }
     }
 
+    [Fact]
+    public async Task CheckForUpdateAsync_DetectsNewerFourPartPatchRelease()
+    {
+        const string json = """
+        {
+          "tag_name": "v0.2.2.2",
+          "name": "v0.2.2.2",
+          "body": "Patch release",
+          "html_url": "https://github.com/Spadehub/KlevaDeploy/releases/tag/v0.2.2.2",
+          "prerelease": false,
+          "published_at": "2026-07-02T20:00:00Z",
+          "assets": [
+            {
+              "name": "KlevaDeploy.exe",
+              "browser_download_url": "https://github.com/Spadehub/KlevaDeploy/releases/download/v0.2.2.2/KlevaDeploy.exe",
+              "size": 654321
+            }
+          ]
+        }
+        """;
+
+        using var _ = new EnvVarScope(("KLEVADEPLOY_APP_VERSION_OVERRIDE", "0.2.2.1"));
+        var handler = new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            });
+        using var httpClient = new HttpClient(handler);
+        var service = new AppUpdateService(httpClient, new FakeLogService(), new FakeAppConfigService());
+
+        var info = await service.CheckForUpdateAsync();
+
+        Assert.NotNull(info);
+        Assert.Equal("0.2.2.2", info!.Version);
+        Assert.Equal("https://github.com/Spadehub/KlevaDeploy/releases/tag/v0.2.2.2", info.ReleasePageUrl);
+    }
+
+    [Fact]
+    public async Task CheckForUpdateAsync_DoesNotOfferSameFourPartVersion()
+    {
+        const string json = """
+        {
+          "tag_name": "v0.2.2.2",
+          "name": "v0.2.2.2",
+          "body": "Patch release",
+          "html_url": "https://github.com/Spadehub/KlevaDeploy/releases/tag/v0.2.2.2",
+          "prerelease": false,
+          "published_at": "2026-07-02T20:00:00Z",
+          "assets": [
+            {
+              "name": "KlevaDeploy.exe",
+              "browser_download_url": "https://github.com/Spadehub/KlevaDeploy/releases/download/v0.2.2.2/KlevaDeploy.exe",
+              "size": 654321
+            }
+          ]
+        }
+        """;
+
+        using var _ = new EnvVarScope(("KLEVADEPLOY_APP_VERSION_OVERRIDE", "0.2.2.2"));
+        var handler = new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            });
+        using var httpClient = new HttpClient(handler);
+        var service = new AppUpdateService(httpClient, new FakeLogService(), new FakeAppConfigService());
+
+        var info = await service.CheckForUpdateAsync();
+
+        Assert.Null(info);
+    }
+
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> handler) : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, HttpResponseMessage> _handler = handler;

@@ -229,13 +229,22 @@ public sealed class AppUpdateService : IAppUpdateService
 
     private static string GetCurrentVersionString()
     {
+        var overridden = Environment.GetEnvironmentVariable("KLEVADEPLOY_APP_VERSION_OVERRIDE");
+        if (!string.IsNullOrWhiteSpace(overridden))
+            return overridden.Trim();
+
         var asm = Assembly.GetExecutingAssembly();
         var informational = asm.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         if (!string.IsNullOrWhiteSpace(informational))
             return informational;
 
         var v = asm.GetName().Version;
-        return v is null ? "0.0.0" : $"{v.Major}.{v.Minor}.{v.Build}";
+        if (v is null)
+            return "0.0.0";
+
+        return v.Revision >= 0
+            ? $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}"
+            : $"{v.Major}.{v.Minor}.{v.Build}";
     }
 
     private static IEnumerable<JsonElement> EnumerateCandidateReleases(JsonElement root, bool includePrereleases)
@@ -317,6 +326,7 @@ public sealed class AppUpdateService : IAppUpdateService
         int Major,
         int Minor,
         int Patch,
+        int Revision,
         string[] PreReleaseIdentifiers) : IComparable<SemVersion>
     {
         public static bool TryParse(string? s, out SemVersion version)
@@ -338,12 +348,14 @@ public sealed class AppUpdateService : IAppUpdateService
             if (!int.TryParse(parts[0], out var major)) return false;
             if (!int.TryParse(parts[1], out var minor)) return false;
             if (!int.TryParse(parts[2], out var patch)) return false;
+            var revision = 0;
+            if (parts.Length == 4 && !int.TryParse(parts[3], out revision)) return false;
 
             var ids = string.IsNullOrWhiteSpace(prerelease)
                 ? Array.Empty<string>()
                 : prerelease.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-            version = new SemVersion(major, minor, patch, ids);
+            version = new SemVersion(major, minor, patch, revision, ids);
             return true;
         }
 
@@ -354,6 +366,8 @@ public sealed class AppUpdateService : IAppUpdateService
             c = Minor.CompareTo(other.Minor);
             if (c != 0) return c;
             c = Patch.CompareTo(other.Patch);
+            if (c != 0) return c;
+            c = Revision.CompareTo(other.Revision);
             if (c != 0) return c;
 
             var thisHasPre = PreReleaseIdentifiers.Length > 0;
@@ -391,9 +405,13 @@ public sealed class AppUpdateService : IAppUpdateService
 
         public override string ToString()
         {
+            var core = Revision == 0
+                ? $"{Major}.{Minor}.{Patch}"
+                : $"{Major}.{Minor}.{Patch}.{Revision}";
+
             if (PreReleaseIdentifiers.Length == 0)
-                return $"{Major}.{Minor}.{Patch}";
-            return $"{Major}.{Minor}.{Patch}-{string.Join('.', PreReleaseIdentifiers)}";
+                return core;
+            return $"{core}-{string.Join('.', PreReleaseIdentifiers)}";
         }
     }
 
