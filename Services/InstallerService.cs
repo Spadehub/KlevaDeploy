@@ -372,6 +372,42 @@ public sealed class InstallerService : IInstallerService
                         p.RelativePath = Path.Combine("Data", "installers", p.Id, desiredName);
                 }
             }
+
+            if (NormalizeKnownScriptFixups(p))
+                changed = true;
+        }
+
+        return changed;
+    }
+
+    private static bool NormalizeKnownScriptFixups(DeploymentProcess process)
+    {
+        var changed = false;
+
+        if (!string.IsNullOrWhiteSpace(process.ScriptContent))
+        {
+            var fixedScript = process.ScriptContent.Replace(
+                "$saPwdthrowthrow 'KLEVADEPLOY_SQLPASS_SA_PASSWORD non impostata.'",
+                "throw 'KLEVADEPLOY_SQLPASS_SA_PASSWORD non impostata.'",
+                StringComparison.Ordinal);
+
+            if (!string.Equals(fixedScript, process.ScriptContent, StringComparison.Ordinal))
+            {
+                process.ScriptContent = fixedScript;
+                changed = true;
+            }
+        }
+
+        if (process.SubProcesses is null || process.SubProcesses.Count == 0)
+            return changed;
+
+        foreach (var subProcess in process.SubProcesses)
+        {
+            if (subProcess.Process is null)
+                continue;
+
+            if (NormalizeKnownScriptFixups(subProcess.Process))
+                changed = true;
         }
 
         return changed;

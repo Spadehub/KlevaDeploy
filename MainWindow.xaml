@@ -3640,7 +3640,7 @@
                                                     <DataTemplate.Triggers>
                                                         <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.Manual}">
                                                             <Setter TargetName="ModeTitle" Property="Text" Value="Manuale"/>
-                                                            <Setter TargetName="ModeSubtitle" Property="Text" Value="Esegue l’EXE così com’è. Se non hai parametri silent può aprire finestre."/>
+                                                            <Setter TargetName="ModeSubtitle" Property="Text" Value="Per EXE standalone lo esegue cosi com'e. Se il processo ha sottoprocessi, l'EXE padre viene solo scaricato/cache-ato e i sottoprocessi fanno il resto."/>
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding}" Value="{x:Static models:ExeInstallerMode.Auto}">
                                                             <Setter TargetName="ModeTitle" Property="Text" Value="Auto ({AUTO})"/>

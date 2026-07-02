@@ -15,6 +15,7 @@ using Microsoft.Win32;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KlevaDeploy.Models;
+using KlevaDeploy.Services;
 using KlevaDeploy.Services.Interfaces;
 using KlevaDeploy.Utilities;
 using KlevaDeploy.Views;
@@ -1604,27 +1605,7 @@ public sealed class MainViewModel : ObservableObject
                 else
                 {
                     step.ProgressValue = 0;
-                    static string FirstLine(string? s)
-                    {
-                        var v = (s ?? string.Empty).Trim();
-                        if (string.IsNullOrWhiteSpace(v)) return string.Empty;
-                        var idx = v.IndexOfAny(['\r', '\n']);
-                        return idx >= 0 ? v[..idx].Trim() : v;
-                    }
-
-                    var detail = FirstLine(result.StdErr);
-                    if (string.IsNullOrWhiteSpace(detail))
-                        detail = FirstLine(result.StdOut);
-
-                    var statusFallback = (step.StatusText ?? string.Empty).Trim();
-                    if (string.IsNullOrWhiteSpace(detail) &&
-                        !string.IsNullOrWhiteSpace(statusFallback) &&
-                        !statusFallback.StartsWith("In esecuzione", StringComparison.OrdinalIgnoreCase) &&
-                        !statusFallback.StartsWith("Errore (exit", StringComparison.OrdinalIgnoreCase) &&
-                        !string.Equals(statusFallback, "Errore", StringComparison.OrdinalIgnoreCase))
-                    {
-                        detail = statusFallback;
-                    }
+                    var detail = ExecutionErrorFormatter.BuildDetail(process.Name, result, step.StatusText);
 
                     var statusText = string.IsNullOrWhiteSpace(detail)
                         ? $"Errore (exit {result.ExitCode})"
