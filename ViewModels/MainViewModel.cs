@@ -2235,10 +2235,29 @@ public sealed class MainViewModel : ObservableObject
             subtitle = $"{subtitle}\n\n{prefillNotice}".Trim();
 
         var app = System.Windows.Application.Current;
-        if (app?.Dispatcher is not null && !app.Dispatcher.CheckAccess())
+        var dispatcher = app?.Dispatcher;
+        if (dispatcher is not null &&
+            !dispatcher.CheckAccess() &&
+            !dispatcher.HasShutdownStarted &&
+            !dispatcher.HasShutdownFinished)
         {
-            response = app.Dispatcher.Invoke(() =>
-                _dialogService.ShowArgumentPrompt(process.Name, subtitle, inputs, mergedPrefill));
+            try
+            {
+                response = dispatcher.Invoke(() =>
+                    _dialogService.ShowArgumentPrompt(process.Name, subtitle, inputs, mergedPrefill));
+            }
+            catch (TaskCanceledException)
+            {
+                response = _dialogService.ShowArgumentPrompt(process.Name, subtitle, inputs, mergedPrefill);
+            }
+            catch (OperationCanceledException)
+            {
+                response = _dialogService.ShowArgumentPrompt(process.Name, subtitle, inputs, mergedPrefill);
+            }
+            catch (InvalidOperationException)
+            {
+                response = _dialogService.ShowArgumentPrompt(process.Name, subtitle, inputs, mergedPrefill);
+            }
         }
         else
         {
