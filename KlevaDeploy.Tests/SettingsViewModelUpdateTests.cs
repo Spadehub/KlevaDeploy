@@ -52,10 +52,45 @@ public sealed class SettingsViewModelUpdateTests
         Assert.Contains("Riavvio in corso", vm.UpdateStatusText);
     }
 
+    [Fact]
+    public async Task DownloadAndInstallUpdate_WhenDownloadThrows_ShowsUnderlyingErrorMessage()
+    {
+        var updateInfo = new AppUpdateInfo(
+            "0.3.0",
+            "https://github.com/Spadehub/KlevaDeploy/releases/download/v0.3.0/KlevaDeploy.exe",
+            "KlevaDeploy.exe",
+            "v0.3.0",
+            "Important fixes",
+            "https://github.com/Spadehub/KlevaDeploy/releases/tag/v0.3.0",
+            false,
+            new DateTimeOffset(2026, 7, 1, 18, 0, 0, TimeSpan.Zero),
+            123456);
+
+        var appUpdateService = new FakeAppUpdateService
+        {
+            AvailableUpdate = updateInfo,
+            DownloadException = new IOException("Access to the path is denied.")
+        };
+        var vm = new SettingsViewModel(
+            appUpdateService,
+            new FakePreferencesService(),
+            new FakeThemeService(),
+            new FakeLogService(),
+            new FakeDialogService(),
+            new FakePresetIconService());
+
+        await vm.CheckForUpdateCommand.ExecuteAsync(null);
+        await vm.DownloadAndInstallUpdateCommand.ExecuteAsync(null);
+
+        Assert.Contains("Errore durante download o installazione dell'aggiornamento:", vm.UpdateStatusText);
+        Assert.Contains("Access to the path is denied.", vm.UpdateStatusText);
+    }
+
     private sealed class FakeAppUpdateService : IAppUpdateService
     {
         public AppUpdateInfo? AvailableUpdate { get; set; }
         public string? DownloadedPath { get; set; }
+        public Exception? DownloadException { get; set; }
         public bool DownloadCalled { get; private set; }
         public bool LaunchCalled { get; private set; }
         public string? LaunchedPath { get; private set; }
@@ -66,6 +101,8 @@ public sealed class SettingsViewModelUpdateTests
         public Task<string?> DownloadUpdateAsync(AppUpdateInfo info, CancellationToken ct = default)
         {
             DownloadCalled = true;
+            if (DownloadException is not null)
+                throw DownloadException;
             return Task.FromResult(DownloadedPath);
         }
 

@@ -16,6 +16,7 @@ public class UserPreferences
     public AppThemeStyle ThemeStyle { get; set; } = AppThemeStyle.Default;
     public bool SuppressRequiredProcessWarning { get; set; } = false;
     public PresetsViewMode PresetsViewMode { get; set; } = PresetsViewMode.List;
+    public ScriptEditorLayoutPreferences ScriptEditorLayout { get; set; } = new();
     public string? SelectedPortalId { get; set; }
     public List<PortalPreference> Portals { get; set; } = new();
     public List<ProcessArgumentProfile> ProcessArgumentProfiles { get; set; } = new();
@@ -43,6 +44,7 @@ public class UserPreferences
             {
                 var json = File.ReadAllText(StoragePath);
                 var prefs = JsonSerializer.Deserialize<UserPreferences>(json) ?? new UserPreferences();
+                prefs.ScriptEditorLayout ??= new();
                 prefs.RecentPortalHomeUrls ??= new();
                 prefs.ProcessArgumentProfiles ??= new();
                 prefs.ProcessOrderOverrides = prefs.ProcessOrderOverrides is null
@@ -174,4 +176,20 @@ public sealed class ProcessArgumentProfile
     public string SchemaHash { get; set; } = string.Empty;
     public Dictionary<string, string> Values { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public bool LastRunFailed { get; set; }
+}
+
+public sealed class ScriptEditorLayoutPreferences
+{
+    public double LeftPaneWidth { get; set; } = 256;
+    public double RightPaneWidth { get; set; } = 288;
+    public double TerminalHeight { get; set; } = 180;
+    public bool NavigatorCollapsed { get; set; }
+    public bool ExplorerCollapsed { get; set; }
+    public bool TerminalCollapsed { get; set; }
+    public bool DiagnosticsCollapsed { get; set; } = true;
+    public double WindowWidth { get; set; } = 1500;
+    public double WindowHeight { get; set; } = 920;
+    public double WindowLeft { get; set; } = double.NaN;
+    public double WindowTop { get; set; } = double.NaN;
+    public bool IsMaximized { get; set; }
 }

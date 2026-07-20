@@ -4,6 +4,8 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:avalonedit="http://icsharpcode.net/sharpdevelop/avalonedit"
+        xmlns:behaviors="clr-namespace:KlevaDeploy.Behaviors"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:KlevaDeploy.ViewModels"
         mc:Ignorable="d"
         Title="Script Editor"
@@ -12,8 +14,14 @@
         MinWidth="960"
         MinHeight="700"
         WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        AllowsTransparency="False"
+        ResizeMode="CanResizeWithGrip"
         FontFamily="Segoe UI Variable, Segoe UI, sans-serif"
         Background="{DynamicResource AppBackgroundBrush}"
+        ToolTipService.InitialShowDelay="300"
+        ToolTipService.BetweenShowDelay="100"
+        ToolTipService.ShowDuration="10000"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True">
 
@@ -31,35 +39,37 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Style="{StaticResource EditorBadgeBorder}"
-                                Background="{DynamicResource EditorInfoSurfaceBrush}"
-                                Margin="0,0,8,0">
-                            <TextBlock Text="{Binding Kind}"
-                                       Style="{StaticResource EditorBadgeText}"/>
-                        </Border>
+                    <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="{Binding DisplayName}"
                                    Style="{StaticResource Win11TextBody}"
                                    FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding KindLabel}"
+                                   Style="{StaticResource EditorSectionCaption}"
+                                   Margin="0,1,0,0"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
-                        <Button Content="Run"
-                                Command="{Binding DataContext.RunNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                        <Button Command="{Binding DataContext.RunNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding}"
-                                Style="{StaticResource EditorMiniButton}"
-                                AutomationProperties.Name="Run selected process node"/>
-                        <Button Content="Stop"
-                                Command="{Binding DataContext.StopNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                Style="{StaticResource EditorInlineIconButton}"
+                                ToolTip="Run"
+                                AutomationProperties.Name="Run selected process node">
+                            <Image Source="{StaticResource IconInstall}" Style="{StaticResource EditorIcon16}"/>
+                        </Button>
+                        <Button Command="{Binding DataContext.StopNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding}"
-                                Style="{StaticResource EditorMiniButton}"
-                                AutomationProperties.Name="Stop selected process node"/>
-                        <Button Content="Restart"
-                                Command="{Binding DataContext.RestartNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                Style="{StaticResource EditorInlineIconButton}"
+                                ToolTip="Stop"
+                                AutomationProperties.Name="Stop selected process node">
+                            <Image Source="{StaticResource IconStop}" Style="{StaticResource EditorIcon16}"/>
+                        </Button>
+                        <Button Command="{Binding DataContext.RestartNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding}"
-                                Style="{StaticResource EditorMiniButton}"
-                                Margin="0"
-                                AutomationProperties.Name="Restart selected process node"/>
+                                Style="{StaticResource EditorInlineIconButtonLast}"
+                                ToolTip="Restart"
+                                AutomationProperties.Name="Restart selected process node">
+                            <Image Source="{StaticResource IconRefresh}" Style="{StaticResource EditorIcon16}"/>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </HierarchicalDataTemplate>
@@ -73,201 +83,306 @@
         </ResourceDictionary>
     </Window.Resources>
 
-    <Grid Margin="16">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="46"
+                      ResizeBorderThickness="6"
+                      GlassFrameThickness="0,0,0,1"
+                      UseAeroCaptionButtons="False"
+                      CornerRadius="12"/>
+    </WindowChrome.WindowChrome>
+
+    <Border Background="{DynamicResource AppBackgroundBrush}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="12">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="8"/>
-            <RowDefinition Height="260"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition x:Name="WorkspaceRow" Height="*"/>
+            <RowDefinition x:Name="TerminalSplitterRow" Height="8"/>
+            <RowDefinition x:Name="TerminalRow" Height="180"/>
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0"
-                Style="{StaticResource EditorShellCard}"
-                Margin="0,0,0,12">
-            <Grid Margin="16">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+                Background="{DynamicResource EditorToolbarSurfaceBrush}"
+                BorderBrush="{DynamicResource EditorSubtleBorderBrush}"
+                BorderThickness="0,0,0,1"
+                CornerRadius="12,12,0,0"
+                Height="46"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid Margin="12,0,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-                <Grid Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel>
-                        <TextBlock Text="Script Editor"
-                                   Style="{StaticResource EditorHeaderTitle}"/>
-                        <TextBlock Text="{Binding CurrentDocumentHint}"
+                <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <Border Style="{StaticResource EditorTitleIconBorder}">
+                        <Image Source="{StaticResource IconScript}"
+                               Style="{StaticResource EditorIcon16}"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding DocumentName}"
+                                   Style="{StaticResource EditorHeaderTitle}"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxWidth="360"/>
+                        <TextBlock Text="{Binding CurrentDocumentSubtitle}"
                                    Style="{StaticResource EditorHeaderSubtitle}"
-                                   MaxWidth="760"/>
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxWidth="360"/>
                     </StackPanel>
+                </StackPanel>
 
-                    <WrapPanel Grid.Column="1"
-                               HorizontalAlignment="Right"
-                               VerticalAlignment="Top">
-                        <Border Style="{StaticResource EditorBadgeBorder}"
-                                Background="{DynamicResource EditorInfoSurfaceBrush}">
-                            <TextBlock Text="{Binding CurrentDocumentKindLabel}"
-                                       Style="{StaticResource EditorBadgeText}"/>
-                        </Border>
-                        <Border Style="{StaticResource EditorBadgeBorder}"
-                                Background="{DynamicResource EditorPanelAltBrush}">
-                            <TextBlock Text="{Binding LanguageName}"
-                                       Style="{StaticResource EditorBadgeText}"/>
-                        </Border>
-                        <Border Style="{StaticResource EditorActivityBadgeBorder}">
-                            <TextBlock Text="{Binding ActivityStateLabel}"
-                                       Style="{StaticResource EditorBadgeText}"/>
-                        </Border>
-                        <Border Style="{StaticResource EditorDiagnosticsBadgeBorder}">
-                            <TextBlock Text="{Binding DiagnosticsStateLabel}"
-                                       Style="{StaticResource EditorBadgeText}"/>
-                        </Border>
-                        <Border Style="{StaticResource EditorBadgeBorder}"
-                                Background="{DynamicResource EditorPanelAltBrush}"
-                                Margin="0,0,0,8">
-                            <TextBlock Text="{Binding LayoutModeLabel}"
-                                       Style="{StaticResource EditorBadgeText}"/>
-                        </Border>
-                    </WrapPanel>
-                </Grid>
-
-                <WrapPanel Grid.Row="1"
-                           Margin="0,14,0,0">
+                <WrapPanel Grid.Column="1"
+                           Margin="18,0,12,0"
+                           VerticalAlignment="Center">
                     <Border Style="{StaticResource EditorToolGroup}"
                             Visibility="{Binding ShowExecutionToolbar, Converter={StaticResource BoolToVisibility}}">
                         <WrapPanel>
-                            <Button Content="Run"
-                                    Command="{Binding RunCommand}"
-                                    Style="{StaticResource EditorToolbarAccentButton}"
-                                    ToolTip="Run the current document"
-                                    AutomationProperties.Name="Run current document"/>
-                            <Button Content="Stop"
-                                    Command="{Binding StopCommand}"
-                                    Style="{StaticResource EditorToolbarButton}"
-                                    ToolTip="Stop the current run session"
-                                    AutomationProperties.Name="Stop current run session"/>
-                            <Button Content="Restart"
-                                    Command="{Binding RestartCommand}"
-                                    Style="{StaticResource EditorToolbarButton}"
-                                    Margin="0"
-                                    ToolTip="Restart the current document"
-                                    AutomationProperties.Name="Restart current document"/>
+                            <Button Command="{Binding RunCommand}"
+                                    Style="{StaticResource EditorToolbarPrimaryButton}"
+                                    ToolTip="Run"
+                                    AutomationProperties.Name="Run current document"
+                                    Content="Run"/>
+                            <Button Command="{Binding StopCommand}"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="Stop"
+                                    AutomationProperties.Name="Stop current run session">
+                                <Image Source="{StaticResource IconStop}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
+                            <Button Command="{Binding RestartCommand}"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="Restart"
+                                    AutomationProperties.Name="Restart current document">
+                                <Image Source="{StaticResource IconRefresh}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
+                            <Button Command="{Binding UndoCommand}"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="Undo"
+                                    AutomationProperties.Name="Undo">
+                                <Image Source="{StaticResource IconUndo}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
+                            <Button Command="{Binding RedoCommand}"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="Redo"
+                                    AutomationProperties.Name="Redo">
+                                <Image Source="{StaticResource IconRedo}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
                         </WrapPanel>
                     </Border>
 
                     <Border Style="{StaticResource EditorToolGroup}"
                             Visibility="{Binding IsProcessDocumentActive, Converter={StaticResource BoolToVisibility}}">
                         <WrapPanel>
-                            <Button Content="Apply to Process"
-                                    Command="{Binding SaveCommand}"
-                                    Style="{StaticResource EditorToolbarButton}"
-                                    ToolTip="Apply editor changes back to the current KDP process"
-                                    AutomationProperties.Name="Apply editor changes to current process"/>
-                            <Button Content="New Scratch"
-                                    Command="{Binding NewCommand}"
-                                    Style="{StaticResource EditorToolbarButton}"
-                                    ToolTip="Create a new scratch document"
-                                    AutomationProperties.Name="Create scratch document"/>
-                            <Button Content="Open File"
-                                    Command="{Binding OpenCommand}"
-                                    Style="{StaticResource EditorToolbarButton}"
-                                    Margin="0"
-                                    ToolTip="Open a file into the editor"
-                                    AutomationProperties.Name="Open file in editor"/>
+                            <Button Command="{Binding SaveCommand}"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="Apply to Process"
+                                    AutomationProperties.Name="Apply editor changes to current process">
+                                <Image Source="{StaticResource IconSave}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
+                            <Button Command="{Binding NewCommand}"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="New Scratch"
+                                    AutomationProperties.Name="Create scratch document">
+                                <Image Source="{StaticResource IconPlus}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
+                            <Button Command="{Binding OpenCommand}"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="Open File"
+                                    AutomationProperties.Name="Open file in editor">
+                                <Image Source="{StaticResource IconFolder}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
                         </WrapPanel>
                     </Border>
 
                     <Border Style="{StaticResource EditorToolGroup}"
                             Visibility="{Binding IsFileDocumentActive, Converter={StaticResource BoolToVisibility}}">
                         <WrapPanel>
-                            <Button Content="Save File"
-                                    Command="{Binding SaveCommand}"
-                                    Style="{StaticResource EditorToolbarButton}"
-                                    ToolTip="Save the active file to disk"
-                                    AutomationProperties.Name="Save current file"/>
-                            <Button Content="Refresh Explorer"
-                                    Command="{Binding RefreshFilesCommand}"
-                                    Style="{StaticResource EditorToolbarButton}"
-                                    ToolTip="Refresh the file explorer for the current working folder"
-                                    AutomationProperties.Name="Refresh file explorer"/>
-                            <Button Content="Open File"
-                                    Command="{Binding OpenCommand}"
-                                    Style="{StaticResource EditorToolbarButton}"
-                                    Margin="0"
-                                    ToolTip="Open another file into the editor"
-                                    AutomationProperties.Name="Open another file in editor"/>
+                            <Button Command="{Binding SaveCommand}"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="Save File"
+                                    AutomationProperties.Name="Save current file">
+                                <Image Source="{StaticResource IconSave}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
+                            <Button Command="{Binding RefreshFilesCommand}"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="Refresh Explorer"
+                                    AutomationProperties.Name="Refresh file explorer">
+                                <Image Source="{StaticResource IconRefresh}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
+                            <Button Command="{Binding OpenCommand}"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="Open File"
+                                    AutomationProperties.Name="Open another file in editor">
+                                <Image Source="{StaticResource IconFolder}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
                         </WrapPanel>
                     </Border>
 
                     <Border Style="{StaticResource EditorToolGroup}"
                             Visibility="{Binding IsScratchDocumentActive, Converter={StaticResource BoolToVisibility}}">
                         <WrapPanel>
-                            <Button Content="Save As"
-                                    Command="{Binding SaveCommand}"
-                                    Style="{StaticResource EditorToolbarButton}"
-                                    ToolTip="Save the scratch document as a new file"
-                                    AutomationProperties.Name="Save scratch document as file"/>
-                            <Button Content="New Scratch"
-                                    Command="{Binding NewCommand}"
-                                    Style="{StaticResource EditorToolbarButton}"
-                                    ToolTip="Create another scratch document"
-                                    AutomationProperties.Name="Create another scratch document"/>
-                            <Button Content="Open File"
-                                    Command="{Binding OpenCommand}"
-                                    Style="{StaticResource EditorToolbarButton}"
-                                    Margin="0"
-                                    ToolTip="Open a file into the editor"
-                                    AutomationProperties.Name="Open file in editor from scratch context"/>
+                            <Button Command="{Binding SaveCommand}"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="Save As"
+                                    AutomationProperties.Name="Save scratch document as file">
+                                <Image Source="{StaticResource IconSave}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
+                            <Button Command="{Binding NewCommand}"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="New Scratch"
+                                    AutomationProperties.Name="Create another scratch document">
+                                <Image Source="{StaticResource IconPlus}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
+                            <Button Command="{Binding OpenCommand}"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="Open File"
+                                    AutomationProperties.Name="Open file in editor from scratch context">
+                                <Image Source="{StaticResource IconFolder}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
                         </WrapPanel>
                     </Border>
 
                     <Border Style="{StaticResource EditorToolGroup}"
                             Visibility="{Binding ShowDiagnosticsToolbar, Converter={StaticResource BoolToVisibility}}">
                         <WrapPanel>
-                            <Button Content="Prev Issue"
-                                    Click="PrevIssueButton_Click"
-                                    Style="{StaticResource EditorToolbarButton}"
-                                    ToolTip="Jump to the previous diagnostic"
-                                    AutomationProperties.Name="Navigate to previous issue"/>
-                            <Button Content="Next Issue"
-                                    Click="NextIssueButton_Click"
-                                    Style="{StaticResource EditorToolbarButton}"
-                                    Margin="0"
-                                    ToolTip="Jump to the next diagnostic"
-                                    AutomationProperties.Name="Navigate to next issue"/>
+                            <Button Click="PrevIssueButton_Click"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="Previous Issue"
+                                    AutomationProperties.Name="Navigate to previous issue">
+                                <Image Source="{StaticResource IconChevronUp}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
+                            <Button Click="NextIssueButton_Click"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="Next Issue"
+                                    AutomationProperties.Name="Navigate to next issue">
+                                <Image Source="{StaticResource IconChevronDown}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
+                            <Button Click="ToggleDiagnosticsPanel_Click"
+                                    Style="{StaticResource EditorToolbarIconButton}"
+                                    ToolTip="{Binding DiagnosticsPanelToggleLabel}"
+                                    AutomationProperties.Name="Toggle diagnostics panel">
+                                <Image Source="{StaticResource IconLog}" Style="{StaticResource EditorIcon16}"/>
+                            </Button>
                         </WrapPanel>
                     </Border>
                 </WrapPanel>
+
+                <WrapPanel Grid.Column="2"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Right">
+                    <Border Style="{StaticResource EditorActivityBadgeBorder}"
+                            Visibility="{Binding ShowHeaderSecondaryBadges, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="{Binding ActivityStateLabel}"
+                                   Style="{StaticResource EditorBadgeText}"/>
+                    </Border>
+                    <Border Style="{StaticResource EditorDiagnosticsBadgeBorder}"
+                            Visibility="{Binding ShowHeaderSecondaryBadges, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="{Binding DiagnosticsStateLabel}"
+                                   Style="{StaticResource EditorBadgeText}"/>
+                    </Border>
+                    <Button Click="ToggleNavigatorPane_Click"
+                            Style="{StaticResource EditorToolbarIconButton}"
+                            ToolTip="Toggle Navigator"
+                            AutomationProperties.Name="Toggle process navigator pane">
+                        <Image Source="{StaticResource IconPackage}" Style="{StaticResource EditorIcon16}"/>
+                    </Button>
+                    <Button Click="ToggleExplorerPane_Click"
+                            Style="{StaticResource EditorToolbarIconButton}"
+                            ToolTip="Toggle Explorer"
+                            AutomationProperties.Name="Toggle file explorer pane">
+                        <Image Source="{StaticResource IconFolder}" Style="{StaticResource EditorIcon16}"/>
+                    </Button>
+                    <Button Click="ToggleTerminalPane_Click"
+                            Style="{StaticResource EditorToolbarIconButton}"
+                            ToolTip="Toggle Terminal"
+                            AutomationProperties.Name="Toggle terminal pane">
+                        <Image Source="{StaticResource IconLog}" Style="{StaticResource EditorIcon16}"/>
+                    </Button>
+                    <Button Click="ResetLayout_Click"
+                            Style="{StaticResource EditorToolbarIconButton}"
+                            ToolTip="Reset Layout"
+                            AutomationProperties.Name="Restore default editor layout">
+                        <Image Source="{StaticResource IconRefresh}" Style="{StaticResource EditorIcon16}"/>
+                    </Button>
+                </WrapPanel>
+
+                <StackPanel Grid.Column="3"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Stretch">
+                    <Button Click="MinimizeWindowButton_Click"
+                            Style="{StaticResource EditorWindowChromeButton}"
+                            ToolTip="Minimize">
+                        <TextBlock Text="&#x2014;"
+                                   FontSize="10"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"/>
+                    </Button>
+                    <Button x:Name="MaximizeWindowButton"
+                            Click="MaximizeWindowButton_Click"
+                            Style="{StaticResource EditorWindowChromeButton}"
+                            ToolTip="Maximize">
+                        <TextBlock x:Name="MaximizeIcon"
+                                   Text="&#x25A1;"
+                                   FontSize="11"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"/>
+                    </Button>
+                    <Button Click="CloseWindowButton_Click"
+                            Style="{StaticResource EditorWindowChromeCloseButton}"
+                            ToolTip="Close">
+                        <TextBlock Text="&#x2715;"
+                                   FontSize="11"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"/>
+                    </Button>
+                </StackPanel>
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="1"
+              Margin="12,8,12,0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="280" MinWidth="220"/>
-                <ColumnDefinition Width="8"/>
-                <ColumnDefinition Width="*" MinWidth="420"/>
-                <ColumnDefinition Width="8"/>
-                <ColumnDefinition Width="320" MinWidth="240"/>
+                <ColumnDefinition x:Name="NavigatorPaneColumn" Width="256" MinWidth="220"/>
+                <ColumnDefinition x:Name="NavigatorSplitterColumn" Width="8"/>
+                <ColumnDefinition x:Name="EditorPaneColumn" Width="*" MinWidth="420"/>
+                <ColumnDefinition x:Name="ExplorerSplitterColumn" Width="8"/>
+                <ColumnDefinition x:Name="ExplorerPaneColumn" Width="288" MinWidth="240"/>
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0"
-                    Style="{StaticResource EditorShellCard}">
+                    Style="{StaticResource EditorShellCard}"
+                    Background="{DynamicResource EditorSidebarSurfaceBrush}"
+                    Visibility="{Binding ShowNavigatorPane, Converter={StaticResource BoolToVisibility}}">
                 <Grid Margin="14">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <StackPanel Margin="0,0,0,12">
-                        <TextBlock Text="Process Navigator"
-                                   Style="{StaticResource EditorSectionTitle}"/>
-                        <TextBlock Text="Browse the main process and subprocess hierarchy. Each node exposes direct run controls."
-                                   Style="{StaticResource EditorSectionCaption}"/>
-                    </StackPanel>
+                    <Border Background="Transparent"
+                            BorderBrush="{DynamicResource EditorSubtleBorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="0,0,0,6"
+                            Margin="0,0,0,8">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left"
+                                       Text="Process Navigator"
+                                       Style="{StaticResource EditorSectionTitle}"/>
+                            <Button Style="{StaticResource EditorInlineIconButton}"
+                                    Click="ToggleNavigatorPane_Click"
+                                    DockPanel.Dock="Right"
+                                    Margin="8,0,0,0"
+                                    ToolTip="Hide process navigator"
+                                    AutomationProperties.Name="Hide process navigator pane">
+                                <Image Source="{StaticResource IconEyeClosed}"
+                                       Style="{StaticResource EditorIcon16}"/>
+                            </Button>
+                        </DockPanel>
+                    </Border>
 
                     <TreeView Grid.Row="1"
                               x:Name="ProcessTree"
@@ -275,19 +390,32 @@
                               SelectedItemChanged="ProcessTree_SelectedItemChanged"
                               Style="{StaticResource EditorSidebarTree}"
                               ItemContainerStyle="{StaticResource EditorSidebarTreeItem}"
-                              AutomationProperties.Name="Process hierarchy"/>
+                              FlowDirection="LeftToRight"
+                              AutomationProperties.Name="Process hierarchy">
+                        <TreeView.Resources>
+                            <Style TargetType="ScrollViewer">
+                                <Setter Property="behaviors:TouchScrollBehavior.IsEnabled" Value="False"/>
+                                <Setter Property="PanningMode" Value="VerticalFirst"/>
+                            </Style>
+                        </TreeView.Resources>
+                    </TreeView>
                 </Grid>
             </Border>
 
             <GridSplitter Grid.Column="1"
                           Width="8"
-                          Style="{StaticResource EditorGridSplitter}"/>
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Stretch"
+                          Style="{StaticResource EditorGridSplitter}"
+                          ResizeDirection="Columns"
+                          ResizeBehavior="PreviousAndNext"
+                          Visibility="{Binding ShowNavigatorPane, Converter={StaticResource BoolToVisibility}}"
+                          DragCompleted="PaneSplitter_DragCompleted"/>
 
             <Border Grid.Column="2"
                     Style="{StaticResource EditorShellCard}">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
@@ -296,170 +424,100 @@
                     </Grid.RowDefinitions>
 
                     <Border Grid.Row="0"
-                            Background="{DynamicResource EditorPanelAltBrush}"
-                            BorderBrush="{DynamicResource BorderBrush}"
-                            BorderThickness="0,0,0,1"
-                            Padding="16,14">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel>
-                                <TextBlock Text="{Binding DocumentName}"
-                                           Style="{StaticResource EditorSectionTitle}"
-                                           FontSize="16"/>
-                                <TextBlock Text="{Binding DocumentPath}"
-                                           Style="{StaticResource EditorSectionCaption}"
-                                           Margin="0,4,0,0"/>
-                            </StackPanel>
+                            Visibility="Collapsed"/>
 
-                            <StackPanel Grid.Column="1"
-                                        Orientation="Horizontal"
-                                        VerticalAlignment="Center">
-                                <Border Style="{StaticResource EditorBadgeBorder}"
-                                        Background="{DynamicResource EditorPanelBrush}">
-                                    <TextBlock Text="{Binding CurrentDocumentKindLabel}"
-                                               Style="{StaticResource EditorBadgeText}"/>
-                                </Border>
-                                <Border Style="{StaticResource EditorBadgeBorder}"
-                                        Background="{DynamicResource EditorPanelBrush}"
-                                        Margin="0">
-                                    <TextBlock Text="{Binding LanguageName}"
-                                               Style="{StaticResource EditorBadgeText}"/>
-                                </Border>
-                            </StackPanel>
-                        </Grid>
+                    <Border Grid.Row="1"
+                            Background="{DynamicResource EditorToolbarSurfaceBrush}"
+                            BorderBrush="{DynamicResource EditorSubtleBorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="6,2,6,0"
+                            Visibility="{Binding HasOpenDocuments, Converter={StaticResource BoolToVisibility}}">
+                        <TabControl x:Name="DocumentsTabControl"
+                                    ItemsSource="{Binding OpenDocuments}"
+                                    Style="{StaticResource EditorTabControl}"
+                                    ItemContainerStyle="{StaticResource EditorDocumentTabItem}"
+                                    SelectionChanged="DocumentsTabControl_SelectionChanged"
+                                    PreviewMouseLeftButtonDown="DocumentsTabControl_PreviewMouseLeftButtonDown"
+                                    MouseMove="DocumentsTabControl_MouseMove"
+                                    AllowDrop="True"
+                                    Drop="DocumentsTabControl_Drop"
+                                    DragOver="DocumentsTabControl_DragOver"
+                                    AutomationProperties.Name="Open editor documents">
+                            <TabControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding HeaderText}"
+                                                   Margin="0,0,8,0"
+                                                   Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}"/>
+                                        <Button Tag="{Binding}"
+                                                Click="CloseDocumentButton_Click"
+                                                Style="{StaticResource EditorTabCloseButton}"
+                                                ToolTip="Close document tab"
+                                                AutomationProperties.Name="Close document tab">
+                                            <Image Source="{StaticResource IconClose}"
+                                                   Style="{StaticResource EditorIcon12}"/>
+                                        </Button>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </TabControl.ItemTemplate>
+                            <TabControl.ContentTemplate>
+                                <DataTemplate>
+                                    <Grid Height="0"/>
+                                </DataTemplate>
+                            </TabControl.ContentTemplate>
+                        </TabControl>
                     </Border>
 
-                    <TabControl Grid.Row="1"
-                                x:Name="DocumentsTabControl"
-                                ItemsSource="{Binding OpenDocuments}"
-                                Style="{StaticResource EditorTabControl}"
-                                ItemContainerStyle="{StaticResource EditorDocumentTabItem}"
-                                SelectionChanged="DocumentsTabControl_SelectionChanged"
-                                PreviewMouseLeftButtonDown="DocumentsTabControl_PreviewMouseLeftButtonDown"
-                                MouseMove="DocumentsTabControl_MouseMove"
-                                AllowDrop="True"
-                                Drop="DocumentsTabControl_Drop"
-                                DragOver="DocumentsTabControl_DragOver"
-                                AutomationProperties.Name="Open editor documents">
-                        <TabControl.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding HeaderText}"
-                                               Margin="0,0,8,0"
-                                               Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}"/>
-                                    <Button Content="x"
-                                            Tag="{Binding}"
-                                            Click="CloseDocumentButton_Click"
-                                            Style="{StaticResource EditorGlyphButton}"
-                                            Width="24"
-                                            Height="24"
-                                            ToolTip="Close document tab"
-                                            AutomationProperties.Name="Close document tab"/>
-                                </StackPanel>
-                            </DataTemplate>
-                        </TabControl.ItemTemplate>
-                        <TabControl.ContentTemplate>
-                            <DataTemplate>
-                                <Grid Height="0"/>
-                            </DataTemplate>
-                        </TabControl.ContentTemplate>
-                    </TabControl>
-
                     <Border Grid.Row="2"
-                            Background="{DynamicResource EditorChromeBrush}"
-                            BorderBrush="{DynamicResource BorderBrush}"
-                            BorderThickness="0,1,0,1"
-                            Padding="12,10">
-                        <WrapPanel VerticalAlignment="Center">
-                            <Border Style="{StaticResource EditorBadgeBorder}"
-                                    Background="{DynamicResource EditorPanelBrush}">
-                                <TextBlock Text="{Binding ActivityStateLabel}"
-                                           Style="{StaticResource EditorBadgeText}"/>
+                            Background="{DynamicResource EditorCodeSurfaceBrush}">
+                        <Grid>
+                            <avalonedit:TextEditor x:Name="EditorView"
+                                                   ShowLineNumbers="True"
+                                                   FontFamily="Cascadia Code, Consolas, monospace"
+                                                   FontSize="13"
+                                                   Background="{DynamicResource AppBackgroundBrush}"
+                                                   Foreground="{DynamicResource TextPrimaryBrush}"
+                                                   HorizontalScrollBarVisibility="Auto"
+                                                   VerticalScrollBarVisibility="Auto"
+                                                   Visibility="{Binding HasOpenDocuments, Converter={StaticResource BoolToVisibility}}"
+                                                   AutomationProperties.Name="Script editor surface"
+                                                   AutomationProperties.HelpText="Long-format script editor with syntax feedback, completion, and execution tooling."/>
+
+                            <Border Style="{StaticResource EditorEmptyStateBorder}"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    MaxWidth="420"
+                                    Visibility="{Binding ShowEmptyEditorState, Converter={StaticResource BoolToVisibility}}">
+                                <StackPanel>
+                                    <TextBlock Text="No document open"
+                                               Style="{StaticResource EditorSectionTitle}"
+                                               HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Select a process, open a file, or create a scratch document to start working."
+                                               Style="{StaticResource EditorSectionCaption}"
+                                               TextAlignment="Center"
+                                               TextWrapping="Wrap"
+                                               Margin="0,8,0,0"/>
+                                    <WrapPanel HorizontalAlignment="Center"
+                                               Margin="0,16,0,0">
+                                        <Button Command="{Binding NewCommand}"
+                                                Style="{StaticResource EditorToolbarPrimaryButton}"
+                                                Content="New Scratch"
+                                                Margin="0,0,8,0"/>
+                                        <Button Command="{Binding OpenCommand}"
+                                                Style="{StaticResource Win11Button}"
+                                                Content="Open File"/>
+                                    </WrapPanel>
+                                </StackPanel>
                             </Border>
-                            <Border Style="{StaticResource EditorBadgeBorder}"
-                                    Background="{DynamicResource EditorPanelBrush}">
-                                <TextBlock Text="{Binding DiagnosticsSummary}"
-                                           Style="{StaticResource EditorBadgeText}"/>
-                            </Border>
-                            <TextBlock Text="Use Ctrl+Space for completion, F8 / Shift+F8 for issue navigation, and drag tabs to reorder."
-                                       Style="{StaticResource EditorSectionCaption}"
-                                       VerticalAlignment="Center"/>
-                        </WrapPanel>
+                        </Grid>
                     </Border>
 
                     <Border Grid.Row="3"
-                            Background="{DynamicResource EditorCodeSurfaceBrush}">
-                        <avalonedit:TextEditor x:Name="EditorView"
-                                               ShowLineNumbers="True"
-                                               FontFamily="Cascadia Code, Consolas, monospace"
-                                               FontSize="13"
-                                               Background="{DynamicResource AppBackgroundBrush}"
-                                               Foreground="{DynamicResource TextPrimaryBrush}"
-                                               HorizontalScrollBarVisibility="Auto"
-                                               VerticalScrollBarVisibility="Auto"
-                                               AutomationProperties.Name="Script editor surface"
-                                               AutomationProperties.HelpText="Long-format script editor with syntax feedback, completion, and execution tooling."/>
-                    </Border>
+                            Visibility="Collapsed"/>
 
                     <Border Grid.Row="4"
-                            Background="{DynamicResource EditorPanelAltBrush}"
-                            BorderBrush="{DynamicResource BorderBrush}"
-                            BorderThickness="0,1,0,1"
-                            Padding="12,10"
-                            Visibility="{Binding HasDiagnostics, Converter={StaticResource BoolToVisibility}}">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
-                            <StackPanel Margin="0,0,0,8">
-                                <TextBlock Text="Diagnostics"
-                                           Style="{StaticResource EditorSectionTitle}"/>
-                                <TextBlock Text="Errors and warnings remain inline, but you can also click any item here to jump directly to the exact location."
-                                           Style="{StaticResource EditorSectionCaption}"/>
-                            </StackPanel>
-                            <ListBox Grid.Row="1"
-                                     x:Name="DiagnosticsList"
-                                     ItemsSource="{Binding Diagnostics}"
-                                     Style="{StaticResource EditorDiagnosticsList}"
-                                     SelectionChanged="DiagnosticsList_SelectionChanged"
-                                     AutomationProperties.Name="Diagnostics list">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="0,0,0,4">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Border Grid.Column="0"
-                                                    Style="{StaticResource EditorSeverityBadgeBorder}"
-                                                    Margin="0,0,8,0">
-                                                <TextBlock Text="{Binding Severity}"
-                                                           Style="{StaticResource EditorBadgeText}"/>
-                                            </Border>
-                                            <TextBlock Grid.Column="1"
-                                                       TextWrapping="Wrap"
-                                                       Style="{StaticResource Win11TextBody}">
-                                                <Run Text="Line "/>
-                                                <Run Text="{Binding Line}"/>
-                                                <Run Text=", Col "/>
-                                                <Run Text="{Binding Column}"/>
-                                                <Run Text=": "/>
-                                                <Run Text="{Binding Message}"/>
-                                            </TextBlock>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
-                        </Grid>
-                    </Border>
-
-                    <Border Grid.Row="5"
-                            Background="{DynamicResource EditorPanelAltBrush}"
-                            Padding="12,10">
+                            Background="{DynamicResource EditorToolbarSurfaceBrush}"
+                            Padding="10,8">
                         <TextBlock x:Name="StatusTextBlock"
                                    Text="{Binding StatusText}"
                                    Style="{StaticResource EditorStatusBarText}"/>
@@ -469,11 +527,17 @@
 
             <GridSplitter Grid.Column="3"
                           Width="8"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Stretch"
                           Style="{StaticResource EditorGridSplitter}"
-                          Visibility="{Binding ShowExplorerPane, Converter={StaticResource BoolToVisibility}}"/>
+                          ResizeDirection="Columns"
+                          ResizeBehavior="PreviousAndNext"
+                          Visibility="{Binding ShowExplorerPane, Converter={StaticResource BoolToVisibility}}"
+                          DragCompleted="PaneSplitter_DragCompleted"/>
 
             <Border Grid.Column="4"
                     Style="{StaticResource EditorShellCard}"
+                    Background="{DynamicResource EditorSidebarSurfaceBrush}"
                     Visibility="{Binding ShowExplorerPane, Converter={StaticResource BoolToVisibility}}">
                 <Grid Margin="14">
                     <Grid.RowDefinitions>
@@ -481,21 +545,34 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <DockPanel Margin="0,0,0,12">
-                        <StackPanel DockPanel.Dock="Left">
-                            <TextBlock Text="File Explorer"
+                    <Border Background="Transparent"
+                            BorderBrush="{DynamicResource EditorSubtleBorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            Padding="0,0,0,6"
+                            Margin="0,0,0,8">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Left"
+                                       Text="File Explorer"
                                        Style="{StaticResource EditorSectionTitle}"/>
-                            <TextBlock Text="Mirrors the working folder used by the current script context. Double-click a file to open it in a tab."
-                                       Style="{StaticResource EditorSectionCaption}"
-                                       MaxWidth="260"/>
-                        </StackPanel>
-                        <Button Content="Refresh"
-                                Command="{Binding RefreshFilesCommand}"
-                                Style="{StaticResource EditorMiniButton}"
-                                DockPanel.Dock="Right"
-                                Margin="8,0,0,0"
-                                AutomationProperties.Name="Refresh file explorer"/>
-                    </DockPanel>
+                            <StackPanel DockPanel.Dock="Right"
+                                        Orientation="Horizontal">
+                                <Button Style="{StaticResource EditorInlineIconButton}"
+                                        Command="{Binding RefreshFilesCommand}"
+                                        ToolTip="Refresh file explorer"
+                                        AutomationProperties.Name="Refresh file explorer">
+                                    <Image Source="{StaticResource IconRefresh}"
+                                           Style="{StaticResource EditorIcon16}"/>
+                                </Button>
+                                <Button Click="ToggleExplorerPane_Click"
+                                        Style="{StaticResource EditorInlineIconButtonLast}"
+                                        ToolTip="Hide file explorer"
+                                        AutomationProperties.Name="Hide file explorer pane">
+                                    <Image Source="{StaticResource IconEyeClosed}"
+                                           Style="{StaticResource EditorIcon16}"/>
+                                </Button>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
 
                     <TreeView Grid.Row="1"
                               x:Name="FileTree"
@@ -512,109 +589,229 @@
         <GridSplitter Grid.Row="2"
                       Height="8"
                       HorizontalAlignment="Stretch"
-                      Style="{StaticResource EditorGridSplitter}"/>
+                      Margin="12,0,12,0"
+                      VerticalAlignment="Center"
+                      Style="{StaticResource EditorGridSplitter}"
+                      ResizeDirection="Rows"
+                      ResizeBehavior="PreviousAndNext"
+                      Visibility="{Binding ShowTerminalPane, Converter={StaticResource BoolToVisibility}}"
+                      DragCompleted="PaneSplitter_DragCompleted"/>
 
         <Border Grid.Row="3"
                 Style="{StaticResource EditorShellCard}"
                 Padding="0"
-                Margin="0,0,0,12">
+                Margin="12,0,12,12"
+                Visibility="{Binding ShowTerminalPane, Converter={StaticResource BoolToVisibility}}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <Border Background="{DynamicResource EditorPanelAltBrush}"
-                        BorderBrush="{DynamicResource BorderBrush}"
+                <Border Background="{DynamicResource EditorToolbarSurfaceBrush}"
+                        BorderBrush="{DynamicResource EditorSubtleBorderBrush}"
                         BorderThickness="0,0,0,1"
-                        Padding="14">
+                        Padding="10,8">
                     <DockPanel>
                         <StackPanel DockPanel.Dock="Left">
-                            <TextBlock Text="Terminal"
+                            <TextBlock Text="Output"
                                        Style="{StaticResource EditorSectionTitle}"/>
-                            <TextBlock Text="Verbose output, timestamps, level filtering, and session separation for test runs."
-                                       Style="{StaticResource EditorSectionCaption}"/>
+                            <TextBlock x:Name="OutputDescriptionText"
+                                       Text="Logs, filtering, and export for the current run."
+                                       Style="{StaticResource EditorSectionCaption}"
+                                       Visibility="{Binding ShowTerminalDescription, Converter={StaticResource BoolToVisibility}}"/>
+                            <WrapPanel Margin="0,8,0,0">
+                                <ToggleButton x:Name="TerminalViewToggle"
+                                              Style="{StaticResource EditorPaneToggleButton}"
+                                              ToolTip="Show terminal output"
+                                              IsChecked="True"
+                                              Checked="TerminalViewToggle_Checked"
+                                              AutomationProperties.Name="Show terminal output">
+                                    <TextBlock Text="Terminal"/>
+                                </ToggleButton>
+                                <ToggleButton x:Name="IssuesViewToggle"
+                                              Style="{StaticResource EditorPaneToggleButton}"
+                                              ToolTip="Show issue list"
+                                              Checked="IssuesViewToggle_Checked"
+                                              IsEnabled="{Binding HasDiagnostics}"
+                                              AutomationProperties.Name="Show issue list">
+                                    <TextBlock Text="{Binding DiagnosticsStateLabel}"/>
+                                </ToggleButton>
+                            </WrapPanel>
                         </StackPanel>
 
                         <WrapPanel DockPanel.Dock="Right"
                                    VerticalAlignment="Center">
-                            <CheckBox Content="Auto-follow"
-                                      IsChecked="{Binding AutoFollowTerminal}"
-                                      Style="{StaticResource Win11CheckBox}"
-                                      Margin="0,0,12,0"
-                                      AutomationProperties.Name="Toggle terminal auto follow"/>
-                            <Button Content="Clear"
-                                    Command="{Binding ClearTerminalCommand}"
-                                    Style="{StaticResource EditorMiniButton}"
-                                    ToolTip="Clear terminal output"
-                                    AutomationProperties.Name="Clear terminal output"/>
-                            <Button Content="Export"
-                                    Command="{Binding ExportTerminalCommand}"
-                                    Style="{StaticResource EditorMiniButton}"
-                                    ToolTip="Export terminal output"
-                                    AutomationProperties.Name="Export terminal output"/>
-                            <ComboBox Width="120"
-                                      ItemsSource="{Binding TerminalLevels}"
-                                      SelectedItem="{Binding TerminalLevelFilter}"
-                                      Style="{StaticResource Win11ComboBox}"
-                                      Margin="0,0,8,0"
-                                      AutomationProperties.Name="Terminal level filter"/>
-                            <TextBox Width="220"
-                                     Text="{Binding TerminalSearchText, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource Win11TextBox}"
-                                     AutomationProperties.Name="Search terminal output"/>
+                            <Border x:Name="TerminalActionsHost"
+                                    Style="{StaticResource EditorTerminalToolbarGroup}">
+                                <WrapPanel>
+                                    <Button Click="ToggleTerminalPane_Click"
+                                            Style="{StaticResource EditorInlineIconButton}"
+                                            ToolTip="Hide terminal pane"
+                                            AutomationProperties.Name="Hide terminal pane">
+                                        <Image Source="{StaticResource IconEyeClosed}"
+                                               Style="{StaticResource EditorIcon16}"/>
+                                    </Button>
+                                    <Button Command="{Binding ClearTerminalCommand}"
+                                            Style="{StaticResource EditorInlineIconButton}"
+                                            ToolTip="Clear terminal output"
+                                            AutomationProperties.Name="Clear terminal output">
+                                        <Image Source="{StaticResource IconTrash}"
+                                               Style="{StaticResource EditorIcon16}"/>
+                                    </Button>
+                                    <Button Command="{Binding ExportTerminalCommand}"
+                                            Style="{StaticResource EditorInlineIconButtonLast}"
+                                            ToolTip="Export terminal output"
+                                            AutomationProperties.Name="Export terminal output">
+                                        <Image Source="{StaticResource IconDownload}"
+                                               Style="{StaticResource EditorIcon16}"/>
+                                    </Button>
+                                </WrapPanel>
+                            </Border>
+                            <Border x:Name="TerminalFiltersDivider"
+                                    Style="{StaticResource EditorToolbarDivider}"/>
+                            <Border x:Name="TerminalFiltersHost"
+                                    Style="{StaticResource EditorTerminalToolbarGroup}">
+                                <WrapPanel>
+                                    <CheckBox Content="Auto-follow"
+                                              IsChecked="{Binding AutoFollowTerminal}"
+                                              Style="{StaticResource Win11CheckBox}"
+                                              Margin="0,0,10,0"
+                                              AutomationProperties.Name="Toggle terminal auto follow"/>
+                                    <ComboBox Width="{Binding TerminalLevelFilterWidth}"
+                                              ItemsSource="{Binding TerminalLevels}"
+                                              SelectedItem="{Binding TerminalLevelFilter}"
+                                              Style="{StaticResource Win11ComboBox}"
+                                              Margin="0,0,8,0"
+                                              AutomationProperties.Name="Terminal level filter"/>
+                                    <TextBox Width="{Binding TerminalSearchBoxWidth}"
+                                             Text="{Binding TerminalSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource Win11TextBox}"
+                                             AutomationProperties.Name="Search terminal output"/>
+                                </WrapPanel>
+                            </Border>
+                            <Border x:Name="IssuesActionsHost"
+                                    Style="{StaticResource EditorTerminalToolbarGroup}"
+                                    Visibility="Collapsed">
+                                <WrapPanel>
+                                    <Button Click="PrevIssueButton_Click"
+                                            Style="{StaticResource EditorInlineIconButton}"
+                                            ToolTip="Previous Issue"
+                                            AutomationProperties.Name="Navigate to previous issue from output panel">
+                                        <Image Source="{StaticResource IconChevronUp}" Style="{StaticResource EditorIcon16}"/>
+                                    </Button>
+                                    <Button Click="NextIssueButton_Click"
+                                            Style="{StaticResource EditorInlineIconButton}"
+                                            ToolTip="Next Issue"
+                                            AutomationProperties.Name="Navigate to next issue from output panel">
+                                        <Image Source="{StaticResource IconChevronDown}" Style="{StaticResource EditorIcon16}"/>
+                                    </Button>
+                                    <Button Click="ToggleDiagnosticsPanel_Click"
+                                            Style="{StaticResource EditorInlineIconButtonLast}"
+                                            ToolTip="{Binding DiagnosticsPanelToggleLabel}"
+                                            AutomationProperties.Name="Toggle issue view from output panel">
+                                        <Image Source="{StaticResource IconLog}" Style="{StaticResource EditorIcon16}"/>
+                                    </Button>
+                                </WrapPanel>
+                            </Border>
                         </WrapPanel>
                     </DockPanel>
                 </Border>
 
-                <ListView Grid.Row="1"
-                          x:Name="TerminalList"
-                          ItemsSource="{Binding TerminalView}"
-                          Style="{StaticResource EditorTerminalList}"
-                          AutomationProperties.Name="Terminal output list">
-                    <ListView.ItemContainerStyle>
-                        <Style TargetType="ListViewItem">
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                            <Setter Property="Padding" Value="4,2"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsSessionHeader}" Value="True">
-                                    <Setter Property="FontWeight" Value="SemiBold"/>
-                                    <Setter Property="Background" Value="{DynamicResource EditorTabActiveBrush}"/>
-                                </DataTrigger>
-                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                                    <Setter Property="BorderBrush" Value="{DynamicResource FocusRingBrush}"/>
-                                    <Setter Property="BorderThickness" Value="1"/>
-                                </Trigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ListView.ItemContainerStyle>
-                    <ListView.View>
-                        <GridView>
-                            <GridViewColumn Header="Time" Width="84" DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss}"/>
-                            <GridViewColumn Header="Session" Width="86" DisplayMemberBinding="{Binding Session}"/>
-                            <GridViewColumn Header="Level" Width="76" DisplayMemberBinding="{Binding Level}"/>
-                            <GridViewColumn Header="Source" Width="170" DisplayMemberBinding="{Binding Source}"/>
-                            <GridViewColumn Header="Message" Width="900" DisplayMemberBinding="{Binding Message}"/>
-                        </GridView>
-                    </ListView.View>
-                </ListView>
+                <Grid Grid.Row="1">
+                    <Grid x:Name="TerminalViewHost">
+                        <ListView x:Name="TerminalList"
+                                  ItemsSource="{Binding TerminalView}"
+                                  Style="{StaticResource EditorTerminalList}"
+                                  ItemContainerStyle="{StaticResource EditorTerminalListItem}"
+                                  Visibility="{Binding HasVisibleTerminalEntries, Converter={StaticResource BoolToVisibility}}"
+                                  AutomationProperties.Name="Terminal output list">
+                            <ListView.View>
+                                <GridView ColumnHeaderContainerStyle="{StaticResource EditorGridViewHeader}">
+                                    <GridViewColumn Header="Time" Width="84" DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss}"/>
+                                    <GridViewColumn Header="Session" Width="86" DisplayMemberBinding="{Binding Session}"/>
+                                    <GridViewColumn Header="Level" Width="76" DisplayMemberBinding="{Binding Level}"/>
+                                    <GridViewColumn Header="Source" Width="170" DisplayMemberBinding="{Binding Source}"/>
+                                    <GridViewColumn Header="Message" Width="900" DisplayMemberBinding="{Binding Message}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+
+                        <Border Style="{StaticResource EditorEmptyStateBorder}"
+                                Visibility="{Binding ShowTerminalPlaceholder, Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        MaxWidth="420">
+                                <TextBlock Text="{Binding TerminalEmptyStateTitle}"
+                                           Style="{StaticResource EditorSectionTitle}"
+                                           TextAlignment="Center"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="{Binding TerminalEmptyStateMessage}"
+                                           Style="{StaticResource EditorSectionCaption}"
+                                           TextAlignment="Center"
+                                           Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <Grid x:Name="IssuesViewHost"
+                          Visibility="Collapsed">
+                        <ListBox x:Name="DiagnosticsList"
+                                 ItemsSource="{Binding Diagnostics}"
+                                 Style="{StaticResource EditorDiagnosticsList}"
+                                 ItemContainerStyle="{StaticResource EditorDiagnosticsListItem}"
+                                 SelectionChanged="DiagnosticsList_SelectionChanged"
+                                 Visibility="{Binding HasDiagnostics, Converter={StaticResource BoolToVisibility}}"
+                                 AutomationProperties.Name="Diagnostics list">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0"
+                                                Style="{StaticResource EditorSeverityBadgeBorder}"
+                                                Margin="0,0,8,0">
+                                            <TextBlock Text="{Binding Severity}"
+                                                       Style="{StaticResource EditorBadgeText}"/>
+                                        </Border>
+                                        <TextBlock Grid.Column="1"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource Win11TextBody}">
+                                            <Run Text="Line "/>
+                                            <Run Text="{Binding Line}"/>
+                                            <Run Text=", Col "/>
+                                            <Run Text="{Binding Column}"/>
+                                            <Run Text=": "/>
+                                            <Run Text="{Binding Message}"/>
+                                        </TextBlock>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <Border x:Name="IssuesEmptyStateBorder"
+                                Style="{StaticResource EditorEmptyStateBorder}"
+                                Visibility="Collapsed">
+                            <StackPanel HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        MaxWidth="420">
+                                <TextBlock Text="No issues detected"
+                                           Style="{StaticResource EditorSectionTitle}"
+                                           TextAlignment="Center"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="Inline highlighting stays active while you edit."
+                                           Style="{StaticResource EditorSectionCaption}"
+                                           TextAlignment="Center"
+                                           Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
             </Grid>
         </Border>
 
-        <Border Grid.Row="4"
-                Background="{DynamicResource EditorPanelAltBrush}"
-                BorderBrush="{DynamicResource BorderBrush}"
-                BorderThickness="1"
-                CornerRadius="10"
-                Padding="12">
-            <DockPanel>
-                <TextBlock DockPanel.Dock="Left"
-                           Text="Inline commands stay in the process form. Use this editor for long-format scripts, diagnostics, repeated execution, and file-context browsing."
-                           Style="{StaticResource EditorSectionCaption}"/>
-                <TextBlock DockPanel.Dock="Right"
-                           Text="WCAG-aware focus, keyboard shortcuts, and resizable panes are active."
-                           Style="{StaticResource EditorSectionCaption}"/>
-            </DockPanel>
-        </Border>
     </Grid>
+    </Border>
 </Window>

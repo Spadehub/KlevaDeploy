@@ -53,6 +53,7 @@ public sealed class InstallerService : IInstallerService
             {
                 var json = File.ReadAllText(_processesFilePath);
                 _userCreatedProcesses = JsonSerializer.Deserialize<List<DeploymentProcess>>(json) ?? new();
+                needsSave |= NormalizeProcessIcons(_userCreatedProcesses);
                 needsSave |= NormalizeInstallerProcesses(_userCreatedProcesses);
                 _log.Info($"Loaded {_userCreatedProcesses.Count} custom processes from storage.");
             }
@@ -302,6 +303,7 @@ public sealed class InstallerService : IInstallerService
             else merged.Add(custom);
         }
 
+        NormalizeProcessIcons(merged);
         NormalizeInstallerProcesses(merged);
         _cachedProcesses = merged;
     }
@@ -309,6 +311,18 @@ public sealed class InstallerService : IInstallerService
     private void RebuildPresetCache()
     {
         _cachedPresets = _userCreatedPresets.ToList();
+    }
+
+    private static bool NormalizeProcessIcons(List<DeploymentProcess> processes)
+    {
+        var changed = false;
+        foreach (var process in processes)
+        {
+            if (process.NormalizeIconRecursively())
+                changed = true;
+        }
+
+        return changed;
     }
 
     private bool NormalizeInstallerProcesses(List<DeploymentProcess> processes)
@@ -325,6 +339,9 @@ public sealed class InstallerService : IInstallerService
 
             p.DownloadUrl = ApplyKnownUrlFixups(NormalizeAbsoluteUrl(p.DownloadUrl));
             p.DownloadBaseFolderUrl = NormalizeAbsoluteUrl(p.DownloadBaseFolderUrl);
+
+            if (NormalizeKnownInstallerFixups(p, normalization))
+                changed = true;
 
             if (!string.Equals(originalDownloadUrl, p.DownloadUrl, StringComparison.Ordinal) ||
                 !string.Equals(originalDownloadBase, p.DownloadBaseFolderUrl, StringComparison.Ordinal))
@@ -379,6 +396,339 @@ public sealed class InstallerService : IInstallerService
 
         return changed;
     }
+
+    private static bool NormalizeKnownInstallerFixups(DeploymentProcess process, InstallerNormalizationConfig normalization)
+    {
+        var changed = false;
+
+        if (NormalizeKnownRetailFixups(process, normalization))
+            changed = true;
+
+        if (IsSqlPassProcess(process))
+        {
+            var desiredUrl = ApplyKnownUrlFixups(NormalizeAbsoluteUrl(normalization.SqlPassFullInstallerUrl));
+            if (!string.IsNullOrWhiteSpace(desiredUrl) &&
+                (string.IsNullOrWhiteSpace(process.DownloadUrl) ||
+                 string.Equals(Path.GetFileName(process.DownloadUrl), "SQLEXPR_x64_ENU.exe", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(Path.GetFileName(process.DownloadUrl), "SQL2022-SSEI-Expr.exe", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!string.Equals(process.DownloadUrl, desiredUrl, StringComparison.Ordinal))
+                {
+                    process.DownloadUrl = desiredUrl;
+                    changed = true;
+                }
+            }
+
+            var desiredFileName = SanitizeFileName(normalization.SqlPassFullInstallerFileName);
+            if (!string.IsNullOrWhiteSpace(desiredFileName))
+            {
+                var normalizedRelative = (process.RelativePath ?? string.Empty).Replace('/', '\\');
+                var legacyPrefix = Path.Combine("Data", "installers", process.Id).Replace('/', '\\') + "\\";
+                if (string.IsNullOrWhiteSpace(normalizedRelative) ||
+                    normalizedRelative.StartsWith(legacyPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    var desiredRelativePath = Path.Combine("Data", "installers", process.Id, desiredFileName);
+                    if (!string.Equals(process.RelativePath, desiredRelativePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        process.RelativePath = desiredRelativePath;
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        if (NormalizeKnownSqlPassScriptFixups(process, normalization))
+            changed = true;
+
+        return changed;
+    }
+
+    private static bool NormalizeKnownRetailFixups(DeploymentProcess process, InstallerNormalizationConfig normalization)
+    {
+        if (!IsRetailProcess(process))
+            return false;
+
+        var changed = false;
+
+        var desiredArgs = (normalization.RetailDefaultArgs ?? string.Empty).Trim();
+        if (!string.IsNullOrWhiteSpace(desiredArgs) &&
+            string.IsNullOrWhiteSpace((process.Arguments ?? string.Empty).Trim()))
+        {
+            process.Arguments = desiredArgs;
+            changed = true;
+        }
+
+        var desiredInputs = BuildRetailArgumentInputs(normalization);
+        if (desiredInputs.Count > 0)
+        {
+            if (MergeRetailArgumentInputs(process, desiredInputs))
+                changed = true;
+        }
+
+        if (LooksLikeLegacyRetailWrapper(process))
+        {
+            process.SubProcesses = new List<DeploymentSubProcess>();
+            changed = true;
+        }
+        else if (RemoveRetailNormalizationSubProcess(process))
+        {
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    private static bool LooksLikeLegacyRetailWrapper(DeploymentProcess process)
+    {
+        if (process.SubProcesses is not { Count: > 0 })
+            return false;
+
+        if (process.SubProcesses.Count == 1)
+        {
+            var only = process.SubProcesses[0].Process;
+            return IsRetailInstallSubProcess(only) && RetailInstallMatchesParent(process, only!);
+        }
+
+        if (process.SubProcesses.Count == 2)
+        {
+            var first = process.SubProcesses[0].Process;
+            var second = process.SubProcesses[1].Process;
+            return IsRetailInstallSubProcess(first) &&
+                   RetailInstallMatchesParent(process, first!) &&
+                   IsRetailNormalizationSubProcess(second);
+        }
+
+        return false;
+    }
+
+    private static bool RemoveRetailNormalizationSubProcess(DeploymentProcess process)
+    {
+        if (process.SubProcesses is not { Count: > 0 })
+            return false;
+
+        var originalCount = process.SubProcesses.Count;
+        process.SubProcesses = process.SubProcesses
+            .Where(sp => !IsRetailNormalizationSubProcess(sp.Process))
+            .ToList();
+
+        return process.SubProcesses.Count != originalCount;
+    }
+
+    private static bool IsRetailInstallSubProcess(DeploymentProcess? process) =>
+        process is not null &&
+        process.Kind == ProcessKind.Installer &&
+        string.Equals(Path.GetFileName(process.RelativePath ?? string.Empty), "RetailServer.exe", StringComparison.OrdinalIgnoreCase);
+
+    private static bool RetailInstallMatchesParent(DeploymentProcess parent, DeploymentProcess child)
+    {
+        var parentArgs = (parent.Arguments ?? string.Empty).Trim();
+        var childArgs = (child.Arguments ?? string.Empty).Trim();
+        var argumentsMatch =
+            string.Equals(parentArgs, childArgs, StringComparison.Ordinal) ||
+            string.IsNullOrWhiteSpace(childArgs);
+
+        return string.Equals((parent.RelativePath ?? string.Empty).Trim(), (child.RelativePath ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase) &&
+               argumentsMatch &&
+               parent.InstallerSourceMode == child.InstallerSourceMode &&
+               string.Equals((parent.DownloadBaseFolderUrl ?? string.Empty).Trim(), (child.DownloadBaseFolderUrl ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase) &&
+               string.Equals((parent.DownloadSelectedFileTemplate ?? string.Empty).Trim(), (child.DownloadSelectedFileTemplate ?? string.Empty).Trim(), StringComparison.Ordinal) &&
+               parent.DownloadPickLatestFolderByName == child.DownloadPickLatestFolderByName &&
+               parent.DownloadUseLatestVersion == child.DownloadUseLatestVersion &&
+               string.Equals((parent.PortalId ?? string.Empty).Trim(), (child.PortalId ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsRetailNormalizationSubProcess(DeploymentProcess? process)
+    {
+        if (process is null)
+            return false;
+
+        var name = process.Name ?? string.Empty;
+        var script = process.ScriptContent ?? string.Empty;
+        return process.Kind == ProcessKind.PowerShellScript &&
+               (name.Contains("Normalizza configurazione SQL", StringComparison.OrdinalIgnoreCase) ||
+                script.Contains("Retail: normalizzato endpoint DB", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsRetailProcess(DeploymentProcess process) =>
+        string.Equals(process.Id, "retail-server", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(Path.GetFileName(process.RelativePath ?? string.Empty), "RetailServer.exe", StringComparison.OrdinalIgnoreCase) ||
+        process.Name.Contains("Passepartout Retail", StringComparison.OrdinalIgnoreCase);
+
+    private static List<ArgumentInputDefinition> BuildRetailArgumentInputs(InstallerNormalizationConfig normalization)
+    {
+        var sqlServerDefault = (normalization.DefaultRetailSqlServer ?? string.Empty).Trim();
+        var sqlUserDefaultRaw = (normalization.DefaultRetailSqlUser ?? string.Empty).Trim();
+        var sqlUserDefault = string.IsNullOrWhiteSpace(sqlUserDefaultRaw) ? "sa" : sqlUserDefaultRaw;
+        var dbNameDefault = (normalization.DefaultRetailDbName ?? string.Empty).Trim();
+        var sqlPasswordDefault = (normalization.DefaultSqlPassSaPassword ?? string.Empty).Trim();
+
+        return
+        [
+            new ArgumentInputDefinition
+            {
+                Key = "KLEVADEPLOY_RETAIL_SQL_SERVER",
+                Label = "Server SQL",
+                Description = "Nome istanza SQL (es. NOMEPC\\SQLPASS).",
+                DefaultValue = sqlServerDefault,
+                IsSecret = false,
+                IsRequired = true
+            },
+            new ArgumentInputDefinition
+            {
+                Key = "KLEVADEPLOY_RETAIL_SQL_USER",
+                Label = "Utente SQL",
+                Description = "Utente SQL usato da Retail per connettersi al DB.",
+                DefaultValue = sqlUserDefault,
+                IsSecret = false,
+                IsRequired = true
+            },
+            new ArgumentInputDefinition
+            {
+                Key = "KLEVADEPLOY_RETAIL_DB_NAME",
+                Label = "Nome database",
+                Description = "Nome database Retail.",
+                DefaultValue = dbNameDefault,
+                IsSecret = false,
+                IsRequired = true
+            },
+            new ArgumentInputDefinition
+            {
+                Key = "KLEVADEPLOY_SQLPASS_SA_PASSWORD",
+                Label = "Password SQL",
+                Description = "Password dell'utente SQL usato da Retail per connettersi al DB.",
+                DefaultValue = sqlPasswordDefault,
+                IsSecret = true,
+                IsRequired = true
+            }
+        ];
+    }
+
+    private static bool MergeRetailArgumentInputs(DeploymentProcess process, IReadOnlyList<ArgumentInputDefinition> desiredInputs)
+    {
+        var changed = false;
+        var existing = process.ArgumentInputs ?? new List<ArgumentInputDefinition>();
+        var existingByKey = existing.ToDictionary(x => (x.Key ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase);
+        var merged = new List<ArgumentInputDefinition>();
+
+        foreach (var desired in desiredInputs)
+        {
+            if (!existingByKey.TryGetValue(desired.Key, out var current))
+            {
+                merged.Add(CloneArgumentInput(desired));
+                changed = true;
+                continue;
+            }
+
+            var updated = CloneArgumentInput(current);
+            if (string.IsNullOrWhiteSpace((updated.Label ?? string.Empty).Trim()))
+            {
+                updated.Label = desired.Label;
+                changed = true;
+            }
+
+            if (string.IsNullOrWhiteSpace((updated.Description ?? string.Empty).Trim()))
+            {
+                updated.Description = desired.Description;
+                changed = true;
+            }
+
+            if (string.IsNullOrWhiteSpace((updated.DefaultValue ?? string.Empty).Trim()) &&
+                !string.IsNullOrWhiteSpace((desired.DefaultValue ?? string.Empty).Trim()))
+            {
+                updated.DefaultValue = desired.DefaultValue ?? string.Empty;
+                changed = true;
+            }
+
+            if (updated.IsSecret != desired.IsSecret)
+            {
+                updated.IsSecret = desired.IsSecret;
+                changed = true;
+            }
+
+            if (updated.IsRequired != desired.IsRequired)
+            {
+                updated.IsRequired = desired.IsRequired;
+                changed = true;
+            }
+
+            merged.Add(updated);
+        }
+
+        foreach (var current in existing)
+        {
+            var key = (current.Key ?? string.Empty).Trim();
+            if (desiredInputs.Any(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            merged.Add(CloneArgumentInput(current));
+        }
+
+        if (changed)
+            process.ArgumentInputs = merged;
+
+        return changed;
+    }
+
+    private static ArgumentInputDefinition CloneArgumentInput(ArgumentInputDefinition input) =>
+        new()
+        {
+            Key = input.Key ?? string.Empty,
+            Label = input.Label ?? string.Empty,
+            Description = input.Description ?? string.Empty,
+            DefaultValue = input.DefaultValue ?? string.Empty,
+            IsSecret = input.IsSecret,
+            IsRequired = input.IsRequired
+        };
+
+    private static bool NormalizeKnownSqlPassScriptFixups(DeploymentProcess process, InstallerNormalizationConfig normalization)
+    {
+        var changed = false;
+        var desiredBootstrapper = SanitizeFileName(normalization.SqlPassFullInstallerFileName);
+
+        if (!string.IsNullOrWhiteSpace(process.ScriptContent))
+        {
+            var original = process.ScriptContent;
+            var updated = original;
+
+            if (!string.IsNullOrWhiteSpace(desiredBootstrapper))
+            {
+                updated = updated.Replace(
+                    "installers\\sql-express-2022-sqlpass\\SQLEXPR_x64_ENU.exe",
+                    $"installers\\sql-express-2022-sqlpass\\{desiredBootstrapper}",
+                    StringComparison.Ordinal);
+            }
+
+            const string oldExtractBlock = "$p = Start-Process -FilePath $installer -ArgumentList @('/q', ('/x:' + $extract)) -Wait -PassThru -WindowStyle Hidden\nif ($p.ExitCode -ne 0) { exit $p.ExitCode }\n\nif (!(Test-Path $setupInExtract)) { throw ('setup.exe non trovato in: ' + $extract) }\nexit 0\n";
+            const string newExtractBlock = "$media = Join-Path $temp 'KlevaDeploy\\sql2022_media'\nNew-Item -ItemType Directory -Force -Path $media | Out-Null\n\n$downloadedCore = Join-Path $media 'SQLEXPR_x64_ENU.exe'\nif (!(Test-Path $downloadedCore)) {\n  $download = Start-Process -FilePath $installer -ArgumentList @('/Action=Download', ('/MediaPath=\"' + $media + '\"'), '/MediaType=Core', '/Quiet') -Wait -PassThru -WindowStyle Hidden\n  if ($download.ExitCode -ne 0) { exit $download.ExitCode }\n}\n\nif (!(Test-Path $downloadedCore)) { throw ('Media SQL Express non trovata in: ' + $media) }\n\n$p = Start-Process -FilePath $downloadedCore -ArgumentList @('/q', ('/x:' + $extract)) -Wait -PassThru -WindowStyle Hidden\nif ($p.ExitCode -ne 0) { exit $p.ExitCode }\n\nif (!(Test-Path $setupInExtract)) { throw ('setup.exe non trovato in: ' + $extract) }\nexit 0\n";
+
+            if (updated.Contains(oldExtractBlock, StringComparison.Ordinal))
+                updated = updated.Replace(oldExtractBlock, newExtractBlock, StringComparison.Ordinal);
+
+            if (!string.Equals(updated, original, StringComparison.Ordinal))
+            {
+                process.ScriptContent = updated;
+                changed = true;
+            }
+        }
+
+        if (process.SubProcesses is null || process.SubProcesses.Count == 0)
+            return changed;
+
+        foreach (var subProcess in process.SubProcesses)
+        {
+            if (subProcess.Process is null)
+                continue;
+
+            if (NormalizeKnownSqlPassScriptFixups(subProcess.Process, normalization))
+                changed = true;
+        }
+
+        return changed;
+    }
+
+    private static bool IsSqlPassProcess(DeploymentProcess process) =>
+        string.Equals(process.Id, "sql-express-2022-sqlpass", StringComparison.OrdinalIgnoreCase) ||
+        process.Name.Contains("SQLPASS", StringComparison.OrdinalIgnoreCase);
 
     private static bool NormalizeKnownScriptFixups(DeploymentProcess process)
     {

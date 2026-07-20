@@ -412,6 +412,9 @@ public sealed class MainViewModel : ObservableObject
                     AllowTrailingCommas = true,
                     ReadCommentHandling = JsonCommentHandling.Skip
                 }) ?? new List<DeploymentProcess>();
+
+                foreach (var process in bundledProcesses)
+                    process.NormalizeIconRecursively();
             }
 
             if (bundledProcesses.Count > 0)
@@ -3375,7 +3378,7 @@ public sealed class MainViewModel : ObservableObject
         return null;
     }
 
-    private string? TryBuildFriendlyMsiFailureHint(string logPath)
+    private static string? TryBuildFriendlyMsiFailureHint(string logPath)
     {
         if (string.IsNullOrWhiteSpace(logPath) || !File.Exists(logPath))
             return null;
@@ -3397,6 +3400,7 @@ public sealed class MainViewModel : ObservableObject
 
         var rebootPending =
             tail.Contains("MsiSystemRebootPending = 1", StringComparison.OrdinalIgnoreCase) ||
+            tail.Contains("MsiSystemRebootPending property. Its value is '1'", StringComparison.OrdinalIgnoreCase) ||
             tail.Contains("reboot pending", StringComparison.OrdinalIgnoreCase) ||
             tail.Contains("riavvio", StringComparison.OrdinalIgnoreCase) && tail.Contains("necess", StringComparison.OrdinalIgnoreCase);
 
@@ -3405,9 +3409,19 @@ public sealed class MainViewModel : ObservableObject
 
         if (hasSqlSetupError1001)
         {
+            var sqlUser = TryFindMsiPropertyValue(tail, "UTENTEDATABASE", "UtenteDatabase");
+            var sqlServer = TryFindMsiPropertyValue(tail, "IPSERVERDATABASE", "IpServerDatabase");
+            var sqlDatabase = TryFindMsiPropertyValue(tail, "NOMEDATABASE", "NomeDatabase");
+            var hasExplicitSqlUser =
+                tail.Contains("UTENTEDATABASE", StringComparison.OrdinalIgnoreCase) ||
+                tail.Contains("UtenteDatabase", StringComparison.OrdinalIgnoreCase);
+
             var mentionsSa =
                 tail.Contains("utente sa", StringComparison.OrdinalIgnoreCase) ||
                 tail.Contains("user sa", StringComparison.OrdinalIgnoreCase);
+
+            if (string.IsNullOrWhiteSpace(sqlUser) && mentionsSa)
+                sqlUser = "sa";
 
             var cannotCreateDbOrInsert =
                 tail.Contains("non esiste", StringComparison.OrdinalIgnoreCase) ||
@@ -3425,27 +3439,96 @@ public sealed class MainViewModel : ObservableObject
 
             if (mentionsSa && cannotCreateDbOrInsert)
             {
-                return rebootPending
-                    ? "Errore SQL: credenziali/permessi non validi per l'utente sa (o sa disabilitato). Riavvia Windows (se richiesto), verifica che SQLPASS sia installato e avviato e che l'istanza sia in Mixed Mode con login sa abilitato. Controlla anche che password e server/istanza siano corretti (es: NOMEPC\\SQLPASS)."
-                    : "Errore SQL: credenziali/permessi non validi per l'utente sa (o sa disabilitato). Verifica che SQLPASS sia installato e avviato e che l'istanza sia in Mixed Mode con login sa abilitato. Controlla anche che password e server/istanza siano corretti (es: NOMEPC\\SQLPASS).";
+                var loginText = string.IsNullOrWhiteSpace(sqlUser) ? "il login SQL selezionato" : $"il login SQL '{sqlUser}'";
+                var targetText = BuildRetailSqlTargetText(sqlServer, sqlDatabase);
+                var rebootText = rebootPending
+                    ? " È presente anche un riavvio di Windows in sospeso: riavvia prima di riprovare."
+                    : string.Empty;
+                var staleConfigText = !hasExplicitSqlUser && string.Equals(sqlUser, "sa", StringComparison.OrdinalIgnoreCase)
+                    ? " Se volevi usare un utente diverso da 'sa', chiudi e riapri KlevaDeploy e ricontrolla il campo 'Utente SQL'."
+                    : string.Empty;
+
+                return $"Errore SQL durante l'installazione Retail: {loginText} non esiste, è disabilitato o non ha permessi per creare o popolare il database{targetText}. Verifica utente, password, Mixed Mode e permessi del login.{rebootText}{staleConfigText}";
             }
 
             if (mentionsDbServer)
             {
-                return rebootPending
-                    ? "Connessione SQL non riuscita (Errore 1001). Riavvia Windows (se richiesto) e verifica che l'istanza SQLPASS sia attiva e raggiungibile."
-                    : "Connessione SQL non riuscita (Errore 1001). Verifica che l'istanza SQLPASS sia attiva e raggiungibile (servizio MSSQL$SQLPASS avviato).";
+                var targetText = BuildRetailSqlTargetText(sqlServer, sqlDatabase);
+                var rebootText = rebootPending
+                    ? " È presente anche un riavvio di Windows in sospeso: riavvia prima di riprovare."
+                    : string.Empty;
+                return $"Connessione SQL non riuscita durante l'installazione Retail{targetText}. Verifica che l'istanza SQL sia attiva e raggiungibile e che le credenziali siano corrette.{rebootText}";
             }
 
             return rebootPending
-                ? "Errore SQL durante l'installazione (Errore 1001). Riavvia Windows (se richiesto) e riprova."
-                : "Errore SQL durante l'installazione (Errore 1001). Verifica che SQLPASS sia installato e raggiungibile e che le credenziali siano corrette.";
+                ? "Errore SQL durante l'installazione Retail (Errore 1001). È presente un riavvio di Windows in sospeso: riavvia prima di riprovare."
+                : "Errore SQL durante l'installazione Retail (Errore 1001). Verifica che SQL Server sia raggiungibile e che le credenziali configurate siano corrette.";
         }
 
         if (rebootPending)
             return "È presente un riavvio di Windows in sospeso: riavvia e riprova.";
 
         return null;
+    }
+
+    private static string BuildRetailSqlTargetText(string? server, string? database)
+    {
+        var safeServer = NormalizeMsiPropertyValue(server);
+        var safeDatabase = NormalizeMsiPropertyValue(database);
+
+        if (!string.IsNullOrWhiteSpace(safeServer) && !string.IsNullOrWhiteSpace(safeDatabase))
+            return $" '{safeDatabase}' su '{safeServer}'";
+
+        if (!string.IsNullOrWhiteSpace(safeDatabase))
+            return $" '{safeDatabase}'";
+
+        if (!string.IsNullOrWhiteSpace(safeServer))
+            return $" sull'istanza '{safeServer}'";
+
+        return string.Empty;
+    }
+
+    private static string? TryFindMsiPropertyValue(string tail, params string[] propertyNames)
+    {
+        if (string.IsNullOrWhiteSpace(tail) || propertyNames is not { Length: > 0 })
+            return null;
+
+        foreach (var propertyName in propertyNames)
+        {
+            if (string.IsNullOrWhiteSpace(propertyName))
+                continue;
+
+            var escaped = Regex.Escape(propertyName);
+            var patterns = new[]
+            {
+                $@"PROPERTY CHANGE:\s+(?:Adding|Modifying)\s+{escaped}\s+property\..*?(?:Its value is|Its new value:)\s+'([^']*)'",
+                $@"Property\(S\):\s+{escaped}\s+=\s+([^\r\n]+)",
+                $@"/{escaped}=(""[^""]*""|'[^']*'|[^\s]+)",
+                $@"\b{escaped}=(""[^""]*""|'[^']*'|[^\s]+)"
+            };
+
+            foreach (var pattern in patterns)
+            {
+                var match = Regex.Match(tail, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                if (!match.Success || match.Groups.Count < 2)
+                    continue;
+
+                var value = NormalizeMsiPropertyValue(match.Groups[1].Value);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static string NormalizeMsiPropertyValue(string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().Trim('"', '\'');
+        if (string.IsNullOrWhiteSpace(normalized))
+            return string.Empty;
+
+        return normalized.Replace(@"\\", @"\", StringComparison.Ordinal).Trim();
     }
 
     private static string ReadTextTail(string path, int maxChars)
@@ -3556,7 +3639,7 @@ public sealed class MainViewModel : ObservableObject
         ScriptContent = p.ScriptContent,
         InstallDirectory = p.InstallDirectory,
         IconKey = p.IconKey,
-        Icon = p.Icon,
+        Icon = p.HasCustomIcon ? p.Icon : DeploymentProcess.ResolveBuiltInIcon(p.IconKey, p.Icon),
         CustomIconLightPath = p.CustomIconLightPath,
         CustomIconDarkPath = p.CustomIconDarkPath,
         IsUserCreated = p.IsUserCreated,

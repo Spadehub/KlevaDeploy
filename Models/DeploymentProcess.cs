@@ -55,6 +55,64 @@ public class DeploymentProcess
     public bool IsUserCreated { get; set; }
 
     public List<DeploymentSubProcess> SubProcesses { get; set; } = new();
+    public bool HasCustomIcon =>
+        !string.IsNullOrWhiteSpace(CustomIconLightPath) ||
+        !string.IsNullOrWhiteSpace(CustomIconDarkPath);
+
+    public bool NormalizeIconRecursively()
+    {
+        var changed = NormalizeIcon();
+
+        if (SubProcesses is null || SubProcesses.Count == 0)
+            return changed;
+
+        foreach (var subProcess in SubProcesses)
+        {
+            if (subProcess.Process is not null && subProcess.Process.NormalizeIconRecursively())
+                changed = true;
+        }
+
+        return changed;
+    }
+
+    public bool NormalizeIcon()
+    {
+        if (HasCustomIcon)
+            return false;
+
+        var resolved = ResolveBuiltInIcon(IconKey, Icon);
+        if (string.Equals(Icon, resolved, StringComparison.Ordinal))
+            return false;
+
+        Icon = resolved;
+        return true;
+    }
+
+    public static string ResolveBuiltInIcon(string? iconKey, string? currentIcon = null)
+    {
+        var key = (iconKey ?? string.Empty).Trim();
+        if (BuiltInIcons.TryGetValue(key, out var resolved))
+            return resolved;
+
+        return string.IsNullOrWhiteSpace(currentIcon) ? "📦" : currentIcon;
+    }
+
+    private static readonly IReadOnlyDictionary<string, string> BuiltInIcons =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["IconPackage"] = "📦",
+            ["IconScript"] = "💻",
+            ["IconSettings"] = "⚙️",
+            ["IconDownload"] = "⬇️",
+            ["IconInstall"] = "▶️",
+            ["IconSuccess"] = "✅",
+            ["IconWarning"] = "⚠️",
+            ["IconError"] = "❌",
+            ["IconRefresh"] = "🔄",
+            ["IconLock"] = "🔒",
+            ["IconUnlock"] = "🔓",
+            ["IconLog"] = "📋"
+        };
 }
 
 public sealed class ArgumentInputDefinition

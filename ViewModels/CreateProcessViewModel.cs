@@ -36,6 +36,8 @@ public sealed class CreateProcessViewModel : ObservableObject
     private CancellationTokenSource? _remoteInstallerLoadCts;
     private bool _suppressVersionAutoLoad;
 
+    public IPreferencesService? PreferencesService => _prefsService;
+
     private string? _existingProcessId;
     public string? EditingProcessId => _existingProcessId;
     private string _editingProcessRelativePath = string.Empty;
@@ -159,6 +161,8 @@ public sealed class CreateProcessViewModel : ObservableObject
 
     public ObservableCollection<SubProcessItem> SubProcesses { get; } = new();
     public bool HasSubProcesses => SubProcesses.Count > 0;
+    public DeploymentProcess? EditorNavigationRootProcess { get; private set; }
+    public CreateProcessViewModel? EditorNavigationSourceViewModel { get; private set; }
 
     private SubProcessItem? _selectedSubProcess;
     public SubProcessItem? SelectedSubProcess
@@ -765,6 +769,8 @@ public sealed class CreateProcessViewModel : ObservableObject
         {
             IsSubProcessEditor = true
         };
+        vm.EditorNavigationSourceViewModel = this;
+        vm.EditorNavigationRootProcess = BuildEditorProcessSnapshot(includeSubProcesses: true);
         return vm;
     }
 
@@ -1014,8 +1020,9 @@ public sealed class CreateProcessViewModel : ObservableObject
         IsRemoteFolderNavigationMode = false;
         OnPropertyChanged(nameof(HasRemoteInstallerVersions));
         _latestRemoteFolderName = string.Empty;
+        process.NormalizeIconRecursively();
         SelectedIconKey = process.IconKey;
-        Icon = string.IsNullOrWhiteSpace(process.Icon) ? "📦" : process.Icon;
+        Icon = DeploymentProcess.ResolveBuiltInIcon(process.IconKey, process.Icon);
         CustomIconLightPath = process.CustomIconLightPath;
         CustomIconDarkPath = process.CustomIconDarkPath;
         IsIconPickerOpen = false;
@@ -1917,12 +1924,57 @@ public sealed class CreateProcessViewModel : ObservableObject
         ScriptContent = p.ScriptContent,
         InstallDirectory = p.InstallDirectory,
         IconKey = p.IconKey,
-        Icon = p.Icon,
+        Icon = p.HasCustomIcon ? p.Icon : DeploymentProcess.ResolveBuiltInIcon(p.IconKey, p.Icon),
         CustomIconLightPath = p.CustomIconLightPath,
         CustomIconDarkPath = p.CustomIconDarkPath,
         IsUserCreated = p.IsUserCreated,
         SubProcesses = p.SubProcesses?.ToList() ?? new()
     };
+
+    private DeploymentProcess BuildEditorProcessSnapshot(bool includeSubProcesses)
+    {
+        return new DeploymentProcess
+        {
+            Id = _existingProcessId ?? Guid.NewGuid().ToString("N"),
+            Name = string.IsNullOrWhiteSpace(ProcessName) ? "Current Process" : ProcessName.Trim(),
+            Description = Description.Trim(),
+            Kind = SelectedProcessKind,
+            RelativePath = FilePath.Trim(),
+            Arguments = Arguments.Trim(),
+            RunAsAdmin = RunAsAdmin,
+            RequiresInternet = RequiresInternet,
+            ScriptContent = ScriptContent,
+            InstallDirectory = InstallDirectory.Trim(),
+            IconKey = SelectedIconKey,
+            Icon = Icon,
+            CustomIconLightPath = CustomIconLightPath,
+            CustomIconDarkPath = CustomIconDarkPath,
+            IsUserCreated = true,
+            EnabledByDefault = true,
+            SubProcesses = includeSubProcesses
+                ? BuildEditorSubProcesses()
+                : new List<DeploymentSubProcess>()
+        };
+    }
+
+    private List<DeploymentSubProcess> BuildEditorSubProcesses()
+    {
+        return SubProcesses
+            .Where(s =>
+                s.Process is not null ||
+                !string.IsNullOrWhiteSpace(s.SubProcess.Name) ||
+                !string.IsNullOrWhiteSpace(s.SubProcess.RelativePath) ||
+                !string.IsNullOrWhiteSpace(s.SubProcess.Arguments))
+            .Select(s => new DeploymentSubProcess
+            {
+                Name = (s.SubProcess.Name ?? string.Empty).Trim(),
+                Process = s.Process is null ? null : CloneProcess(s.Process),
+                RelativePath = (s.SubProcess.RelativePath ?? string.Empty).Trim(),
+                Arguments = (s.SubProcess.Arguments ?? string.Empty).Trim(),
+                RunAsAdmin = s.SubProcess.RunAsAdmin
+            })
+            .ToList();
+    }
 
     private bool CanRemoveSubProcess(SubProcessItem? item) => item is not null && SubProcesses.Contains(item);
 
@@ -2031,6 +2083,7 @@ public sealed class CreateProcessViewModel : ObservableObject
                 throw new InvalidOperationException("File processo non valido.");
 
             var imported = dto.Process;
+            imported.NormalizeIconRecursively();
             InitializeForEdit(imported);
         }
         catch (Exception ex)

@@ -26,6 +26,9 @@ public sealed partial class ArgumentPromptItemViewModel : ObservableObject
     [ObservableProperty]
     private string replacementHint = string.Empty;
 
+    [ObservableProperty]
+    private bool isPasswordVisible;
+
     public ArgumentPromptItemViewModel(ArgumentInputDefinition def, string initialValue)
     {
         Key = (def.Key ?? string.Empty).Trim();

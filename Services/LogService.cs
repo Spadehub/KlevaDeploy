@@ -21,7 +21,11 @@ public sealed class LogService : ILogService
 
     public void AppendRaw(string level, string message)
     {
-        var entry = new LogEntry(DateTime.Now, level, message);
+        var sanitized = LogSanitizer.Sanitize(level, message);
+        if (string.IsNullOrWhiteSpace(sanitized))
+            return;
+
+        var entry = new LogEntry(DateTime.Now, level, sanitized);
         lock (_lock) { _entries.Add(entry); }
         LogAdded?.Invoke(this, entry);
     }

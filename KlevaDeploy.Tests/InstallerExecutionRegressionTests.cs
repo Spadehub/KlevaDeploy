@@ -43,6 +43,222 @@ public sealed class InstallerExecutionRegressionTests
     }
 
     [Fact]
+    public void DeploymentProcess_NormalizeIconRecursively_RestoresBuiltInIconsFromIconKey()
+    {
+        var process = new DeploymentProcess
+        {
+            Id = "imported-parent",
+            Name = "Imported Parent",
+            IconKey = "IconInstall",
+            Icon = "ï¿½ weird",
+            SubProcesses =
+            [
+                new DeploymentSubProcess
+                {
+                    Name = "Imported Child",
+                    Process = new DeploymentProcess
+                    {
+                        Id = "imported-child",
+                        Name = "Imported Child",
+                        IconKey = "IconWarning",
+                        Icon = "garbage"
+                    }
+                }
+            ]
+        };
+
+        var changed = process.NormalizeIconRecursively();
+
+        Assert.True(changed);
+        Assert.Equal("▶️", process.Icon);
+        Assert.Equal("⚠️", process.SubProcesses[0].Process!.Icon);
+    }
+
+    [Fact]
+    public void DeploymentProcess_NormalizeIconRecursively_DoesNotTouchCustomIcons()
+    {
+        var process = new DeploymentProcess
+        {
+            Id = "custom-icon-parent",
+            Name = "Custom Icon Parent",
+            IconKey = "IconInstall",
+            Icon = "keep-me",
+            CustomIconLightPath = @"C:\Icons\parent-light.png",
+            CustomIconDarkPath = @"C:\Icons\parent-dark.png",
+            SubProcesses =
+            [
+                new DeploymentSubProcess
+                {
+                    Name = "Custom Icon Child",
+                    Process = new DeploymentProcess
+                    {
+                        Id = "custom-icon-child",
+                        Name = "Custom Icon Child",
+                        IconKey = "IconWarning",
+                        Icon = "child-keep-me",
+                        CustomIconLightPath = @"C:\Icons\child-light.png"
+                    }
+                }
+            ]
+        };
+
+        var changed = process.NormalizeIconRecursively();
+
+        Assert.False(changed);
+        Assert.Equal("keep-me", process.Icon);
+        Assert.Equal("child-keep-me", process.SubProcesses[0].Process!.Icon);
+    }
+
+    [Fact]
+    public void InstallerService_NormalizeKnownInstallerFixups_UpgradesSqlPassToBootstrapperFlow()
+    {
+        var process = new DeploymentProcess
+        {
+            Id = "sql-express-2022-sqlpass",
+            Name = "SQL Server Express 2022 (SQLPASS)",
+            Kind = ProcessKind.Installer,
+            RelativePath = @"Data\installers\sql-express-2022-sqlpass\SQLEXPR_x64_ENU.exe",
+            DownloadUrl = "https://download.microsoft.com/download/3/8/d/38de7036-2433-4207-8eae-06e247e17b25/SQLEXPR_x64_ENU.exe",
+            SubProcesses =
+            [
+                new DeploymentSubProcess
+                {
+                    Name = "Extract media",
+                    Process = new DeploymentProcess
+                    {
+                        Name = "Extract media",
+                        Kind = ProcessKind.PowerShellScript,
+                        ScriptContent = "$installer = Join-Path $data 'installers\\sql-express-2022-sqlpass\\SQLEXPR_x64_ENU.exe'\n$p = Start-Process -FilePath $installer -ArgumentList @('/q', ('/x:' + $extract)) -Wait -PassThru -WindowStyle Hidden\nif ($p.ExitCode -ne 0) { exit $p.ExitCode }\n\nif (!(Test-Path $setupInExtract)) { throw ('setup.exe non trovato in: ' + $extract) }\nexit 0\n"
+                    }
+                }
+            ]
+        };
+
+        var normalization = new InstallerNormalizationConfig
+        {
+            SqlPassFullInstallerUrl = "https://download.microsoft.com/download/5/1/4/5145fe04-4d30-4b85-b0d1-39533663a2f1/SQL2022-SSEI-Expr.exe",
+            SqlPassFullInstallerFileName = "SQL2022-SSEI-Expr.exe"
+        };
+
+        var method = typeof(InstallerService).GetMethod("NormalizeKnownInstallerFixups", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var changed = (bool)method!.Invoke(null, [process, normalization])!;
+
+        Assert.True(changed);
+        Assert.Equal(@"Data\installers\sql-express-2022-sqlpass\SQL2022-SSEI-Expr.exe", process.RelativePath);
+        Assert.Equal(normalization.SqlPassFullInstallerUrl, process.DownloadUrl);
+        var script = process.SubProcesses[0].Process!.ScriptContent;
+        Assert.Contains(@"installers\sql-express-2022-sqlpass\SQL2022-SSEI-Expr.exe", script, StringComparison.Ordinal);
+        Assert.Contains("/Action=Download", script, StringComparison.Ordinal);
+        Assert.Contains(@"Join-Path $media 'SQLEXPR_x64_ENU.exe'", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InstallerService_NormalizeKnownInstallerFixups_SimplifiesLegacyRetailWrapper_AndRestoresDefaults()
+    {
+        var process = new DeploymentProcess
+        {
+            Id = "retail-server",
+            Name = "Passepartout Retail Server",
+            Kind = ProcessKind.Installer,
+            RelativePath = @"Data\installers\retail-server\RetailServer.exe",
+            Arguments = string.Empty,
+            DownloadBaseFolderUrl = "https://download.passepartout.cloud/Aggiornamenti/Retail/",
+            DownloadSelectedFileTemplate = "RetailServer{VERSION}.exe",
+            DownloadPickLatestFolderByName = true,
+            InstallerSourceMode = InstallerSourceMode.DynamicWeb,
+            DownloadUseLatestVersion = true,
+            PortalId = "passepartout",
+            ArgumentInputs =
+            [
+                new ArgumentInputDefinition
+                {
+                    Key = "KLEVADEPLOY_RETAIL_SQL_SERVER",
+                    Label = "Server SQL",
+                    DefaultValue = string.Empty,
+                    IsRequired = true
+                },
+                new ArgumentInputDefinition
+                {
+                    Key = "KLEVADEPLOY_RETAIL_SQL_USER",
+                    Label = "Utente SQL",
+                    DefaultValue = string.Empty,
+                    IsRequired = true
+                },
+                new ArgumentInputDefinition
+                {
+                    Key = "KLEVADEPLOY_RETAIL_DB_NAME",
+                    Label = "Nome database",
+                    DefaultValue = string.Empty,
+                    IsRequired = true
+                },
+                new ArgumentInputDefinition
+                {
+                    Key = "KLEVADEPLOY_SQLPASS_SA_PASSWORD",
+                    Label = "Password SQL",
+                    DefaultValue = string.Empty,
+                    IsSecret = true,
+                    IsRequired = true
+                }
+            ],
+            SubProcesses =
+            [
+                new DeploymentSubProcess
+                {
+                    Name = "Install Retail Server",
+                    Process = new DeploymentProcess
+                    {
+                        Name = "Install Retail Server",
+                        Kind = ProcessKind.Installer,
+                        RelativePath = @"Data\installers\retail-server\RetailServer.exe",
+                        Arguments = string.Empty,
+                        DownloadBaseFolderUrl = "https://download.passepartout.cloud/Aggiornamenti/Retail/",
+                        DownloadSelectedFileTemplate = "RetailServer{VERSION}.exe",
+                        DownloadPickLatestFolderByName = true,
+                        InstallerSourceMode = InstallerSourceMode.DynamicWeb,
+                        DownloadUseLatestVersion = true,
+                        PortalId = "passepartout"
+                    }
+                },
+                new DeploymentSubProcess
+                {
+                    Name = "Normalizza configurazione SQL (mostra SQLPASS)",
+                    Process = new DeploymentProcess
+                    {
+                        Name = "Normalizza configurazione SQL (mostra SQLPASS)",
+                        Kind = ProcessKind.PowerShellScript,
+                        RunAsAdmin = true,
+                        ScriptContent = "Write-Output \"Retail: normalizzato endpoint DB da 'localhost,50261' a 'localhost\\SQLPASS'.\""
+                    }
+                }
+            ]
+        };
+
+        var normalization = new InstallerNormalizationConfig
+        {
+            RetailDefaultArgs = "IPSERVERDATABASE=%COMPUTERNAME%\\SQLPASS UTENTEDATABASE=%KLEVADEPLOY_RETAIL_SQL_USER% NOMEDATABASE=PassepartoutRetail PASSWORDDATABASE=%KLEVADEPLOY_SQLPASS_SA_PASSWORD%",
+            DefaultRetailSqlServer = "%COMPUTERNAME%\\SQLPASS",
+            DefaultRetailSqlUser = "sa",
+            DefaultRetailDbName = "PassepartoutRetail",
+            DefaultSqlPassSaPassword = string.Empty
+        };
+
+        var method = typeof(InstallerService).GetMethod("NormalizeKnownInstallerFixups", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var changed = (bool)method!.Invoke(null, [process, normalization])!;
+
+        Assert.True(changed);
+        Assert.Empty(process.SubProcesses);
+        Assert.Equal("IPSERVERDATABASE=%COMPUTERNAME%\\SQLPASS UTENTEDATABASE=%KLEVADEPLOY_RETAIL_SQL_USER% NOMEDATABASE=PassepartoutRetail PASSWORDDATABASE=%KLEVADEPLOY_SQLPASS_SA_PASSWORD%", process.Arguments);
+        Assert.Equal("%COMPUTERNAME%\\SQLPASS", process.ArgumentInputs.Single(x => x.Key == "KLEVADEPLOY_RETAIL_SQL_SERVER").DefaultValue);
+        Assert.Equal("sa", process.ArgumentInputs.Single(x => x.Key == "KLEVADEPLOY_RETAIL_SQL_USER").DefaultValue);
+        Assert.Equal("PassepartoutRetail", process.ArgumentInputs.Single(x => x.Key == "KLEVADEPLOY_RETAIL_DB_NAME").DefaultValue);
+        Assert.Equal(string.Empty, process.ArgumentInputs.Single(x => x.Key == "KLEVADEPLOY_SQLPASS_SA_PASSWORD").DefaultValue);
+    }
+
+    [Fact]
     public async Task RunSingleProcessHeadless_DownloadsParentInstallerBeforeRunningSubProcesses_AndDoesNotRunParentExe()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "KlevaDeployTests", Guid.NewGuid().ToString("N"));
@@ -207,6 +423,13 @@ public sealed class InstallerExecutionRegressionTests
                 },
                 new ArgumentInputDefinition
                 {
+                    Key = "KLEVADEPLOY_RETAIL_SQL_USER",
+                    Label = "Utente SQL",
+                    DefaultValue = "sa",
+                    IsRequired = true
+                },
+                new ArgumentInputDefinition
+                {
                     Key = "KLEVADEPLOY_RETAIL_DB_NAME",
                     Label = "Nome database",
                     DefaultValue = "PassepartoutRetail",
@@ -215,7 +438,7 @@ public sealed class InstallerExecutionRegressionTests
                 new ArgumentInputDefinition
                 {
                     Key = "KLEVADEPLOY_SQLPASS_SA_PASSWORD",
-                    Label = "Password SQL (sa)",
+                    Label = "Password SQL",
                     DefaultValue = "",
                     IsSecret = true,
                     IsRequired = true
@@ -234,6 +457,7 @@ public sealed class InstallerExecutionRegressionTests
                     new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                     {
                         ["KLEVADEPLOY_RETAIL_SQL_SERVER"] = prefill["KLEVADEPLOY_RETAIL_SQL_SERVER"],
+                        ["KLEVADEPLOY_RETAIL_SQL_USER"] = prefill["KLEVADEPLOY_RETAIL_SQL_USER"],
                         ["KLEVADEPLOY_RETAIL_DB_NAME"] = prefill["KLEVADEPLOY_RETAIL_DB_NAME"],
                         ["KLEVADEPLOY_SQLPASS_SA_PASSWORD"] = string.Empty
                     });
@@ -251,6 +475,7 @@ public sealed class InstallerExecutionRegressionTests
                     Values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                     {
                         ["KLEVADEPLOY_RETAIL_SQL_SERVER"] = string.Empty,
+                        ["KLEVADEPLOY_RETAIL_SQL_USER"] = string.Empty,
                         ["KLEVADEPLOY_RETAIL_DB_NAME"] = string.Empty,
                         ["KLEVADEPLOY_SQLPASS_SA_PASSWORD"] = string.Empty
                     }
@@ -280,6 +505,7 @@ public sealed class InstallerExecutionRegressionTests
 
         Assert.Equal(0, exitCode);
         Assert.Equal("%COMPUTERNAME%\\SQLPASS", promptedPrefill["KLEVADEPLOY_RETAIL_SQL_SERVER"]);
+        Assert.Equal("sa", promptedPrefill["KLEVADEPLOY_RETAIL_SQL_USER"]);
         Assert.Equal("PassepartoutRetail", promptedPrefill["KLEVADEPLOY_RETAIL_DB_NAME"]);
         Assert.Equal(string.Empty, promptedPrefill["KLEVADEPLOY_SQLPASS_SA_PASSWORD"]);
     }
@@ -333,6 +559,74 @@ public sealed class InstallerExecutionRegressionTests
             Assert.Contains("Prerequisito MSI non supportato su questo sistema operativo", message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("SQL Server Native Client legacy", message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(logPath, message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void TryBuildFriendlyMsiFailureHint_ReturnsActionableRetailSqlMessage()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "KlevaDeployTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var logPath = Path.Combine(tempDir, "retail-sql.log");
+            File.WriteAllText(
+                logPath,
+                """
+                MSI (s): PROPERTY CHANGE: Adding IPSERVERDATABASE property. Its value is 'VINCENZO-PC\\SQLPASS'.
+                MSI (s): PROPERTY CHANGE: Adding NOMEDATABASE property. Its value is 'Test2DB'.
+                Errore 1001. Error 1001. Si è verificato un errore durante il controllo dell'utente. Dettagli: L'utente sa non esiste oppure non può creare database o effettuare inserimenti dei dati.
+                """);
+
+            var method = typeof(MainViewModel).GetMethod("TryBuildFriendlyMsiFailureHint", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var message = (string?)method!.Invoke(null, [logPath]);
+
+            Assert.NotNull(message);
+            Assert.Contains("il login SQL 'sa'", message, StringComparison.Ordinal);
+            Assert.Contains("'Test2DB' su 'VINCENZO-PC\\SQLPASS'", message, StringComparison.Ordinal);
+            Assert.Contains("Se volevi usare un utente diverso da 'sa'", message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void TryBuildFriendlyMsiFailureHint_PrioritizesPendingRebootInRetailSqlMessage()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "KlevaDeployTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var logPath = Path.Combine(tempDir, "retail-sql-reboot.log");
+            File.WriteAllText(
+                logPath,
+                """
+                MSI (s): PROPERTY CHANGE: Adding UTENTEDATABASE property. Its value is 'retailadmin'.
+                MSI (s): PROPERTY CHANGE: Adding IPSERVERDATABASE property. Its value is 'SERVER01\\SQLPASS'.
+                MSI (s): PROPERTY CHANGE: Adding NOMEDATABASE property. Its value is 'RetailDb'.
+                MSI (s): PROPERTY CHANGE: Adding MsiSystemRebootPending property. Its value is '1'.
+                Errore 1001. Error 1001. Si è verificato un errore durante il controllo dell'utente. Dettagli: L'utente sa non esiste oppure non può creare database o effettuare inserimenti dei dati.
+                """);
+
+            var method = typeof(MainViewModel).GetMethod("TryBuildFriendlyMsiFailureHint", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var message = (string?)method!.Invoke(null, [logPath]);
+
+            Assert.NotNull(message);
+            Assert.Contains("il login SQL 'retailadmin'", message, StringComparison.Ordinal);
+            Assert.Contains("riavvio di Windows in sospeso", message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Se volevi usare un utente diverso da 'sa'", message, StringComparison.Ordinal);
         }
         finally
         {

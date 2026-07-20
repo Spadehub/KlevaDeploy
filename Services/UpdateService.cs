@@ -29,7 +29,7 @@ public sealed class UpdateService : IUpdateService
             return;
         }
 
-        _log.Info("Internet available. Checking for installer updates...");
+        _log.Info("Internet available. Checking installer cache status...");
 
         var storageDir = GetStorageDir();
         var state = InstallerUpdateState.Load(storageDir);
@@ -40,7 +40,7 @@ public sealed class UpdateService : IUpdateService
 
             if (process.RequiresAuth && !IsAuthenticatedForProcess(process))
             {
-                _log.Warning($"Skipping update for '{process.Name}': auth required but not logged in.");
+                _log.Warning($"Skipping installer check for '{process.Name}': auth required but not logged in.");
                 continue;
             }
 
@@ -61,7 +61,7 @@ public sealed class UpdateService : IUpdateService
     {
         if (process.RequiresAuth && !IsAuthenticatedForProcess(process))
         {
-            _log.Warning($"Skipping installer update for '{process.Name}': auth required but not logged in.");
+            _log.Warning($"Skipping installer refresh for '{process.Name}': auth required but not logged in.");
             return;
         }
 
@@ -225,7 +225,12 @@ public sealed class UpdateService : IUpdateService
                                    !string.IsNullOrWhiteSpace(normalizedPrevDownloadedFromUrl) &&
                                    string.Equals(normalizedPrevDownloadedFromUrl, normalizedRemoteUrl, StringComparison.OrdinalIgnoreCase);
 
-        var needDownload = forceDownload || !fileExists || selectionChanged || resolvedChangedWithoutHistory;
+        var changeKind = DetermineCacheChangeKind(
+            forceDownload,
+            fileExists,
+            selectionChanged,
+            resolvedChangedWithoutHistory);
+        var needDownload = changeKind is not null;
 
         if (!needDownload)
         {
@@ -234,11 +239,14 @@ public sealed class UpdateService : IUpdateService
                 var head = await TryHeadAsync(remoteUrl, entry, ct);
                 if (head == HeadCheckResult.NotModified)
                 {
-                    _log.Info($"'{process.Name}' is up to date.");
+                    _log.Info($"'{process.Name}' cached installer is current.");
                     return;
                 }
 
-                needDownload = head == HeadCheckResult.Modified;
+                if (head == HeadCheckResult.Modified)
+                    changeKind = InstallerCacheChangeKind.RemoteChanged;
+
+                needDownload = changeKind is not null;
                 if (!needDownload) return;
             }
             else if (process.InstallerSourceMode == InstallerSourceMode.StaticWeb)
@@ -249,11 +257,20 @@ public sealed class UpdateService : IUpdateService
                 if (fileExists && !forceDownload && isAssociatedFallback)
                     return;
 
-                needDownload = forceDownload || !fileExists || selectionChanged || string.IsNullOrWhiteSpace(normalizedPrevDownloadedFromUrl);
+                changeKind = DetermineCacheChangeKind(
+                    forceDownload,
+                    fileExists,
+                    selectionChanged,
+                    resolvedChangedWithoutHistory,
+                    string.IsNullOrWhiteSpace(normalizedPrevDownloadedFromUrl));
+                needDownload = changeKind is not null;
             }
         }
 
-        _log.Info($"Downloading update for '{process.Name}'...");
+        if (changeKind is null)
+            return;
+
+        _log.Info(BuildDownloadStartMessage(process.Name, changeKind.Value));
 
         var tempPath = localPath + ".download";
         if (File.Exists(tempPath)) File.Delete(tempPath);
@@ -281,7 +298,7 @@ public sealed class UpdateService : IUpdateService
         if (!downloadResult.Success)
         {
             if (File.Exists(tempPath)) File.Delete(tempPath);
-            _log.Warning($"Download failed for '{process.Name}'.");
+            _log.Warning($"Installer download failed for '{process.Name}'.");
             return;
         }
 
@@ -291,7 +308,7 @@ public sealed class UpdateService : IUpdateService
         entry.LastDownloadedBytes = downloadResult.BytesWritten;
         entry.LastDownloadedFromUrl = remoteUrl;
 
-        _log.Info($"'{process.Name}' installer updated ({downloadResult.BytesWritten} bytes).");
+        _log.Info(BuildDownloadCompletedMessage(process.Name, downloadResult.BytesWritten, changeKind.Value));
     }
 
     private static bool IsInstallerArtifact(string path)
@@ -367,6 +384,54 @@ public sealed class UpdateService : IUpdateService
     }
 
     private enum HeadCheckResult { Unknown, NotModified, Modified }
+
+    private enum InstallerCacheChangeKind
+    {
+        CacheMissing,
+        CacheAssociationMissing,
+        SourceChanged,
+        RemoteChanged,
+        ForcedRedownload
+    }
+
+    private static InstallerCacheChangeKind? DetermineCacheChangeKind(
+        bool forceDownload,
+        bool fileExists,
+        bool selectionChanged,
+        bool resolvedChangedWithoutHistory,
+        bool missingAssociation = false)
+    {
+        if (forceDownload)
+            return InstallerCacheChangeKind.ForcedRedownload;
+
+        if (!fileExists)
+            return InstallerCacheChangeKind.CacheMissing;
+
+        if (selectionChanged || resolvedChangedWithoutHistory)
+            return InstallerCacheChangeKind.SourceChanged;
+
+        if (missingAssociation)
+            return InstallerCacheChangeKind.CacheAssociationMissing;
+
+        return null;
+    }
+
+    private static string BuildDownloadStartMessage(string processName, InstallerCacheChangeKind changeKind) =>
+        changeKind switch
+        {
+            InstallerCacheChangeKind.ForcedRedownload => $"Redownloading installer for '{processName}'...",
+            InstallerCacheChangeKind.RemoteChanged => $"Refreshing cached installer for '{processName}' because the remote file changed...",
+            InstallerCacheChangeKind.SourceChanged => $"Refreshing cached installer for '{processName}' because the selected source changed...",
+            _ => $"Caching installer for '{processName}'..."
+        };
+
+    private static string BuildDownloadCompletedMessage(string processName, long bytesWritten, InstallerCacheChangeKind changeKind) =>
+        changeKind switch
+        {
+            InstallerCacheChangeKind.CacheMissing or InstallerCacheChangeKind.CacheAssociationMissing =>
+                $"Installer cached for '{processName}' ({bytesWritten} bytes).",
+            _ => $"Cached installer refreshed for '{processName}' ({bytesWritten} bytes)."
+        };
 
     private async Task<HeadCheckResult> TryHeadAsync(string url, InstallerUpdateStateEntry entry, CancellationToken ct)
     {

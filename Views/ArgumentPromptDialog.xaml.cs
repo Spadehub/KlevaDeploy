@@ -36,8 +36,7 @@ public partial class ArgumentPromptDialog : Window
     {
         if (sender is not PasswordBox pb) return;
         if (pb.DataContext is not ArgumentPromptItemViewModel item) return;
-        if (pb.Password != item.Value)
-            pb.Password = item.Value ?? string.Empty;
+        SyncPasswordBox(pb, item);
     }
 
     private void OnPasswordChanged(object sender, RoutedEventArgs e)
@@ -46,5 +45,24 @@ public partial class ArgumentPromptDialog : Window
         if (pb.DataContext is not ArgumentPromptItemViewModel item) return;
         item.Value = pb.Password;
     }
-}
 
+    private void OnPasswordVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is not PasswordBox pb || pb.Visibility != Visibility.Visible) return;
+        if (pb.DataContext is not ArgumentPromptItemViewModel item) return;
+        SyncPasswordBox(pb, item);
+    }
+
+    private void OnTogglePasswordVisibility(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement fe) return;
+        if (fe.DataContext is not ArgumentPromptItemViewModel item) return;
+        item.IsPasswordVisible = !item.IsPasswordVisible;
+    }
+
+    private static void SyncPasswordBox(PasswordBox pb, ArgumentPromptItemViewModel item)
+    {
+        if (pb.Password != item.Value)
+            pb.Password = item.Value ?? string.Empty;
+    }
+}

@@ -436,96 +436,8 @@ public partial class App : Application
         var safe = StripMsiUiSwitches(trimmed);
         safe = Environment.ExpandEnvironmentVariables(safe);
         safe = NormalizeKnownRetailAliases(safe);
-        safe = NormalizeSqlServerInstanceEndpoints(safe);
         safe = EnsureSecureCustomProperties(safe);
         return safe.Trim();
-    }
-
-    private static string NormalizeSqlServerInstanceEndpoints(string args)
-    {
-        if (string.IsNullOrWhiteSpace(args)) return string.Empty;
-
-        static bool TryGetKeyValue(string token, out string key, out string value)
-        {
-            key = string.Empty;
-            value = string.Empty;
-
-            var t = (token ?? string.Empty).Trim();
-            if (t.Length == 0) return false;
-            if (t[0] == '/' || t[0] == '-') return false;
-
-            var eq = t.IndexOf('=');
-            if (eq <= 0 || eq >= t.Length - 1) return false;
-            key = t[..eq].Trim();
-            value = t[(eq + 1)..].Trim().Trim('"');
-            return key.Length > 0;
-        }
-
-        var tokens = TokenizeCommandLine(args);
-        for (var i = 0; i < tokens.Count; i++)
-        {
-            if (!TryGetKeyValue(tokens[i], out var key, out var value)) continue;
-
-            if (!string.Equals(key, "IPSERVERDATABASE", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(key, "IpServerDatabase", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var resolved = TryResolveSqlServerTcpEndpoint(value);
-            if (string.IsNullOrWhiteSpace(resolved)) continue;
-            tokens[i] = $"{key}={resolved}";
-        }
-
-        return string.Join(' ', tokens).Trim();
-    }
-
-    private static string? TryResolveSqlServerTcpEndpoint(string value)
-    {
-        var trimmed = (value ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(trimmed)) return null;
-        if (!trimmed.Contains('\\')) return null;
-        if (trimmed.Contains(',')) return trimmed;
-
-        var parts = trimmed.Split(new[] { '\\' }, 2, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length != 2) return null;
-
-        var host = parts[0].Trim();
-        var instance = parts[1].Trim();
-        if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(instance)) return null;
-
-        var port = TryReadSqlInstanceTcpPort(instance);
-        if (string.IsNullOrWhiteSpace(port)) return null;
-
-        return $"{host},{port}";
-    }
-
-    private static string? TryReadSqlInstanceTcpPort(string instanceName)
-    {
-        if (string.IsNullOrWhiteSpace(instanceName)) return null;
-
-        var normalized = instanceName.Trim();
-        var candidates = new[]
-        {
-            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL16.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
-            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL15.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
-            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL14.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
-            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL13.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
-            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL12.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll",
-            $@"SOFTWARE\Microsoft\Microsoft SQL Server\MSSQL11.{normalized}\MSSQLServer\SuperSocketNetLib\Tcp\IPAll"
-        };
-
-        foreach (var subKey in candidates)
-        {
-            using var key = Registry.LocalMachine.OpenSubKey(subKey);
-            if (key is null) continue;
-
-            var tcpPort = key.GetValue("TcpPort") as string;
-            if (!string.IsNullOrWhiteSpace(tcpPort)) return tcpPort.Trim();
-
-            var dynamicPort = key.GetValue("TcpDynamicPorts") as string;
-            if (!string.IsNullOrWhiteSpace(dynamicPort)) return dynamicPort.Trim();
-        }
-
-        return null;
     }
 
     private static string NormalizeKnownRetailAliases(string args)
@@ -567,6 +479,7 @@ public partial class App : Application
         EnsureAlias(tokens, "REINSTALLMODE", "ReinstallMode");
         EnsureAlias(tokens, "IPSERVERDATABASE", "IpServerDatabase");
         EnsureAlias(tokens, "PORTASERVER", "PortaServer");
+        EnsureAlias(tokens, "UTENTEDATABASE", "UtenteDatabase");
         EnsureAlias(tokens, "NOMEDATABASE", "NomeDatabase");
         EnsureAlias(tokens, "PASSWORDDATABASE", "PasswordDatabase");
         EnsureAlias(tokens, "LOGFILE", "LogFile");
@@ -575,6 +488,7 @@ public partial class App : Application
         EnsureAlias(tokens, "ReinstallMode", "REINSTALLMODE");
         EnsureAlias(tokens, "IpServerDatabase", "IPSERVERDATABASE");
         EnsureAlias(tokens, "PortaServer", "PORTASERVER");
+        EnsureAlias(tokens, "UtenteDatabase", "UTENTEDATABASE");
         EnsureAlias(tokens, "NomeDatabase", "NOMEDATABASE");
         EnsureAlias(tokens, "PasswordDatabase", "PASSWORDDATABASE");
         EnsureAlias(tokens, "LogFile", "LOGFILE");

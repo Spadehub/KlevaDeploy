@@ -31,7 +31,7 @@ public sealed class AppUpdateServiceTests
         }
         """;
 
-        using var _ = new EnvVarScope();
+        using var _ = new EnvVarScope(("KLEVADEPLOY_APP_VERSION_OVERRIDE", "0.2.3"));
         var handler = new StubHttpMessageHandler(_ =>
             new HttpResponseMessage(HttpStatusCode.OK)
             {

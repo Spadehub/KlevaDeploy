@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -18,12 +19,17 @@ namespace KlevaDeploy.Views;
 
 public partial class ScriptEditorWindow : Window
 {
+    private const double WindowChromeAllowance = 48;
+    private const double MinimumTerminalHeight = 160;
+    private const double MaximumTerminalViewportShare = 0.30;
+
     private readonly ScriptEditorViewModel _viewModel;
     private readonly ScriptSyntaxColorizer _colorizer = new();
     private readonly DiagnosticLineHighlighter _diagnosticHighlighter = new();
     private readonly DiagnosticGlyphMargin _diagnosticGlyphMargin = new();
     private CompletionWindow? _completionWindow;
     private bool _syncingFromViewModel;
+    private bool _syncingDocumentSelectionFromViewModel;
     private bool _revertingSelection;
     private object? _lastAcceptedProcessSelection;
     private object? _lastAcceptedFileSelection;
@@ -31,12 +37,14 @@ public partial class ScriptEditorWindow : Window
     private int _completionReplaceLength;
     private Point _tabDragStart;
     private ScriptEditorViewModel.EditorDocumentTab? _draggedDocument;
+    private readonly DispatcherTimer _layoutSaveTimer;
+    private bool _restoringLayout;
 
     public ScriptEditorWindow(ScriptEditorViewModel viewModel)
     {
-        InitializeComponent();
-        _viewModel = viewModel;
+        _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         DataContext = _viewModel;
+        InitializeComponent();
 
         EditorView.TextArea.LeftMargins.Insert(0, _diagnosticGlyphMargin);
         EditorView.TextArea.TextView.LineTransformers.Add(_colorizer);
@@ -55,16 +63,37 @@ public partial class ScriptEditorWindow : Window
         Closing += ScriptEditorWindow_Closing;
         Loaded += ScriptEditorWindow_Loaded;
         SizeChanged += ScriptEditorWindow_SizeChanged;
+        LocationChanged += ScriptEditorWindow_LocationChanged;
+        StateChanged += ScriptEditorWindow_StateChanged;
+
+        _layoutSaveTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(250)
+        };
+        _layoutSaveTimer.Tick += (_, _) =>
+        {
+            _layoutSaveTimer.Stop();
+            PersistLayoutState();
+        };
 
         _lastAcceptedProcessSelection = _viewModel.SelectedProcessNode;
         _lastAcceptedFileSelection = _viewModel.SelectedFileNode;
         _lastAcceptedDocumentSelection = _viewModel.SelectedDocument;
         DocumentsTabControl.SelectedItem = _viewModel.SelectedDocument;
-        UpdateCompactLayout();
     }
 
     private void ScriptEditorWindow_Loaded(object sender, RoutedEventArgs e)
     {
+        RestoreLayoutState();
+        UpdateCompactLayout();
+        ApplyPaneLayout();
+        UpdateWindowChromeState();
+        UpdateOutputView();
+        Dispatcher.BeginInvoke(() =>
+        {
+            RestoreTreeSelection(ProcessTree, _viewModel.SelectedProcessNode);
+            RestoreTreeSelection(FileTree, _viewModel.SelectedFileNode);
+        }, DispatcherPriority.Loaded);
         EditorView.Focus();
         AnimateStatusPulse();
     }
@@ -72,6 +101,19 @@ public partial class ScriptEditorWindow : Window
     private void ScriptEditorWindow_SizeChanged(object sender, SizeChangedEventArgs e)
     {
         UpdateCompactLayout();
+        ApplyPaneLayout();
+        QueuePersistLayoutState();
+    }
+
+    private void ScriptEditorWindow_LocationChanged(object? sender, EventArgs e)
+    {
+        QueuePersistLayoutState();
+    }
+
+    private void ScriptEditorWindow_StateChanged(object? sender, EventArgs e)
+    {
+        UpdateWindowChromeState();
+        QueuePersistLayoutState();
     }
 
     private void ProcessTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -110,8 +152,27 @@ public partial class ScriptEditorWindow : Window
 
     private void DocumentsTabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_syncingDocumentSelectionFromViewModel)
+            return;
+
         if (_revertingSelection || DocumentsTabControl.SelectedItem is not ScriptEditorViewModel.EditorDocumentTab document)
             return;
+
+        if (_viewModel.SelectedDocument is not null &&
+            e.RemovedItems.Count == 0 &&
+            !ReferenceEquals(document, _viewModel.SelectedDocument))
+        {
+            _syncingDocumentSelectionFromViewModel = true;
+            try
+            {
+                DocumentsTabControl.SelectedItem = _viewModel.SelectedDocument;
+            }
+            finally
+            {
+                _syncingDocumentSelectionFromViewModel = false;
+            }
+            return;
+        }
 
         if (_viewModel.TryActivateDocument(document))
         {
@@ -164,20 +225,43 @@ public partial class ScriptEditorWindow : Window
         else if (e.PropertyName == nameof(ScriptEditorViewModel.SelectedProcessNode))
         {
             _lastAcceptedProcessSelection = _viewModel.SelectedProcessNode;
+            Dispatcher.BeginInvoke(() => RestoreTreeSelection(ProcessTree, _lastAcceptedProcessSelection), DispatcherPriority.Background);
         }
         else if (e.PropertyName == nameof(ScriptEditorViewModel.SelectedFileNode))
         {
             _lastAcceptedFileSelection = _viewModel.SelectedFileNode;
+            Dispatcher.BeginInvoke(() => RestoreTreeSelection(FileTree, _lastAcceptedFileSelection), DispatcherPriority.Background);
         }
         else if (e.PropertyName == nameof(ScriptEditorViewModel.SelectedDocument))
         {
             _lastAcceptedDocumentSelection = _viewModel.SelectedDocument;
             if (!ReferenceEquals(DocumentsTabControl.SelectedItem, _viewModel.SelectedDocument))
-                DocumentsTabControl.SelectedItem = _viewModel.SelectedDocument;
+            {
+                _syncingDocumentSelectionFromViewModel = true;
+                try
+                {
+                    DocumentsTabControl.SelectedItem = _viewModel.SelectedDocument;
+                }
+                finally
+                {
+                    _syncingDocumentSelectionFromViewModel = false;
+                }
+            }
         }
         else if (e.PropertyName == nameof(ScriptEditorViewModel.StatusText))
         {
             AnimateStatusPulse();
+        }
+        else if (e.PropertyName is nameof(ScriptEditorViewModel.HasDiagnostics)
+            or nameof(ScriptEditorViewModel.DiagnosticsPanelToggleLabel))
+        {
+            UpdateOutputView();
+        }
+        else if (e.PropertyName is nameof(ScriptEditorViewModel.ShowNavigatorPane)
+            or nameof(ScriptEditorViewModel.ShowExplorerPane)
+            or nameof(ScriptEditorViewModel.ShowTerminalPane))
+        {
+            ApplyPaneLayout();
         }
     }
 
@@ -189,6 +273,57 @@ public partial class ScriptEditorWindow : Window
         NavigateToDiagnostic(diagnostic);
         DiagnosticsList.SelectedItem = null;
     }
+
+    private void TerminalViewToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        ArgumentNullException.ThrowIfNull(_viewModel);
+        _viewModel.IsDiagnosticsCollapsed = true;
+        UpdateOutputView();
+        QueuePersistLayoutState();
+    }
+
+    private void IssuesViewToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        ArgumentNullException.ThrowIfNull(_viewModel);
+        if (!_viewModel.HasDiagnostics)
+        {
+            TerminalViewToggle.IsChecked = true;
+            return;
+        }
+
+        if (_viewModel.IsTerminalCollapsed)
+        {
+            _viewModel.IsTerminalCollapsed = false;
+            ApplyPaneLayout();
+        }
+
+        _viewModel.IsDiagnosticsCollapsed = false;
+        UpdateOutputView();
+        QueuePersistLayoutState();
+    }
+
+    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left)
+            return;
+
+        if (e.ClickCount == 2)
+        {
+            ToggleWindowState();
+            return;
+        }
+
+        DragMove();
+    }
+
+    private void MinimizeWindowButton_Click(object sender, RoutedEventArgs e)
+        => SystemCommands.MinimizeWindow(this);
+
+    private void MaximizeWindowButton_Click(object sender, RoutedEventArgs e)
+        => ToggleWindowState();
+
+    private void CloseWindowButton_Click(object sender, RoutedEventArgs e)
+        => Close();
 
     private void ApplyEditorLanguage()
     {
@@ -370,8 +505,6 @@ public partial class ScriptEditorWindow : Window
         }
 
         parent.ApplyTemplate();
-        if (parent is TreeViewItem parentItem)
-            parentItem.IsExpanded = true;
 
         foreach (var item in parent.Items)
         {
@@ -393,7 +526,11 @@ public partial class ScriptEditorWindow : Window
             }
 
             if (SelectTreeItem(container, target))
+            {
+                if (parent is TreeViewItem parentItem)
+                    parentItem.IsExpanded = true;
                 return true;
+            }
         }
 
         return false;
@@ -402,7 +539,10 @@ public partial class ScriptEditorWindow : Window
     private void ScriptEditorWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (_viewModel.ConfirmCloseEditor())
+        {
+            PersistLayoutState();
             return;
+        }
 
         e.Cancel = true;
     }
@@ -453,9 +593,177 @@ public partial class ScriptEditorWindow : Window
         DocumentsTabControl.SelectedItem = source;
     }
 
+    private void ToggleNavigatorPane_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.IsNavigatorCollapsed = !_viewModel.IsNavigatorCollapsed;
+        ApplyPaneLayout();
+        QueuePersistLayoutState();
+    }
+
+    private void ToggleExplorerPane_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.IsExplorerCollapsed = !_viewModel.IsExplorerCollapsed;
+        ApplyPaneLayout();
+        QueuePersistLayoutState();
+    }
+
+    private void ToggleTerminalPane_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.IsTerminalCollapsed = !_viewModel.IsTerminalCollapsed;
+        ApplyPaneLayout();
+        UpdateOutputView();
+        QueuePersistLayoutState();
+    }
+
+    private void ToggleDiagnosticsPanel_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_viewModel.HasDiagnostics)
+            return;
+
+        if (_viewModel.IsTerminalCollapsed)
+        {
+            _viewModel.IsTerminalCollapsed = false;
+            ApplyPaneLayout();
+        }
+
+        _viewModel.IsDiagnosticsCollapsed = !_viewModel.IsDiagnosticsCollapsed;
+        UpdateOutputView();
+        QueuePersistLayoutState();
+    }
+
+    private void ResetLayout_Click(object sender, RoutedEventArgs e)
+    {
+        _viewModel.RestoreDefaultLayout();
+        UpdateCompactLayout();
+        ApplyPaneLayout();
+        PersistLayoutState();
+    }
+
+    private void PaneSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            UpdateLayout();
+            PersistLayoutState();
+            ApplyPaneLayout();
+        }, DispatcherPriority.Background);
+    }
+
     private void UpdateCompactLayout()
     {
         _viewModel.IsCompactLayout = ActualWidth < 1280;
+    }
+
+    private void RestoreLayoutState()
+    {
+        _restoringLayout = true;
+        try
+        {
+            var layout = _viewModel.LayoutPreferences;
+            if (layout.WindowWidth >= MinWidth)
+                Width = layout.WindowWidth;
+            if (layout.WindowHeight >= MinHeight)
+                Height = layout.WindowHeight;
+            if (!double.IsNaN(layout.WindowLeft))
+                Left = layout.WindowLeft;
+            if (!double.IsNaN(layout.WindowTop))
+                Top = layout.WindowTop;
+
+            if (layout.IsMaximized)
+                WindowState = WindowState.Maximized;
+        }
+        finally
+        {
+            _restoringLayout = false;
+        }
+    }
+
+    private void ApplyPaneLayout()
+    {
+        var layout = _viewModel.LayoutPreferences;
+        var navigatorWidth = 0d;
+        var explorerWidth = 0d;
+        var leftVisible = _viewModel.ShowNavigatorPane;
+        var rightVisible = _viewModel.ShowExplorerPane;
+
+        if (leftVisible || rightVisible)
+        {
+            var availableWidth = Math.Max(0, ActualWidth - WindowChromeAllowance);
+            var availableSideWidth = Math.Max(0, availableWidth - EditorPaneColumn.MinWidth - (leftVisible && rightVisible ? 16 : 8));
+            var desiredNavigatorWidth = leftVisible ? Math.Max(NavigatorPaneColumn.MinWidth, layout.LeftPaneWidth) : 0;
+            var desiredExplorerWidth = rightVisible ? Math.Max(ExplorerPaneColumn.MinWidth, layout.RightPaneWidth) : 0;
+            var totalDesiredSideWidth = desiredNavigatorWidth + desiredExplorerWidth;
+
+            if (totalDesiredSideWidth > availableSideWidth && availableSideWidth > 0)
+            {
+                var scale = availableSideWidth / totalDesiredSideWidth;
+                desiredNavigatorWidth = leftVisible ? Math.Max(NavigatorPaneColumn.MinWidth, desiredNavigatorWidth * scale) : 0;
+                desiredExplorerWidth = rightVisible ? Math.Max(ExplorerPaneColumn.MinWidth, desiredExplorerWidth * scale) : 0;
+            }
+
+            navigatorWidth = leftVisible ? desiredNavigatorWidth : 0;
+            explorerWidth = rightVisible ? desiredExplorerWidth : 0;
+        }
+
+        NavigatorPaneColumn.Width = leftVisible
+            ? new GridLength(navigatorWidth)
+            : new GridLength(0);
+        NavigatorSplitterColumn.Width = _viewModel.ShowNavigatorPane
+            ? new GridLength(8)
+            : new GridLength(0);
+
+        ExplorerPaneColumn.Width = rightVisible
+            ? new GridLength(explorerWidth)
+            : new GridLength(0);
+        ExplorerSplitterColumn.Width = _viewModel.ShowExplorerPane
+            ? new GridLength(8)
+            : new GridLength(0);
+
+        TerminalRow.Height = _viewModel.ShowTerminalPane
+            ? new GridLength(ResolveTerminalHeight(layout.TerminalHeight))
+            : new GridLength(0);
+        TerminalSplitterRow.Height = _viewModel.ShowTerminalPane
+            ? new GridLength(8)
+            : new GridLength(0);
+    }
+
+    private double ResolveTerminalHeight(double preferredHeight)
+    {
+        var availableHeight = Math.Max(MinHeight, ActualHeight);
+        var maxHeight = Math.Max(MinimumTerminalHeight, availableHeight * MaximumTerminalViewportShare);
+        return Math.Max(MinimumTerminalHeight, Math.Min(preferredHeight, maxHeight));
+    }
+
+    private void QueuePersistLayoutState()
+    {
+        if (!IsLoaded || _restoringLayout)
+            return;
+
+        _layoutSaveTimer.Stop();
+        _layoutSaveTimer.Start();
+    }
+
+    private void PersistLayoutState()
+    {
+        if (!IsLoaded || _restoringLayout)
+            return;
+
+        var layout = _viewModel.LayoutPreferences;
+        var restoreBounds = WindowState == WindowState.Normal
+            ? new Rect(Left, Top, Width, Height)
+            : RestoreBounds;
+
+        var leftPaneWidth = _viewModel.ShowNavigatorPane
+            ? NavigatorPaneColumn.ActualWidth
+            : layout.LeftPaneWidth;
+        var rightPaneWidth = _viewModel.ShowExplorerPane
+            ? ExplorerPaneColumn.ActualWidth
+            : layout.RightPaneWidth;
+        var terminalHeight = _viewModel.ShowTerminalPane
+            ? TerminalRow.ActualHeight
+            : layout.TerminalHeight;
+
+        _viewModel.PersistLayoutState(leftPaneWidth, rightPaneWidth, terminalHeight, restoreBounds, WindowState == WindowState.Maximized);
     }
 
     private void AnimateStatusPulse()
@@ -472,6 +780,68 @@ public partial class ScriptEditorWindow : Window
         };
 
         StatusTextBlock.BeginAnimation(OpacityProperty, animation);
+    }
+
+    private void ToggleWindowState()
+    {
+        if (ResizeMode == ResizeMode.NoResize)
+            return;
+
+        if (WindowState == WindowState.Maximized)
+            SystemCommands.RestoreWindow(this);
+        else
+            SystemCommands.MaximizeWindow(this);
+    }
+
+    private void UpdateWindowChromeState()
+    {
+        if (MaximizeIcon is null || MaximizeWindowButton is null)
+            return;
+
+        if (WindowState == WindowState.Maximized)
+        {
+            MaximizeIcon.Text = "❐";
+            MaximizeWindowButton.ToolTip = "Restore";
+        }
+        else
+        {
+            MaximizeIcon.Text = "□";
+            MaximizeWindowButton.ToolTip = "Maximize";
+        }
+    }
+
+    private void UpdateOutputView()
+    {
+        if (TerminalViewToggle is null || IssuesViewToggle is null)
+            return;
+
+        var showIssues = !_viewModel.IsDiagnosticsCollapsed && _viewModel.HasDiagnostics;
+
+        TerminalViewToggle.IsChecked = !showIssues;
+        IssuesViewToggle.IsChecked = showIssues;
+        IssuesViewToggle.IsEnabled = _viewModel.HasDiagnostics;
+
+        if (OutputDescriptionText is not null)
+        {
+            OutputDescriptionText.Text = showIssues
+                ? "Review current diagnostics and jump between issues."
+                : "Logs, filtering, and export for the current run.";
+        }
+
+        if (TerminalActionsHost is not null)
+            TerminalActionsHost.Visibility = showIssues ? Visibility.Collapsed : Visibility.Visible;
+        if (TerminalFiltersDivider is not null)
+            TerminalFiltersDivider.Visibility = showIssues ? Visibility.Collapsed : Visibility.Visible;
+        if (TerminalFiltersHost is not null)
+            TerminalFiltersHost.Visibility = showIssues ? Visibility.Collapsed : Visibility.Visible;
+        if (IssuesActionsHost is not null)
+            IssuesActionsHost.Visibility = showIssues ? Visibility.Visible : Visibility.Collapsed;
+        if (TerminalViewHost is not null)
+            TerminalViewHost.Visibility = showIssues ? Visibility.Collapsed : Visibility.Visible;
+        if (IssuesViewHost is not null)
+            IssuesViewHost.Visibility = showIssues ? Visibility.Visible : Visibility.Collapsed;
+        if (IssuesEmptyStateBorder is not null)
+            IssuesEmptyStateBorder.Visibility = showIssues && !_viewModel.HasDiagnostics ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject

@@ -333,10 +333,67 @@
                                                        Text="Password"
                                                        Style="{StaticResource Win11TextSecondary}"
                                                        Margin="0,0,0,4"/>
-                                            <PasswordBox Grid.Row="4"
-                                                         x:Name="PasswordBox"
-                                                         Style="{StaticResource Win11PasswordBox}"
-                                                         Height="40"/>
+                                            <Grid Grid.Row="4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <TextBox Grid.Column="0"
+                                                         Text="{Binding Password, UpdateSourceTrigger=PropertyChanged}"
+                                                         Height="40">
+                                                    <TextBox.Style>
+                                                        <Style TargetType="TextBox" BasedOn="{StaticResource Win11TextBox}">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsPasswordVisible}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBox.Style>
+                                                </TextBox>
+
+                                                <PasswordBox Grid.Column="0"
+                                                             x:Name="PasswordBox"
+                                                             Height="40"
+                                                             IsVisibleChanged="OnPasswordVisibilityChanged">
+                                                    <PasswordBox.Style>
+                                                        <Style TargetType="PasswordBox" BasedOn="{StaticResource Win11PasswordBox}">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsPasswordVisible}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </PasswordBox.Style>
+                                                </PasswordBox>
+
+                                                <Button Grid.Column="1"
+                                                        Margin="10,0,0,0"
+                                                        Width="36"
+                                                        Height="36"
+                                                        Style="{StaticResource Win11IconButton}"
+                                                        Click="OnTogglePasswordVisibility"
+                                                        ToolTip="Mostra o nascondi password"
+                                                        AutomationProperties.Name="Mostra o nascondi password">
+                                                    <Image Width="18"
+                                                           Height="18"
+                                                           Stretch="Uniform">
+                                                        <Image.Style>
+                                                            <Style TargetType="Image">
+                                                                <Setter Property="Source" Value="{DynamicResource IconEyeOpen}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsPasswordVisible}" Value="True">
+                                                                        <Setter Property="Source" Value="{DynamicResource IconEyeClosed}"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Image.Style>
+                                                    </Image>
+                                                </Button>
+                                            </Grid>
                                         </Grid>
 
                                         <StackPanel Visibility="{Binding IsSelectedPortalLoggedIn, Converter={StaticResource BoolToVisibility}, FallbackValue=Collapsed}">

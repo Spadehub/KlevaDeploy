@@ -437,7 +437,10 @@ public sealed class SettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             _log.Error("Settings update install failed", ex);
-            UpdateStatusText = "Errore durante download o installazione dell'aggiornamento.";
+            var detail = ex.GetBaseException().Message?.Trim() ?? string.Empty;
+            UpdateStatusText = string.IsNullOrWhiteSpace(detail)
+                ? "Errore durante download o installazione dell'aggiornamento."
+                : $"Errore durante download o installazione dell'aggiornamento: {detail}";
         }
         finally
         {

@@ -1,5 +1,6 @@
 using KlevaDeploy.Services;
 using KlevaDeploy.Services.Interfaces;
+using System.Reflection;
 
 namespace KlevaDeploy.Tests;
 
@@ -59,5 +60,32 @@ public sealed class ExecutionErrorFormatterTests
         var detail = ExecutionErrorFormatter.BuildDetail("Retail", result);
 
         Assert.Equal("Prerequisito MSI non supportato su questo sistema operativo: sqlncli.msi (SQL Server Native Client legacy). Log: C:\\temp\\sqlncli.log", detail);
+    }
+
+    [Fact]
+    public void BuildDetail_DoesNotPrependGeneric1603_WhenDetailIsAlreadyActionable()
+    {
+        var result = new ProcessResult(
+            1603,
+            string.Empty,
+            "Errore SQL durante l'installazione Retail: il login SQL 'sa' non esiste, è disabilitato o non ha permessi per creare o popolare il database 'Test2DB' su 'VINCENZO-PC\\SQLPASS'. Verifica utente, password, Mixed Mode e permessi del login.");
+
+        var detail = ExecutionErrorFormatter.BuildDetail("Passepartout Retail Server", result);
+
+        Assert.Equal("Errore SQL durante l'installazione Retail: il login SQL 'sa' non esiste, è disabilitato o non ha permessi per creare o popolare il database 'Test2DB' su 'VINCENZO-PC\\SQLPASS'. Verifica utente, password, Mixed Mode e permessi del login.", detail);
+    }
+
+    [Fact]
+    public void BuildMsiInstallCommandLine_PreservesRetailSqlInstanceName()
+    {
+        var method = typeof(App).GetMethod("BuildMsiInstallCommandLine", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var args = "IPSERVERDATABASE=localhost\\SQLPASS NOMEDATABASE=PassepartoutRetail PASSWORDDATABASE=Secret123!";
+        var result = (string)method!.Invoke(null, [args])!;
+
+        Assert.Contains("IPSERVERDATABASE=localhost\\SQLPASS", result, StringComparison.Ordinal);
+        Assert.Contains("IpServerDatabase=localhost\\SQLPASS", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("localhost,50261", result, StringComparison.OrdinalIgnoreCase);
     }
 }

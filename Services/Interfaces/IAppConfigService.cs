@@ -26,6 +26,7 @@ public sealed class InstallerNormalizationConfig
     public string RetailDefaultArgs { get; set; } = string.Empty;
     public string DefaultSqlPassSaPassword { get; set; } = string.Empty;
     public string DefaultRetailSqlServer { get; set; } = string.Empty;
+    public string DefaultRetailSqlUser { get; set; } = string.Empty;
     public string DefaultRetailDbName { get; set; } = string.Empty;
 }
 

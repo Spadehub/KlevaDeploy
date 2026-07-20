@@ -10,6 +10,7 @@ using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KlevaDeploy.Models;
+using KlevaDeploy.Services.Interfaces;
 using Microsoft.Win32;
 
 namespace KlevaDeploy.ViewModels;
@@ -60,7 +61,12 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
     ];
 
     private readonly CreateProcessViewModel _sourceViewModel;
+    private readonly CreateProcessViewModel _navigationViewModel;
+    private readonly IPreferencesService? _preferencesService;
+    private readonly ScriptEditorLayoutPreferences _layoutPreferences;
     private readonly DispatcherTimer _diagnosticTimer;
+    private readonly DispatcherTimer _undoCaptureTimer;
+    private bool _suppressUndoCapture;
     private readonly Regex _wordRegex = new(@"[\w:$-]+$", RegexOptions.Compiled);
     private readonly Dictionary<Guid, EditorRunSession> _activeSessions = new();
     private int _sessionCounter;
@@ -82,6 +88,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
     };
 
     public ICollectionView TerminalView { get; }
+    public ScriptEditorLayoutPreferences LayoutPreferences => _layoutPreferences;
 
     private EditorProcessNode? _selectedProcessNode;
     public EditorProcessNode? SelectedProcessNode
@@ -127,6 +134,11 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
             UpdateCommandStates();
             _diagnosticTimer.Stop();
             _diagnosticTimer.Start();
+            if (!_suppressUndoCapture)
+            {
+                _undoCaptureTimer.Stop();
+                _undoCaptureTimer.Start();
+            }
         }
     }
 
@@ -141,7 +153,11 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
     public string DocumentPath
     {
         get => _documentPath;
-        private set => SetProperty(ref _documentPath, value);
+        private set
+        {
+            if (!SetProperty(ref _documentPath, value)) return;
+            OnPropertyChanged(nameof(ShowDocumentPath));
+        }
     }
 
     private string _languageName = "Text";
@@ -159,6 +175,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         {
             if (!SetProperty(ref _terminalLevelFilter, value)) return;
             TerminalView.Refresh();
+            RaiseTerminalStateChanged();
         }
     }
 
@@ -170,6 +187,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         {
             if (!SetProperty(ref _terminalSearchText, value)) return;
             TerminalView.Refresh();
+            RaiseTerminalStateChanged();
         }
     }
 
@@ -187,8 +205,51 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         set
         {
             if (!SetProperty(ref _isCompactLayout, value)) return;
-            OnPropertyChanged(nameof(ShowExplorerPane));
-            OnPropertyChanged(nameof(LayoutModeLabel));
+            RaiseLayoutStateChanged();
+        }
+    }
+
+    private bool _isNavigatorCollapsed;
+    public bool IsNavigatorCollapsed
+    {
+        get => _isNavigatorCollapsed;
+        set
+        {
+            if (!SetProperty(ref _isNavigatorCollapsed, value)) return;
+            RaiseLayoutStateChanged();
+        }
+    }
+
+    private bool _isExplorerCollapsed;
+    public bool IsExplorerCollapsed
+    {
+        get => _isExplorerCollapsed;
+        set
+        {
+            if (!SetProperty(ref _isExplorerCollapsed, value)) return;
+            RaiseLayoutStateChanged();
+        }
+    }
+
+    private bool _isTerminalCollapsed;
+    public bool IsTerminalCollapsed
+    {
+        get => _isTerminalCollapsed;
+        set
+        {
+            if (!SetProperty(ref _isTerminalCollapsed, value)) return;
+            RaiseLayoutStateChanged();
+        }
+    }
+
+    private bool _isDiagnosticsCollapsed;
+    public bool IsDiagnosticsCollapsed
+    {
+        get => _isDiagnosticsCollapsed;
+        set
+        {
+            if (!SetProperty(ref _isDiagnosticsCollapsed, value)) return;
+            RaisePresentationStateChanged();
         }
     }
 
@@ -227,25 +288,60 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
     }
 
     public bool HasDiagnostics => Diagnostics.Count > 0;
+    public bool HasOpenDocuments => OpenDocuments.Count > 0;
     public string DiagnosticsSummary => Diagnostics.Count == 0 ? "No syntax issues detected." : $"{Diagnostics.Count} issue(s) detected.";
+    public string DiagnosticsSummaryHint => Diagnostics.Count == 0
+        ? "Parser looks clean. Inline highlighting stays active while you edit."
+        : "Review flagged items below or use F8 / Shift+F8 to jump between issues.";
     public bool HasErrorDiagnostics => Diagnostics.Any(d => string.Equals(d.Severity, "ERROR", StringComparison.OrdinalIgnoreCase));
     public bool HasWarningDiagnostics => Diagnostics.Any(d => string.Equals(d.Severity, "WARN", StringComparison.OrdinalIgnoreCase));
+    public bool HasTerminalEntries => TerminalEntries.Count > 0;
+    public bool HasVisibleTerminalEntries => !TerminalView.IsEmpty;
+    public bool ShowTerminalPlaceholder => !HasVisibleTerminalEntries;
+    public bool ShowTerminalEmptyState => !HasTerminalEntries;
+    public bool ShowTerminalFilteredEmptyState => HasTerminalEntries && !HasVisibleTerminalEntries;
     public bool IsProcessDocumentActive => _currentDocumentKind == EditorDocumentKind.Process;
     public bool IsFileDocumentActive => _currentDocumentKind == EditorDocumentKind.File;
     public bool IsScratchDocumentActive => _currentDocumentKind == EditorDocumentKind.Scratch;
     public bool ShowExecutionToolbar => IsProcessDocumentActive || IsFileDocumentActive || IsScratchDocumentActive;
     public bool ShowDiagnosticsToolbar => HasDiagnostics;
-    public bool ShowExplorerPane => !IsCompactLayout;
+    public bool ShowDiagnosticsPanel => HasDiagnostics && !IsDiagnosticsCollapsed;
+    public bool ShowNavigatorPane => !IsNavigatorCollapsed;
+    public bool ShowExplorerPane => !IsCompactLayout && !IsExplorerCollapsed;
+    public bool ShowTerminalPane => !IsTerminalCollapsed;
+    public bool ShowEmptyEditorState => !HasOpenDocuments;
+    public bool ShowHeaderHint => !IsCompactLayout;
+    public bool ShowHeaderSecondaryBadges => !IsCompactLayout;
+    public bool ShowDocumentPath => !IsCompactLayout && !string.IsNullOrWhiteSpace(DocumentPath);
+    public bool ShowDocumentLanguageBadge => !IsCompactLayout;
+    public bool ShowDocumentWorkspaceCaption => !IsCompactLayout;
+    public bool ShowDocumentMetaGroups => !IsCompactLayout;
+    public bool ShowTerminalDescription => !IsCompactLayout;
+    public double TerminalLevelFilterWidth => IsCompactLayout ? 104 : 120;
+    public double TerminalSearchBoxWidth => IsCompactLayout ? 160 : 220;
+    public string OpenDocumentsBadgeText => IsCompactLayout
+        ? $"{OpenDocuments.Count} tabs"
+        : $"Tabs: {OpenDocuments.Count}";
     public string LayoutModeLabel => IsCompactLayout ? "Compact layout" : "Expanded layout";
     public string CurrentDocumentKindLabel => _currentDocumentKind switch
     {
+        EditorDocumentKind.None => "No Document",
         EditorDocumentKind.Process => "Process Script",
         EditorDocumentKind.File => "External File",
         EditorDocumentKind.Scratch => "Scratch Pad",
         _ => "Editor Document"
     };
+    public string CurrentDocumentSubtitle => _currentDocumentKind switch
+    {
+        EditorDocumentKind.None => "Choose a process, file, or scratch document to start editing.",
+        EditorDocumentKind.Process when SelectedProcessNode is not null => BuildDocumentSubtitle(GetProcessKindLabel(SelectedProcessNode.Kind)),
+        EditorDocumentKind.File => BuildDocumentSubtitle("External file"),
+        EditorDocumentKind.Scratch => BuildDocumentSubtitle("Scratch pad"),
+        _ => BuildDocumentSubtitle("Editor document")
+    };
     public string CurrentDocumentHint => _currentDocumentKind switch
     {
+        EditorDocumentKind.None => "The editor workspace is empty. Open a file, select a process, or create a scratch document.",
         EditorDocumentKind.Process => "Editing inline process behavior stored in the KDP definition.",
         EditorDocumentKind.File => "Editing a file-backed script with local filesystem context.",
         EditorDocumentKind.Scratch => "Editing an unsaved draft for quick experiments or snippet authoring.",
@@ -253,10 +349,39 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
     };
     public string ActivityStateLabel => IsRunning ? "Running" : IsDirty ? "Unsaved" : "Ready";
     public string DiagnosticsStateLabel => Diagnostics.Count == 0 ? "Clean" : $"{Diagnostics.Count} issue(s)";
+    public string DiagnosticsPanelToggleLabel => IsDiagnosticsCollapsed ? "Show Issue Panel" : "Hide Issue Panel";
+    public string TerminalEmptyStateTitle => ShowTerminalFilteredEmptyState ? "No entries match current filters" : "Terminal is ready";
+    public string TerminalEmptyStateMessage => ShowTerminalFilteredEmptyState
+        ? "Adjust the level filter or search text to bring matching output back into view."
+        : "Run the current document to stream output, progress updates, and session logs here.";
+
+    private bool _canUndo;
+    public bool CanUndo
+    {
+        get => _canUndo;
+        private set
+        {
+            if (!SetProperty(ref _canUndo, value)) return;
+            UndoCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private bool _canRedo;
+    public bool CanRedo
+    {
+        get => _canRedo;
+        private set
+        {
+            if (!SetProperty(ref _canRedo, value)) return;
+            RedoCommand.NotifyCanExecuteChanged();
+        }
+    }
 
     public IRelayCommand SaveCommand { get; }
     public IRelayCommand NewCommand { get; }
     public IRelayCommand OpenCommand { get; }
+    public IRelayCommand UndoCommand { get; }
+    public IRelayCommand RedoCommand { get; }
     public IAsyncRelayCommand RunCommand { get; }
     public IRelayCommand StopCommand { get; }
     public IAsyncRelayCommand RestartCommand { get; }
@@ -271,9 +396,22 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
     public ScriptEditorViewModel(CreateProcessViewModel sourceViewModel)
     {
         _sourceViewModel = sourceViewModel;
+        _navigationViewModel = sourceViewModel.EditorNavigationSourceViewModel ?? sourceViewModel;
+        _preferencesService = sourceViewModel.PreferencesService;
+        _layoutPreferences = _preferencesService?.Preferences.ScriptEditorLayout ?? new ScriptEditorLayoutPreferences();
+        _isNavigatorCollapsed = _layoutPreferences.NavigatorCollapsed;
+        _isExplorerCollapsed = _layoutPreferences.ExplorerCollapsed;
+        _isTerminalCollapsed = _layoutPreferences.TerminalCollapsed;
+        _isDiagnosticsCollapsed = _layoutPreferences.DiagnosticsCollapsed;
 
         TerminalView = CollectionViewSource.GetDefaultView(TerminalEntries);
         TerminalView.Filter = FilterTerminalEntry;
+        OpenDocuments.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(OpenDocumentsBadgeText));
+            OnPropertyChanged(nameof(HasOpenDocuments));
+            OnPropertyChanged(nameof(ShowEmptyEditorState));
+        };
 
         _diagnosticTimer = new DispatcherTimer
         {
@@ -285,9 +423,21 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
             _ = RefreshDiagnosticsAsync();
         };
 
+        _undoCaptureTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(350)
+        };
+        _undoCaptureTimer.Tick += (_, _) =>
+        {
+            _undoCaptureTimer.Stop();
+            CaptureUndoSnapshot();
+        };
+
         SaveCommand = new RelayCommand(SaveDocument);
         NewCommand = new RelayCommand(TryCreateNewScratchDocument);
         OpenCommand = new RelayCommand(TryOpenExternalFile);
+        UndoCommand = new RelayCommand(Undo, () => CanUndo);
+        RedoCommand = new RelayCommand(Redo, () => CanRedo);
         RunCommand = new AsyncRelayCommand(RunCurrentAsync, CanRunCurrent);
         StopCommand = new RelayCommand(StopCurrent, CanStopCurrent);
         RestartCommand = new AsyncRelayCommand(RestartCurrentAsync, CanRestartCurrent);
@@ -302,11 +452,44 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         BuildProcessTree();
         RefreshFiles();
 
-        SelectedProcessNode = ProcessNodes.FirstOrDefault();
+        SelectedProcessNode = ResolveInitialProcessNode() ?? ProcessNodes.FirstOrDefault();
         if (SelectedProcessNode is null)
             CreateNewScratchDocument();
         else
             OpenOrActivateProcessDocument(SelectedProcessNode, promptForDirty: false);
+    }
+
+    public void PersistLayoutState(
+        double leftPaneWidth,
+        double rightPaneWidth,
+        double terminalHeight,
+        Rect restoreBounds,
+        bool isMaximized)
+    {
+        _layoutPreferences.LeftPaneWidth = Clamp(leftPaneWidth, 220, 640);
+        _layoutPreferences.RightPaneWidth = Clamp(rightPaneWidth, 240, 720);
+        _layoutPreferences.TerminalHeight = Clamp(terminalHeight, 160, 520);
+        _layoutPreferences.NavigatorCollapsed = IsNavigatorCollapsed;
+        _layoutPreferences.ExplorerCollapsed = IsExplorerCollapsed;
+        _layoutPreferences.TerminalCollapsed = IsTerminalCollapsed;
+        _layoutPreferences.DiagnosticsCollapsed = IsDiagnosticsCollapsed;
+        _layoutPreferences.WindowWidth = Clamp(restoreBounds.Width, 960, 3840);
+        _layoutPreferences.WindowHeight = Clamp(restoreBounds.Height, 700, 2160);
+        _layoutPreferences.WindowLeft = restoreBounds.Left;
+        _layoutPreferences.WindowTop = restoreBounds.Top;
+        _layoutPreferences.IsMaximized = isMaximized;
+        _preferencesService?.Save();
+    }
+
+    public void RestoreDefaultLayout()
+    {
+        _layoutPreferences.LeftPaneWidth = 256;
+        _layoutPreferences.RightPaneWidth = 288;
+        _layoutPreferences.TerminalHeight = 180;
+        IsNavigatorCollapsed = false;
+        IsExplorerCollapsed = false;
+        IsTerminalCollapsed = false;
+        IsDiagnosticsCollapsed = true;
     }
 
     public IReadOnlyList<string> GetCompletionItems(string prefix)
@@ -399,17 +582,37 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
     private EditorProcessNode CreateRootNode()
     {
         var node = new EditorProcessNode(
-            string.IsNullOrWhiteSpace(_sourceViewModel.ProcessName) ? "Current Process" : _sourceViewModel.ProcessName.Trim(),
-            _sourceViewModel.SelectedProcessKind,
-            () => _sourceViewModel.ScriptContent,
-            value => _sourceViewModel.ScriptContent = value,
-            () => _sourceViewModel.FilePath,
-            value => _sourceViewModel.FilePath = value,
-            () => _sourceViewModel.Arguments,
-            () => _sourceViewModel.RunAsAdmin);
+            string.IsNullOrWhiteSpace(_navigationViewModel.ProcessName) ? "Current Process" : _navigationViewModel.ProcessName.Trim(),
+            _navigationViewModel.SelectedProcessKind,
+            _navigationViewModel.EditingProcessId,
+            () => _navigationViewModel.ScriptContent,
+            value => _navigationViewModel.ScriptContent = value,
+            () => _navigationViewModel.FilePath,
+            value => _navigationViewModel.FilePath = value,
+            () => _navigationViewModel.Arguments,
+            () => _navigationViewModel.RunAsAdmin);
 
-        foreach (var sub in _sourceViewModel.SubProcesses.Where(s => s.Process is not null))
+        foreach (var sub in _navigationViewModel.SubProcesses.Where(s => s.Process is not null))
             node.Children.Add(CreateSubProcessNode(sub.Process!));
+
+        return node;
+    }
+
+    private static EditorProcessNode CreateProcessNode(DeploymentProcess process, bool isRoot = false)
+    {
+        var node = new EditorProcessNode(
+            string.IsNullOrWhiteSpace(process.Name) ? (isRoot ? "Current Process" : "Subprocess") : process.Name.Trim(),
+            process.Kind,
+            process.Id,
+            () => process.ScriptContent,
+            value => process.ScriptContent = value,
+            () => process.RelativePath,
+            value => process.RelativePath = value,
+            () => process.Arguments,
+            () => process.RunAsAdmin);
+
+        foreach (var sub in process.SubProcesses.Where(s => s.Process is not null))
+            node.Children.Add(CreateProcessNode(sub.Process!));
 
         return node;
     }
@@ -419,6 +622,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         var node = new EditorProcessNode(
             string.IsNullOrWhiteSpace(process.Name) ? "Subprocess" : process.Name.Trim(),
             process.Kind,
+            process.Id,
             () => process.ScriptContent,
             value => process.ScriptContent = value,
             () => process.RelativePath,
@@ -430,6 +634,15 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
             node.Children.Add(CreateSubProcessNode(sub.Process!));
 
         return node;
+    }
+
+    private EditorProcessNode? ResolveInitialProcessNode()
+    {
+        if (!_sourceViewModel.IsSubProcessEditor || string.IsNullOrWhiteSpace(_sourceViewModel.EditingProcessId))
+            return null;
+
+        return EnumerateProcessNodes(ProcessNodes)
+            .FirstOrDefault(node => string.Equals(node.ProcessId, _sourceViewModel.EditingProcessId, StringComparison.OrdinalIgnoreCase));
     }
 
     private void OpenProcessDocument(EditorProcessNode node)
@@ -449,7 +662,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
             return true;
         }
 
-        return OpenOrActivateProcessDocument(node, promptForDirty: true);
+        return OpenOrActivateProcessDocument(node, promptForDirty: false);
     }
 
     private void OpenFileNode(EditorFileNode? node)
@@ -547,8 +760,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
             var fallback = OpenDocuments.ElementAtOrDefault(Math.Max(0, index - 1)) ?? OpenDocuments.FirstOrDefault();
             if (fallback is null)
             {
-                var scratch = CreateScratchDocument();
-                ActivateDocument(scratch);
+                ActivateEmptyWorkspace();
             }
             else
             {
@@ -658,6 +870,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         _currentProcessDocument = document.ProcessNode;
         _currentFilePath = document.FilePath;
         SetDocumentState(document.Name, document.Path, document.ScriptText, document.LanguageName, markClean: !document.IsDirty);
+        UpdateUndoRedoState();
 
         if (document.ProcessNode is not null)
             SelectedProcessNode = document.ProcessNode;
@@ -668,6 +881,23 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
             if (existingFileNode is not null)
                 SelectedFileNode = existingFileNode;
         }
+    }
+
+    private void ActivateEmptyWorkspace()
+    {
+        SelectedDocument = null;
+        _currentDocumentKind = EditorDocumentKind.None;
+        _currentProcessDocument = null;
+        _currentFilePath = null;
+        DocumentName = "No document open";
+        DocumentPath = string.Empty;
+        LanguageName = string.Empty;
+        _scriptText = string.Empty;
+        OnPropertyChanged(nameof(ScriptText));
+        IsDirty = false;
+        UpdateUndoRedoState();
+        RaisePresentationStateChanged();
+        StatusText = "All documents closed.";
     }
 
     private static EditorFileNode? FindFileNode(IEnumerable<EditorFileNode> nodes, string fullPath)
@@ -1152,10 +1382,13 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
 
     private async Task PumpStreamAsync(StreamReader reader, string level, string sourceName, EditorRunSession session, CancellationToken ct)
     {
-        while (!reader.EndOfStream && !ct.IsCancellationRequested)
+        while (!ct.IsCancellationRequested)
         {
             var line = await reader.ReadLineAsync(ct);
-            if (string.IsNullOrWhiteSpace(line)) continue;
+            if (line is null)
+                break;
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
             AppendTerminal(level, sourceName, line, session);
         }
     }
@@ -1176,6 +1409,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
             if (TerminalEntries.Count > 5000)
                 TerminalEntries.RemoveAt(0);
             TerminalView.Refresh();
+            RaiseTerminalStateChanged();
         });
     }
 
@@ -1183,6 +1417,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
     {
         TerminalEntries.Clear();
         TerminalView.Refresh();
+        RaiseTerminalStateChanged();
         StatusText = "Terminal cleared.";
     }
 
@@ -1280,21 +1515,143 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         RunCommand.NotifyCanExecuteChanged();
         StopCommand.NotifyCanExecuteChanged();
         RestartCommand.NotifyCanExecuteChanged();
+        UpdateUndoRedoState();
+    }
+
+    private void CaptureUndoSnapshot()
+    {
+        if (_suppressUndoCapture)
+            return;
+
+        var document = SelectedDocument;
+        if (document is null)
+            return;
+
+        var state = document.UndoState;
+        var current = ScriptText;
+        if (string.Equals(state.LastCaptured, current, StringComparison.Ordinal))
+            return;
+
+        state.Undo.Add(state.LastCaptured);
+        state.LastCaptured = current;
+        state.Redo.Clear();
+
+        if (state.Undo.Count > 60)
+            state.Undo.RemoveAt(0);
+
+        UpdateUndoRedoState();
+    }
+
+    private void UpdateUndoRedoState()
+    {
+        var state = SelectedDocument?.UndoState;
+        CanUndo = state is not null && state.Undo.Count > 0;
+        CanRedo = state is not null && state.Redo.Count > 0;
+    }
+
+    private void Undo()
+    {
+        var document = SelectedDocument;
+        if (document is null)
+            return;
+
+        var state = document.UndoState;
+        if (state.Undo.Count == 0)
+            return;
+
+        _suppressUndoCapture = true;
+        try
+        {
+            state.Redo.Add(state.LastCaptured);
+            var restored = state.Undo[^1];
+            state.Undo.RemoveAt(state.Undo.Count - 1);
+            state.LastCaptured = restored;
+            ScriptText = restored;
+            StatusText = "Undo applied.";
+        }
+        finally
+        {
+            _suppressUndoCapture = false;
+            UpdateUndoRedoState();
+        }
+    }
+
+    private void Redo()
+    {
+        var document = SelectedDocument;
+        if (document is null)
+            return;
+
+        var state = document.UndoState;
+        if (state.Redo.Count == 0)
+            return;
+
+        _suppressUndoCapture = true;
+        try
+        {
+            state.Undo.Add(state.LastCaptured);
+            var restored = state.Redo[^1];
+            state.Redo.RemoveAt(state.Redo.Count - 1);
+            state.LastCaptured = restored;
+            ScriptText = restored;
+            StatusText = "Redo applied.";
+        }
+        finally
+        {
+            _suppressUndoCapture = false;
+            UpdateUndoRedoState();
+        }
     }
 
     private void RaisePresentationStateChanged()
     {
+        OnPropertyChanged(nameof(HasOpenDocuments));
+        OnPropertyChanged(nameof(ShowEmptyEditorState));
         OnPropertyChanged(nameof(IsProcessDocumentActive));
         OnPropertyChanged(nameof(IsFileDocumentActive));
         OnPropertyChanged(nameof(IsScratchDocumentActive));
         OnPropertyChanged(nameof(ShowExecutionToolbar));
         OnPropertyChanged(nameof(ShowDiagnosticsToolbar));
+        OnPropertyChanged(nameof(ShowDiagnosticsPanel));
+        OnPropertyChanged(nameof(DiagnosticsSummary));
+        OnPropertyChanged(nameof(DiagnosticsSummaryHint));
         OnPropertyChanged(nameof(CurrentDocumentKindLabel));
+        OnPropertyChanged(nameof(CurrentDocumentSubtitle));
         OnPropertyChanged(nameof(CurrentDocumentHint));
         OnPropertyChanged(nameof(ActivityStateLabel));
         OnPropertyChanged(nameof(DiagnosticsStateLabel));
+        OnPropertyChanged(nameof(DiagnosticsPanelToggleLabel));
         OnPropertyChanged(nameof(HasErrorDiagnostics));
         OnPropertyChanged(nameof(HasWarningDiagnostics));
+    }
+
+    private void RaiseLayoutStateChanged()
+    {
+        OnPropertyChanged(nameof(ShowNavigatorPane));
+        OnPropertyChanged(nameof(ShowExplorerPane));
+        OnPropertyChanged(nameof(ShowTerminalPane));
+        OnPropertyChanged(nameof(ShowHeaderHint));
+        OnPropertyChanged(nameof(ShowHeaderSecondaryBadges));
+        OnPropertyChanged(nameof(ShowDocumentPath));
+        OnPropertyChanged(nameof(ShowDocumentLanguageBadge));
+        OnPropertyChanged(nameof(ShowDocumentWorkspaceCaption));
+        OnPropertyChanged(nameof(ShowDocumentMetaGroups));
+        OnPropertyChanged(nameof(ShowTerminalDescription));
+        OnPropertyChanged(nameof(TerminalLevelFilterWidth));
+        OnPropertyChanged(nameof(TerminalSearchBoxWidth));
+        OnPropertyChanged(nameof(OpenDocumentsBadgeText));
+        OnPropertyChanged(nameof(LayoutModeLabel));
+    }
+
+    private void RaiseTerminalStateChanged()
+    {
+        OnPropertyChanged(nameof(HasTerminalEntries));
+        OnPropertyChanged(nameof(HasVisibleTerminalEntries));
+        OnPropertyChanged(nameof(ShowTerminalPlaceholder));
+        OnPropertyChanged(nameof(ShowTerminalEmptyState));
+        OnPropertyChanged(nameof(ShowTerminalFilteredEmptyState));
+        OnPropertyChanged(nameof(TerminalEmptyStateTitle));
+        OnPropertyChanged(nameof(TerminalEmptyStateMessage));
     }
 
     private async Task RefreshDiagnosticsAsync()
@@ -1483,6 +1840,29 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         };
     }
 
+    private static string GetProcessKindLabel(ProcessKind kind) => kind switch
+    {
+        ProcessKind.PowerShellScript => "PowerShell script",
+        ProcessKind.BatchScript => "Batch script",
+        ProcessKind.BashScript => "Bash script",
+        ProcessKind.RegistryFile => "Registry action",
+        ProcessKind.ConfigAction => "Config action",
+        _ => "Installer"
+    };
+
+    private string BuildDocumentSubtitle(string primaryText)
+    {
+        var parts = new List<string> { primaryText };
+
+        if (!string.IsNullOrWhiteSpace(ActivityStateLabel))
+            parts.Add(ActivityStateLabel);
+
+        if (!string.IsNullOrWhiteSpace(DiagnosticsStateLabel))
+            parts.Add(DiagnosticsStateLabel);
+
+        return string.Join("  •  ", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
+    }
+
     private string DetermineExplorerRoot()
     {
         foreach (var candidate in EnumerateCandidatePaths(_sourceViewModel.FilePath))
@@ -1535,6 +1915,14 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         return GetEditorTempDir();
     }
 
+    private static double Clamp(double value, double min, double max)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return min;
+
+        return Math.Min(max, Math.Max(min, value));
+    }
+
     private static string GetStorageDir()
     {
         var storageDir = Environment.GetEnvironmentVariable("KLEVADEPLOY_STORAGE_DIR");
@@ -1562,8 +1950,16 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         return full;
     }
 
+    internal sealed class UndoRedoState
+    {
+        public List<string> Undo { get; } = new();
+        public List<string> Redo { get; } = new();
+        public string LastCaptured { get; set; } = string.Empty;
+    }
+
     public enum EditorDocumentKind
     {
+        None,
         Process,
         File,
         Scratch
@@ -1592,6 +1988,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         public EditorProcessNode? ProcessNode { get; }
         public string? FilePath { get; set; }
         public string HeaderText => IsDirty ? $"{Name} *" : Name;
+        internal UndoRedoState UndoState { get; } = new();
 
         public EditorDocumentTab(
             EditorDocumentKind kind,
@@ -1611,6 +2008,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
             this.isDirty = isDirty;
             ProcessNode = processNode;
             FilePath = filePath;
+            UndoState.LastCaptured = scriptText;
         }
 
         partial void OnNameChanged(string value) => OnPropertyChanged(nameof(HeaderText));
@@ -1629,6 +2027,8 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         public string DisplayName { get; }
         public Guid NodeId { get; } = Guid.NewGuid();
         public ProcessKind Kind { get; }
+        public string KindLabel => GetProcessKindLabel(Kind);
+        public string? ProcessId { get; }
         public ObservableCollection<EditorProcessNode> Children { get; } = new();
 
         [ObservableProperty]
@@ -1643,6 +2043,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         public EditorProcessNode(
             string displayName,
             ProcessKind kind,
+            string? processId,
             Func<string> readScript,
             Action<string> writeScript,
             Func<string> readPath,
@@ -1652,6 +2053,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
         {
             DisplayName = displayName;
             Kind = kind;
+            ProcessId = processId;
             _readScript = readScript;
             _writeScript = writeScript;
             _readPath = readPath;
@@ -1667,6 +2069,7 @@ public sealed partial class ScriptEditorViewModel : ObservableObject
             return new EditorProcessNode(
                 displayName,
                 kind,
+                null,
                 () => script,
                 value => script = value,
                 () => path,

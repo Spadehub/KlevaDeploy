@@ -110,6 +110,20 @@
         </DrawingImage.Drawing>
     </DrawingImage>
 
+    <DrawingImage x:Key="IconClose" x:Shared="False">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}"
+                             Geometry="M19,6.41 L17.59,5 L12,10.59 L6.41,5 L5,6.41 L10.59,12 L5,17.59 L6.41,19 L12,13.41 L17.59,19 L19,17.59 L13.41,12 Z"/>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <DrawingImage x:Key="IconTrash" x:Shared="False">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}"
+                             Geometry="M6,19 C6,20.1 6.9,21 8,21 L16,21 C17.1,21 18,20.1 18,19 L18,7 L6,7 L6,19 Z M8,9 L16,9 L16,19 L8,19 L8,9 Z M15.5,4 L14.5,3 L9.5,3 L8.5,4 L5,4 L5,6 L19,6 L19,4 L15.5,4 Z"/>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
     <!-- Script / Code icon -->
     <DrawingImage x:Key="IconScript" x:Shared="False">
         <DrawingImage.Drawing>
@@ -123,6 +137,34 @@
         <DrawingImage.Drawing>
             <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}"
                              Geometry="M17.65,6.35 C16.2,4.9 14.21,4 12,4 C7.58,4 4.01,7.58 4.01,12 C4.01,16.42 7.58,20 12,20 C15.73,20 18.84,17.45 19.73,14 L17.65,14 C16.83,16.33 14.61,18 12,18 C8.69,18 6,15.31 6,12 C6,8.69 8.69,6 12,6 C13.66,6 15.14,6.69 16.22,7.78 L13,11 L20,11 L20,4 L17.65,6.35 Z"/>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <DrawingImage x:Key="IconStop" x:Shared="False">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}"
+                             Geometry="M7,7 L17,7 L17,17 L7,17 Z"/>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <DrawingImage x:Key="IconSave" x:Shared="False">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}"
+                             Geometry="M17,3 L5,3 C3.9,3 3,3.9 3,5 L3,19 C3,20.1 3.9,21 5,21 L19,21 C20.1,21 21,20.1 21,19 L21,7 L17,3 Z M12,19 C10.34,19 9,17.66 9,16 C9,14.34 10.34,13 12,13 C13.66,13 15,14.34 15,16 C15,17.66 13.66,19 12,19 Z M6,7 L16,7 L16,5 L6,5 L6,7 Z"/>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <DrawingImage x:Key="IconUndo" x:Shared="False">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}"
+                             Geometry="M12,5 L12,2 L7,7 L12,12 L12,9 C15.31,9 18,11.69 18,15 C18,16.77 17.23,18.37 16,19.45 L17.4,20.85 C18.98,19.44 20,17.4 20,15 C20,10.58 16.42,7 12,7 L12,5 Z"/>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <DrawingImage x:Key="IconRedo" x:Shared="False">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}"
+                             Geometry="M12,5 L12,7 C7.58,7 4,10.58 4,15 C4,17.4 5.02,19.44 6.6,20.85 L8,19.45 C6.77,18.37 6,16.77 6,15 C6,11.69 8.69,9 12,9 L12,12 L17,7 L12,2 L12,5 Z"/>
         </DrawingImage.Drawing>
     </DrawingImage>
 
@@ -175,6 +217,20 @@
         </DrawingImage.Drawing>
     </DrawingImage>
 
+    <DrawingImage x:Key="IconChevronRight" x:Shared="False">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}"
+                             Geometry="M10,6 L8.59,7.41 L13.17,12 L8.59,16.59 L10,18 L16,12 Z"/>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <DrawingImage x:Key="IconChevronLeft" x:Shared="False">
+        <DrawingImage.Drawing>
+            <GeometryDrawing Brush="{DynamicResource TextPrimaryBrush}"
+                             Geometry="M14,6 L15.41,7.41 L10.83,12 L15.41,16.59 L14,18 L8,12 Z"/>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
     <DrawingImage x:Key="IconPending" x:Shared="False">
         <DrawingImage.Drawing>
             <DrawingGroup>
@@ -205,6 +261,61 @@
                 </GeometryDrawing>
                 <GeometryDrawing Brush="{DynamicResource SuccessBrush}"
                                  Geometry="M10,16.17 L6.5,12.67 L5.09,14.09 L10,19 L19,10 L17.59,8.59 Z"/>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <DrawingImage x:Key="IconEyeOpen" x:Shared="False">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="{x:Null}">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="{DynamicResource TextPrimaryBrush}" Thickness="1.8" StartLineCap="Round" EndLineCap="Round" LineJoin="Round"/>
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        M2.5,12 C4.6,7.8 8.1,5.5 12,5.5 C15.9,5.5 19.4,7.8 21.5,12 C19.4,16.2 15.9,18.5 12,18.5 C8.1,18.5 4.6,16.2 2.5,12 Z
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="{x:Null}">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="{DynamicResource TextPrimaryBrush}" Thickness="1.8" StartLineCap="Round" EndLineCap="Round" LineJoin="Round"/>
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        M12,9 A3,3 0 1 1 12,15 A3,3 0 1 1 12,9 Z
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+
+    <DrawingImage x:Key="IconEyeClosed" x:Shared="False">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <GeometryDrawing Brush="{x:Null}">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="{DynamicResource TextPrimaryBrush}" Thickness="1.8" StartLineCap="Round" EndLineCap="Round" LineJoin="Round"/>
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        M3.5,3.5 L20.5,20.5
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="{x:Null}">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="{DynamicResource TextPrimaryBrush}" Thickness="1.8" StartLineCap="Round" EndLineCap="Round" LineJoin="Round"/>
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        M6.2,6.2 C7.9,5.3 9.9,4.8 12,4.8 C15.9,4.8 19.4,7.1 21.5,11.3
+                        M17.8,17.8 C16.1,18.7 14.1,19.2 12,19.2 C8.1,19.2 4.6,16.9 2.5,12.7
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+                <GeometryDrawing Brush="{x:Null}">
+                    <GeometryDrawing.Pen>
+                        <Pen Brush="{DynamicResource TextPrimaryBrush}" Thickness="1.8" StartLineCap="Round" EndLineCap="Round" LineJoin="Round"/>
+                    </GeometryDrawing.Pen>
+                    <GeometryDrawing.Geometry>
+                        M14.4,14.4 A3.4,3.4 0 0 1 9.6,9.6
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
             </DrawingGroup>
         </DrawingImage.Drawing>
     </DrawingImage>

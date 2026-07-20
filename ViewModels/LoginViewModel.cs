@@ -54,6 +54,13 @@ public sealed class LoginViewModel : ObservableObject
         }
     }
 
+    private bool _isPasswordVisible;
+    public bool IsPasswordVisible
+    {
+        get => _isPasswordVisible;
+        set => SetProperty(ref _isPasswordVisible, value);
+    }
+
     private string _errorMessage = string.Empty;
     public string ErrorMessage
     {
@@ -257,6 +264,7 @@ public sealed class LoginViewModel : ObservableObject
         var p = SelectedPortal;
         Username = p?.LastUsername ?? string.Empty;
         Password = string.Empty;
+        IsPasswordVisible = false;
         ErrorMessage = string.Empty;
         LoginCommand.NotifyCanExecuteChanged();
         LogoutCommand.NotifyCanExecuteChanged();

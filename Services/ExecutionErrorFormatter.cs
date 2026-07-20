@@ -19,6 +19,9 @@ public static class ExecutionErrorFormatter
 
         detail = NormalizeKnownInstallerDetail(detail);
 
+        if (ShouldPreferDetailOnly(result.ExitCode, detail))
+            return detail;
+
         var mapped = MapExitCode(processName, result.ExitCode, detail);
         if (string.IsNullOrWhiteSpace(mapped))
             return detail;
@@ -88,6 +91,21 @@ public static class ExecutionErrorFormatter
         }
 
         return detail;
+    }
+
+    private static bool ShouldPreferDetailOnly(int exitCode, string detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail))
+            return false;
+
+        if (exitCode != 1603)
+            return false;
+
+        return detail.StartsWith("Errore SQL durante l'installazione Retail:", StringComparison.OrdinalIgnoreCase) ||
+               detail.StartsWith("Connessione SQL non riuscita durante l'installazione Retail", StringComparison.OrdinalIgnoreCase) ||
+               detail.StartsWith("È presente un riavvio di Windows in sospeso", StringComparison.OrdinalIgnoreCase) ||
+               detail.StartsWith("Spazio su disco insufficiente", StringComparison.OrdinalIgnoreCase) ||
+               detail.Contains("Errore 1001", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? MapExitCode(string processName, int exitCode, string? detail)
